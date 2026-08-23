@@ -44,7 +44,7 @@
           <span id="aim-hint" class="aim-hint gone">建议 —</span>
           <span id="combo-label" class="combo" hidden>连堂</span>
         </div>
-        <div class="hp-row" aria-hidden="false">
+        <div class="hp-row" id="hp-row" aria-hidden="false">
           <div class="hp hp-p">
             <i>岚丸</i>
             <b id="hp-p-n">100</b>
@@ -52,6 +52,15 @@
               <span class="hp-bar"><em id="hp-p"></em></span>
               <span class="st-bar" title="体力"><em id="st-p"></em></span>
               <span class="rg-bar" title="怒气"><em id="rg-p"></em></span>
+            </span>
+          </div>
+          <div class="hp hp-p2 gone" id="hp-p2-wrap">
+            <i>霜丸</i>
+            <b id="hp-p2-n">100</b>
+            <span class="bars">
+              <span class="hp-bar"><em id="hp-p2"></em></span>
+              <span class="st-bar" title="体力"><em id="st-p2"></em></span>
+              <span class="rg-bar" title="怒气"><em id="rg-p2"></em></span>
             </span>
           </div>
           <div class="hp hp-f">
@@ -63,7 +72,17 @@
               <span class="rg-bar" title="怒气"><em id="rg-f"></em></span>
             </span>
           </div>
+          <div class="hp hp-f2 gone" id="hp-f2-wrap">
+            <i>霆丸</i>
+            <b id="hp-f2-n">100</b>
+            <span class="bars">
+              <span class="hp-bar"><em id="hp-f2"></em></span>
+              <span class="st-bar" title="体力"><em id="st-f2"></em></span>
+              <span class="rg-bar" title="怒气"><em id="rg-f2"></em></span>
+            </span>
+          </div>
         </div>
+        <div id="delay-row" class="delay-row gone" aria-hidden="true"></div>
       </div>
       <div class="tools">
         <div class="weps" id="weps" role="tablist" aria-label="武器">
@@ -104,7 +123,7 @@
           <p class="kicker" id="ov-kicker">TAN HALL</p>
           <h1 id="ov-title">弹堂</h1>
           <p class="lead" id="ov-lead">看风，拉满或点射，把对面从石殿上轰下去。</p>
-          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · R 重开 · M 静音 · H 辅助</p>
+          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助</p>
           <div class="maps" id="ov-maps">
             <button type="button" data-map="plain" class="on" id="map-plain">平原</button>
             <button type="button" data-map="canyon" id="map-canyon">峡谷</button>
@@ -128,6 +147,7 @@
             <button type="button" id="btn-core">堂核</button>
             <button type="button" id="btn-drill">演习场</button>
             <button type="button" id="btn-seat">对坐</button>
+            <button type="button" id="btn-duo">对堂</button>
           </div>
           <div class="ov-actions gone" id="ov-end">
             <button type="button" id="ov-retry">再来</button>
