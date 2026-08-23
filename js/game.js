@@ -41,8 +41,8 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -69,6 +69,19 @@
   const BRIDGE_Y = 310;
   const BRIDGE_THICK = 22;
   const BRIDGE_VOID = 528;
+  const ARCADE_VOID = 532;
+  const ARCADE_THICK = 28;
+  const ARCADE_PAD_THICK = 52;
+  const ARCADE_PAD_Y = 310;
+  const ARCADE_RISE = 130;
+  const ARCADE_L0 = 28;
+  const ARCADE_A0 = 248;
+  const ARCADE_A1 = 712;
+  const ARCADE_R1 = 932;
+  const ARCADE_MID = 480;
+  const ARCADE_HALF = (ARCADE_A1 - ARCADE_A0) * 0.5;
+  const ARCADE_RAD = (ARCADE_HALF * ARCADE_HALF + ARCADE_RISE * ARCADE_RISE) / (2 * ARCADE_RISE);
+  const ARCADE_CY = ARCADE_PAD_Y - ARCADE_RISE + ARCADE_RAD;
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
@@ -487,7 +500,7 @@
 
   function isDeathVoid(x) {
     if (!G.H) return false;
-    if ((G.mapId === 'isles' || G.mapId === 'forge') && groundAt(x) >= VH - 14) return true;
+    if ((G.mapId === 'isles' || G.mapId === 'forge' || G.mapId === 'arcade') && groundAt(x) >= VH - 14) return true;
     if (G.sudden && (x < G.safeL || x > G.safeR)) return true;
     return false;
   }
@@ -504,6 +517,22 @@
 
   function liveBridge(x) {
     return isBridgeCol(x) && G.H && G.H[x | 0] < BRIDGE_VOID - 20;
+  }
+
+  function isArcadeArch(x) {
+    const i = x | 0;
+    return G.mapId === 'arcade' && i >= ARCADE_A0 && i <= ARCADE_A1;
+  }
+
+  function liveArcade(x) {
+    return isArcadeArch(x) && G.H && G.H[x | 0] < ARCADE_VOID - 20;
+  }
+
+  function arcadeDeckY(x) {
+    const d = x - ARCADE_MID;
+    const inner = ARCADE_RAD * ARCADE_RAD - d * d;
+    if (inner <= 0) return ARCADE_PAD_Y;
+    return ARCADE_CY - Math.sqrt(inner);
   }
 
   function setCamFighters() {
@@ -646,6 +675,17 @@
       forgeBand(FORGE_L0, FORGE_L1, FORGE_PAD_Y);
       forgeBand(FORGE_C0, FORGE_C1, FORGE_CRUST_Y);
       forgeBand(FORGE_R0, FORGE_R1, FORGE_PAD_Y);
+    } else if (id === 'arcade') {
+      for (let x = 0; x < VW; x++) h[x] = ARCADE_VOID;
+      for (let x = ARCADE_L0; x <= ARCADE_R1; x++) {
+        const edge = Math.min(x - ARCADE_L0, ARCADE_R1 - x);
+        const ramp = clamp(edge / 14, 0, 1);
+        const sm = ramp * ramp * (3 - 2 * ramp);
+        let yy = ARCADE_PAD_Y;
+        if (x >= ARCADE_A0 && x <= ARCADE_A1) yy = arcadeDeckY(x);
+        yy += Math.sin(x * 0.09) * 1.4 + Math.sin(x * 0.21) * 0.6;
+        h[x] = lerp(ARCADE_VOID, yy, sm);
+      }
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -665,6 +705,7 @@
     if (id === 'ruins') return side === 'p' ? 140 : 820;
     if (id === 'vale') return side === 'p' ? 128 : 832;
     if (id === 'forge') return side === 'p' ? 148 : 812;
+    if (id === 'arcade') return side === 'p' ? 140 : 820;
     return side === 'p' ? 152 : 768;
   }
 
@@ -928,6 +969,21 @@
     for (let x = x0; x <= x1; x++) {
       if (G.H[x] < FORGE_VOID - 20 && G.H[x] > FORGE_CRUST_Y + 6) {
         G.H[x] = FORGE_VOID;
+        any = true;
+      }
+    }
+    if (any) terrainDirty = true;
+  }
+
+  function snapArcade(cx, r, wep) {
+    if (G.mapId !== 'arcade' || !G.H || !wep) return;
+    if (wep.id !== 1 && wep.id !== 4) return;
+    const x0 = Math.max(ARCADE_A0, Math.floor(cx - r - 10));
+    const x1 = Math.min(ARCADE_A1, Math.ceil(cx + r + 10));
+    let any = false;
+    for (let x = x0; x <= x1; x++) {
+      if (G.H[x] < ARCADE_VOID - 20) {
+        G.H[x] = ARCADE_VOID;
         any = true;
       }
     }
@@ -1762,7 +1818,7 @@
       const ny = u.y + u.vy * dt;
       u.fall += Math.max(0, ny - u.y);
       u.y = ny;
-      if (u.y > VH + 40 || (G.mapId === 'forge' && isDeathVoid(u.x) && u.y > 400)) {
+      if (u.y > VH + 40 || ((G.mapId === 'forge' || G.mapId === 'arcade') && isDeathVoid(u.x) && u.y > 400)) {
         addRage(u, 20);
         u.hp = 0;
         u.rage = 0;
@@ -2248,6 +2304,7 @@
         const pop = pops[i];
         snapBridge(pop.x, pop.r, wep);
         snapForge(pop.x, pop.r);
+        snapArcade(pop.x, pop.r, wep);
         punchCover(pop.x, pop.y, pop.r, wep);
         if (applyBlast(pop.x, pop.y, wep, owner)) hit = true;
         burst(pop.x, pop.y, hit ? HOT : DIRT, hit ? 12 : 8, 160, 0.4);
@@ -2258,6 +2315,7 @@
       carve(x, y, crater);
       snapBridge(x, crater, wep);
       snapForge(x, crater);
+      snapArcade(x, crater, wep);
       punchCover(x, y, crater, wep);
       if (wep.id === 2 && G.shot && G.shot.pierced) {
         const s = hypot(G.shot.vx, G.shot.vy) || 1;
@@ -2679,6 +2737,7 @@
       if (thinLedge(foe) || pitDepth(foe) > 16) return 3;
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
       if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
+      if (G.mapId === 'arcade' && liveArcade(foe.x)) return 3;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -2711,6 +2770,7 @@
     if (G.mapId === 'bridge' && liveBridge(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
     if (G.mapId === 'ruins' && (wep.id === 1 || wep.id === 4) && inWall(imp.x, imp.y)) bury += 600;
     if (G.mapId === 'forge' && isForgeCrust(imp.x) && G.H && G.H[imp.x | 0] < FORGE_VOID - 20) bury += 900;
+    if (G.mapId === 'arcade' && liveArcade(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
     score += bury;
     return score;
   }
@@ -3491,8 +3551,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -3592,6 +3652,42 @@
         g.fillRect(x, y, 3, 4);
       }
     }
+    if (G.mapId === 'arcade') {
+      g.save();
+      g.globalCompositeOperation = 'destination-out';
+      for (let x = 0; x < VW; x++) {
+        if (H[x] >= ARCADE_VOID - 8) {
+          g.fillRect(x, 0, 1, VH);
+        } else {
+          const thick = (x >= ARCADE_A0 && x <= ARCADE_A1) ? ARCADE_THICK : ARCADE_PAD_THICK;
+          const holeY = H[x] + thick;
+          const holeH = Math.max(0, VH - holeY);
+          if (holeH > 4) g.fillRect(x, holeY, 1, holeH);
+        }
+      }
+      g.restore();
+      const pit = g.createLinearGradient(0, 300, 0, VH);
+      pit.addColorStop(0, 'rgba(8,6,16,0.08)');
+      pit.addColorStop(0.18, 'rgba(12,8,22,0.55)');
+      pit.addColorStop(0.55, '#0c0816');
+      pit.addColorStop(1, '#06040c');
+      g.fillStyle = pit;
+      g.fillRect(ARCADE_A0, 300, ARCADE_A1 - ARCADE_A0 + 1, VH - 300);
+      g.strokeStyle = 'rgba(228,210,168,0.50)';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      let drawing = false;
+      for (let x = ARCADE_A0; x <= ARCADE_A1; x++) {
+        if (H[x] >= ARCADE_VOID - 20) {
+          if (drawing) { g.stroke(); drawing = false; }
+          continue;
+        }
+        const yb = H[x] + ARCADE_THICK;
+        if (!drawing) { g.beginPath(); g.moveTo(x, yb); drawing = true; }
+        else g.lineTo(x, yb);
+      }
+      if (drawing) g.stroke();
+    }
     terrainDirty = false;
   }
 
@@ -3633,6 +3729,13 @@
       lift.addColorStop(0, 'rgba(120,240,255,0.12)');
       lift.addColorStop(1, 'rgba(120,240,255,0)');
       g.fillStyle = lift;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'arcade') {
+      const mist = g.createRadialGradient(480, VH, 20, 480, VH, 320);
+      mist.addColorStop(0, 'rgba(40,24,48,0.28)');
+      mist.addColorStop(1, 'rgba(40,24,48,0)');
+      g.fillStyle = mist;
       g.fillRect(0, 0, VW, VH);
     }
     for (let i = 0; i < stars.length; i++) {
@@ -3840,6 +3943,29 @@
       const a = (strong ? 0.22 : 0.16) + 0.14 * Math.sin(G.t * 3.2 + i);
       g.fillStyle = 'rgba(180,244,255,' + a + ')';
       g.fillRect(x, y, strong ? 2.6 : 2.2, (strong ? 14 : 11) + (i % 4) * 3);
+    }
+    g.restore();
+  }
+
+  function drawArcade(g) {
+    if (G.mapId !== 'arcade') return;
+    g.save();
+    const t = G.t;
+    for (let i = 0; i < 10; i++) {
+      const x = ARCADE_A0 + 24 + i * 44 + Math.sin(t * 0.7 + i) * 10;
+      const y = 348 + Math.sin(t * 1.1 + i * 0.8) * 8;
+      g.fillStyle = 'rgba(40,24,56,' + (0.10 + 0.10 * Math.sin(t * 1.6 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 36 + (i % 3) * 10, 8, 0, 0, TAU);
+      g.fill();
+    }
+    for (let k = 0; k < 6; k++) {
+      const px = ARCADE_A0 + 40 + k * 72;
+      const glow = 0.10 + 0.08 * (0.5 + 0.5 * Math.sin(t * 2.2 + k));
+      g.fillStyle = 'rgba(255,210,120,' + glow + ')';
+      g.beginPath();
+      g.arc(px, 332, 5, 0, TAU);
+      g.fill();
     }
     g.restore();
   }
@@ -4284,6 +4410,7 @@
     if (terrainDirty) paintTerrain();
     if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
     drawLava(ctx);
+    drawArcade(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -4612,7 +4739,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps nine', MAP_IDS.length === 9 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台');
+    ok('maps ten', MAP_IDS.length === 10 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -4734,6 +4861,42 @@
     ok('forge snap lava', G.H[480] >= FORGE_VOID - 8, Math.round(G.H[480]));
     ok('forge leap onto crust', FORGE_L1 + LEAP_DX > FORGE_C0 && FORGE_L1 + LEAP_DX < FORGE_C1, FORGE_L1 + LEAP_DX);
     ok('forge leap onto pad', FORGE_C1 + LEAP_DX > FORGE_R0 && FORGE_C1 + LEAP_DX < FORGE_R1, FORGE_C1 + LEAP_DX);
+    G.H = buildHeight('arcade');
+    G.mapId = 'arcade';
+    ok('arcade spawn', spawnX('arcade', 'p') === 140 && spawnX('arcade', 'f') === 820);
+    ok('arcade spawn on bank', spawnX('arcade', 'p') < ARCADE_A0 && spawnX('arcade', 'f') > ARCADE_A1);
+    ok('arcade pads high', G.H[140] < 340 && G.H[820] < 340, Math.round(G.H[140]) + '/' + Math.round(G.H[820]));
+    ok('arcade arch high', G.H[480] < G.H[140] - 80, Math.round(G.H[480]) + ' vs ' + Math.round(G.H[140]));
+    ok('arcade arch stand', G.H[480] > 88 && G.H[480] < ARCADE_VOID - 80, Math.round(G.H[480]));
+    ok('arcade edge void', G.H[10] >= ARCADE_VOID - 8 && G.H[950] >= ARCADE_VOID - 8);
+    ok('arcade spawn not void', !isDeathVoid(140) && !isDeathVoid(820));
+    ok('arcade side death', isDeathVoid(10));
+    ok('arcade thick punchable', ARCADE_THICK < WEPS[1].crater && ARCADE_THICK > 16, ARCADE_THICK);
+    const arch0 = G.H[480];
+    carve(480, arch0, 30);
+    snapArcade(480, 30, WEPS[0]);
+    ok('arcade 普通 no snap', G.H[480] < ARCADE_VOID - 80, Math.round(G.H[480]));
+    G.H = buildHeight('arcade');
+    G.mapId = 'arcade';
+    carve(480, G.H[480], 48);
+    snapArcade(480, 48, WEPS[1]);
+    ok('arcade 高爆 hole', G.H[480] >= ARCADE_VOID - 8, Math.round(G.H[480]));
+    ok('arcade hole death', isDeathVoid(480));
+    G.H = buildHeight('arcade');
+    G.mapId = 'arcade';
+    carveCluster(480, G.H[480], 1);
+    snapArcade(480, 22, WEPS[3]);
+    ok('arcade 三裂 hole', G.H[480] >= ARCADE_VOID - 8, Math.round(G.H[480]));
+    G.H = buildHeight('arcade');
+    G.mapId = 'arcade';
+    const apx = spawnX('arcade', 'p');
+    const apy = G.H[apx | 0] - UNIT_R;
+    const th30 = 30 * Math.PI / 180;
+    const th65 = 65 * Math.PI / 180;
+    const s30 = traceShot(apx + Math.cos(th30) * 18, apy - 4 - Math.sin(th30) * 18, 30, 70, 0, WEPS[0], G.H, null);
+    const s65 = traceShot(apx + Math.cos(th65) * 18, apy - 4 - Math.sin(th65) * 18, 65, 70, 0, WEPS[0], G.H, null);
+    ok('arcade 30 punch', s30.x > ARCADE_A0 && s30.x < ARCADE_A1 && !s30.air, Math.round(s30.x));
+    ok('arcade 65 over', s65.x > ARCADE_A1 && s65.x < ARCADE_R1, Math.round(s65.x));
     ok('g vk still locked', GRAV === 260 && VK === 420);
     ok('assist keep default 中', G.assist === 2);
     ok('fruit names', ITEM_NAME.leap === '飞步' && ITEM_NAME.warp === '影挪' && ITEM_NAME.neon === '霓弹' && ITEM_NAME.drum === '鼓息');
@@ -4851,6 +5014,16 @@
     ok('forge duo on pad', !isDeathVoid(fx0) && !isDeathVoid(fx1) && !isDeathVoid(rx0) && !isDeathVoid(rx1));
     ok('forge duo stagger', Math.abs(fx1 - fx0) >= 6 && Math.abs(fx1 - fx0) <= 40, Math.round(Math.abs(fx1 - fx0)));
     ok('forge duo right stagger', Math.abs(rx1 - rx0) >= 6 && Math.abs(rx1 - rx0) <= 40, Math.round(Math.abs(rx1 - rx0)));
+    G.mapId = 'arcade';
+    G.H = buildHeight('arcade');
+    const ax0 = spawnAt('p', 0);
+    const ax1 = spawnAt('p', 1);
+    const ar0 = spawnAt('f', 0);
+    const ar1 = spawnAt('f', 1);
+    ok('arcade duo on bank', ax0 < ARCADE_A0 && ax1 < ARCADE_A0 && ar0 > ARCADE_A1 && ar1 > ARCADE_A1);
+    ok('arcade duo not void', !isDeathVoid(ax0) && !isDeathVoid(ax1) && !isDeathVoid(ar0) && !isDeathVoid(ar1));
+    ok('arcade duo stagger', Math.abs(ax1 - ax0) >= 6 && Math.abs(ax1 - ax0) <= 40, Math.round(Math.abs(ax1 - ax0)));
+    ok('arcade duo right stagger', Math.abs(ar1 - ar0) >= 6 && Math.abs(ar1 - ar0) <= 40, Math.round(Math.abs(ar1 - ar0)));
     G.mapId = 'plain';
     G.H = buildHeight('plain');
     const px0 = spawnAt('p', 0);
@@ -4903,7 +5076,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 9', MAP_IDS.length === 9 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }));
+    ok('随图 pool 10', MAP_IDS.length === 10 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('arcade') === 9);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
