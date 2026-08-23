@@ -869,6 +869,13 @@ canvas {
   box-shadow: 0 0 14px rgba(139, 92, 255, 0.28);
 }
 
+.weps button[data-w="4"].on {
+  border-color: rgba(100, 255, 210, 0.75);
+  color: #9affd6;
+  background: rgba(100, 255, 210, 0.14);
+  box-shadow: 0 0 14px rgba(100, 255, 210, 0.28);
+}
+
 .maps button {
   padding: 7px 12px;
   font-size: 12px;

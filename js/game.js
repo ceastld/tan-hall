@@ -25,14 +25,14 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · R 重开 · M 静音 · H 辅助';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 · 65°查表 · Tab尺 · H辅';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 5霓轨 · 65°查表 · Tab尺 · H辅';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · H辅';
   const ASSIST_NAME = ['关', '弱', '中', '强'];
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1 };
   const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0 };
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles'];
   const GUST_MID = 480;
   const GUST_HW = 80;
   const GUST_AY = -150;
@@ -41,7 +41,13 @@
   const BRIDGE_Y = 310;
   const BRIDGE_THICK = 22;
   const BRIDGE_VOID = 528;
+  const ISLE_VOID = 532;
+  const ISLE_THICK = 44;
   const BURY_PX = 40;
+  const SUDDEN_TURN = 12;
+  const SUDDEN_HP = 35;
+  const SUDDEN_SHRINK = 40;
+  const SUDDEN_MIN = 200;
   const CLUSTER = [
     { dx: 0, dy: 0, r: 22 },
     { dx: -12, dy: 1, r: 18 },
@@ -55,12 +61,14 @@
   const WHT = [244, 238, 255];
   const DIRT = [92, 68, 48];
   const ICE = [160, 220, 255];
+  const RAIL = [100, 255, 210];
 
   const WEPS = [
     { id: 0, name: '普通弹', direct: 32, splash: 36, crater: 30, spd: 1.00 },
     { id: 1, name: '高爆', direct: 24, splash: 56, crater: 48, spd: 0.88 },
     { id: 2, name: '穿透', direct: 30, splash: 32, crater: 26, spd: 1.06 },
-    { id: 4, name: '三裂', direct: 14, splash: 22, crater: 16, spd: 0.96 }
+    { id: 4, name: '三裂', direct: 14, splash: 22, crater: 16, spd: 0.96 },
+    { id: 5, name: '霓轨', direct: 20, splash: 40, crater: 22, spd: 0.70 }
   ];
   const NEON = { id: 3, name: '霓弹', direct: 8, splash: 28, crater: 18, spd: 1.00 };
 
@@ -195,7 +203,11 @@
     aiLastNeonTurn: -9,
     camHold: false,
     impactX: VW * 0.5,
-    impactY: VH * 0.5
+    impactY: VH * 0.5,
+    sudden: false,
+    safeL: 0,
+    safeR: VW - 1,
+    slowMo: 0
   };
 
   const particles = [];
@@ -257,6 +269,19 @@
     if (d >= GUST_HW) return 0;
     const k = 1 - d / GUST_HW;
     return GUST_AY * k * k;
+  }
+
+  function windKAt(wep, t) {
+    if (!wep || wep.id !== 5) return WIND_K;
+    const ticks = Math.min(8, Math.floor((t || 0) / 0.05));
+    return WIND_K * Math.pow(1.15, ticks);
+  }
+
+  function isDeathVoid(x) {
+    if (!G.H) return false;
+    if (G.mapId === 'isles' && groundAt(x) >= VH - 14) return true;
+    if (G.sudden && (x < G.safeL || x > G.safeR)) return true;
+    return false;
   }
 
   function isBridgeCol(x) {
@@ -355,6 +380,20 @@
           h[x] = lerp(h[x], BRIDGE_Y + Math.sin(x * 0.11) * 1.6, ramp);
         }
       }
+    } else if (id === 'isles') {
+      for (let x = 0; x < VW; x++) h[x] = ISLE_VOID;
+      function isleBand(x0, x1, y) {
+        for (let x = x0; x <= x1; x++) {
+          const edge = Math.min(x - x0, x1 - x);
+          const ramp = clamp(edge / 16, 0, 1);
+          const sm = ramp * ramp * (3 - 2 * ramp);
+          const yy = y + Math.sin(x * 0.09) * 3.2 + Math.sin(x * 0.21) * 1.4;
+          h[x] = lerp(ISLE_VOID, yy, sm);
+        }
+      }
+      isleBand(80, 280, 360);
+      isleBand(400, 560, 240);
+      isleBand(680, 880, 360);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -370,6 +409,7 @@
     if (id === 'twin') return side === 'p' ? 148 : 812;
     if (id === 'spire') return side === 'p' ? 140 : 820;
     if (id === 'bridge') return side === 'p' ? 150 : 810;
+    if (id === 'isles') return side === 'p' ? 160 : 800;
     return side === 'p' ? 152 : 768;
   }
 
@@ -496,7 +536,7 @@
     let hitU = null;
     let t = 0;
     for (let i = 0; i < 420; i++) {
-      vx += wind * WIND_K * dt;
+      vx += wind * windKAt(wep, t) * dt;
       vy += (GRAV + gustAy(x)) * dt;
       x += vx * dt;
       y += vy * dt;
@@ -646,11 +686,18 @@
       this.beep(wep && wep.id === 1 ? 140 : 280, 0.1, 'square', 0.03, 90);
       if (wep && wep.id === 2) this.beep(880, 0.08, 'triangle', 0.028, 1400);
     },
-    boom(hit, wep) {
+    boom(hit, wep, ult) {
       this.ensure();
       this.noise(hit ? 0.2 : 0.14, hit ? 0.08 : 0.05, hit ? 180 : 280);
       this.beep(hit ? 160 : 110, 0.22, 'sine', hit ? 0.07 : 0.04, 40);
       if (wep && wep.id === 1) this.beep(70, 0.28, 'triangle', 0.05, 32);
+      if (wep && wep.id === 5) this.beep(210, 0.16, 'sine', 0.045, 90);
+      if (ult) {
+        this.noise(0.42, 0.16, 70);
+        this.beep(48, 0.5, 'sine', 0.14, 24);
+        this.beep(86, 0.36, 'triangle', 0.1, 28);
+        this.beep(36, 0.28, 'square', 0.06, 20);
+      }
     },
     hit() {
       this.ensure();
@@ -1040,6 +1087,24 @@
     }
   }
 
+  function dirtBurst(x, y, n) {
+    burst(x, y, DIRT, REDUCE ? Math.min(8, n) : n, 190, 0.52);
+    const extra = REDUCE ? 3 : 8;
+    for (let i = 0; i < extra; i++) {
+      particles.push({
+        x: x + rand(-10, 10),
+        y: y + rand(-4, 8),
+        vx: rand(-90, 90),
+        vy: rand(-30, 140),
+        g: 540,
+        life: 0.58,
+        max: 0.58,
+        r: rand(1.8, 4.4),
+        rgb: DIRT
+      });
+    }
+  }
+
   function floatText(x, y, s, rgb, big) {
     floats.push({ x: x, y: y, s: s, rgb: rgb, t: 0, big: !!big });
   }
@@ -1054,7 +1119,7 @@
     u.hp = Math.max(0, u.hp - dmg);
     u.hitT = 0.28;
     u.flash = 0.22;
-    floatText(u.x, u.y - 22, '-' + dmg, u.side === 'p' ? CYN : MAG, dmg >= 20);
+    floatText(u.x, u.y - 22, '-' + dmg, u.side === 'p' ? CYN : MAG, true);
     if (u.side === 'p' && hpP && hpP.parentElement && hpP.parentElement.parentElement) {
       const wrap = document.querySelector('.hp-p');
       if (wrap) {
@@ -1155,6 +1220,7 @@
         }
         return;
       }
+      if (isDeathVoid(u.x)) return;
       if (u.y >= gy) {
         u.y = gy;
         u.grounded = true;
@@ -1247,6 +1313,7 @@
     G.stam = u ? u.stam : STAM_MAX;
     rollWind();
     if (who === 'p') G.turns += 1;
+    maybeSudden();
     audio.chargeStop();
     if (u && u.frozen) {
       toast(u.name + ' 被冻结', true, false);
@@ -1262,6 +1329,55 @@
     if (who === 'f' && G.kind !== 'drill') startAI();
     syncHud();
     setCamFighters();
+  }
+
+  function dropCol(x) {
+    if (!G.H || x < 0 || x >= VW) return;
+    G.H[x] = VH - 8;
+  }
+
+  function crumbleBand() {
+    if (!G.sudden || !G.H) return;
+    let nL = G.safeL + SUDDEN_SHRINK;
+    let nR = G.safeR - SUDDEN_SHRINK;
+    if (nR - nL < SUDDEN_MIN) {
+      const mid = (G.safeL + G.safeR) * 0.5;
+      nL = Math.max(G.safeL, mid - SUDDEN_MIN * 0.5);
+      nR = Math.min(G.safeR, mid + SUDDEN_MIN * 0.5);
+      if (nL <= G.safeL && nR >= G.safeR) return;
+    }
+    const oldL = G.safeL;
+    const oldR = G.safeR;
+    for (let x = oldL | 0; x < nL; x++) dropCol(x);
+    for (let x = (nR | 0) + 1; x <= oldR; x++) dropCol(x);
+    G.safeL = nL;
+    G.safeR = nR;
+    terrainDirty = true;
+    dirtBurst(nL, groundAt(nL), 12);
+    dirtBurst(nR, groundAt(nR), 12);
+    kick(4.2);
+    ungroundIfAir(G.p);
+    ungroundIfAir(G.f);
+  }
+
+  function maybeSudden() {
+    if (G.kind === 'drill' || G.mode !== 'play') return;
+    if (G.sudden) {
+      crumbleBand();
+      return;
+    }
+    const both = G.p && G.f && G.p.hp > 0 && G.f.hp > 0 && G.p.hp <= SUDDEN_HP && G.f.hp <= SUDDEN_HP;
+    if (G.turns > SUDDEN_TURN || both) {
+      G.sudden = true;
+      G.safeL = 0;
+      G.safeR = VW - 1;
+      toast('殿塌', true, false);
+      audio.ensure();
+      audio.beep(70, 0.28, 'sine', 0.06, 28);
+      audio.noise(0.22, 0.08, 90);
+      screenFlash(MAG, 0.28);
+      crumbleBand();
+    }
   }
 
   function startCharge() {
@@ -1319,8 +1435,12 @@
       audio.beep(300, 0.07, 'square', 0.03, 520);
       audio.beep(480, 0.08, 'triangle', 0.028, 880);
     }
+    if (wep.id === 5) {
+      audio.beep(180, 0.14, 'sine', 0.045, 520);
+      audio.beep(90, 0.1, 'triangle', 0.03, 240);
+    }
     if (u.ult) audio.beep(90, 0.28, 'sine', 0.06, 36);
-    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (u.side === 'p' ? CYN : MAG)), 8, 80, 0.25);
+    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 5 ? RAIL : (u.side === 'p' ? CYN : MAG))), 8, 80, 0.25);
     u.walkT = 0;
   }
 
@@ -1354,7 +1474,8 @@
       burst(x, y, GOLD, hit ? 10 : 4, 140, 0.35);
       ringAt(x, y, hit ? GOLD : HOT, crater * 1.6);
     }
-    audio.boom(hit, wep);
+    dirtBurst(x, y, hit ? 14 : 20);
+    audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y);
     if (wasUlt) {
       floatText(x, y - 48, '殿破', GOLD, true);
@@ -1365,6 +1486,7 @@
     if (hit) {
       audio.hit();
       hitStop(fromHit ? 0.12 : 0.09);
+      if (fromHit && !REDUCE) G.slowMo = Math.max(G.slowMo || 0, 0.10);
       kick(fromHit ? 7.4 : 5.6);
       screenFlash(wasUlt ? GOLD : (owner && owner.side === 'p' ? CYN : MAG), wasUlt ? 0.45 : 0.28);
       G.combo += 1;
@@ -1407,13 +1529,13 @@
   function stepShot(dt) {
     const s = G.shot;
     if (!s) return;
-    s.life += dt;
-    s.vx += G.wind * WIND_K * dt;
+    s.vx += G.wind * windKAt(s.wep, s.life) * dt;
     s.vy += (GRAV + gustAy(s.x)) * dt;
     s.x += s.vx * dt;
     s.y += s.vy * dt;
+    s.life += dt;
     trail.push({ x: s.x, y: s.y, a: 1 });
-    if (trail.length > 28) trail.shift();
+    if (trail.length > 42) trail.shift();
     if (G.ghostPend) G.ghostPend.points = trail.slice();
     setCamShot(s);
     if (s.x < 2 || s.x > VW - 2 || s.y > VH + 20) {
@@ -1661,6 +1783,7 @@
       if (thinLedge(foe) || pitDepth(foe) > 16) return 3;
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
     }
+    if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
     if (foe) {
       const x = foe.x | 0;
@@ -1735,6 +1858,8 @@
     const oy = from.y;
     for (let i = 0; i < tries.length; i++) {
       const nx = clamp(ox + tries[i], 28, VW - 28);
+      if (isDeathVoid(nx)) continue;
+      if (G.sudden && (nx < G.safeL + 16 || nx > G.safeR - 16)) continue;
       from.x = nx;
       from.y = groundAt(nx) - from.r;
       const b2 = solveAI(from);
@@ -1752,7 +1877,7 @@
     if (!from.items || from.items.warp <= 0 || from.stam < 25) return 0;
     if (G.turns <= 1) return 0;
     const foe = G.p;
-    if (pitDepth(from) >= 40) {
+    if (isDeathVoid(from.x) || (G.sudden && (from.x < G.safeL + 24 || from.x > G.safeR - 24)) || pitDepth(from) >= 40) {
       let bestX = 0, bestY = 1e9, bestD = 0;
       for (let i = 0; i < 16; i++) {
         const a = i * TAU / 16;
@@ -1760,6 +1885,7 @@
         if (Math.abs(x - from.x) > WARP_R) continue;
         const gy = groundAt(x);
         const dFoe = Math.abs(x - foe.x);
+        if (isDeathVoid(x)) continue;
         if (gy < bestY - 8 || (Math.abs(gy - bestY) < 8 && dFoe > bestD)) {
           if (dFoe >= GRID * 3) { bestY = gy; bestX = x; bestD = dFoe; }
         }
@@ -1770,6 +1896,7 @@
       for (let dx = -200; dx <= 200; dx += 20) {
         const x = clamp(from.x + dx, 22, VW - 22);
         if (Math.abs(x - from.x) > WARP_R) continue;
+        if (isDeathVoid(x)) continue;
         const g0 = groundAt(x);
         const gl = groundAt(clamp(x - 20, 0, VW - 1));
         const gr = groundAt(clamp(x + 20, 0, VW - 1));
@@ -1783,6 +1910,7 @@
       for (let k = 0; k < dists.length; k++) {
         const x = clamp(from.x + Math.cos(a) * dists[k], 22, VW - 22);
         if (hypot(x - from.x, 0) > WARP_R) continue;
+        if (isDeathVoid(x)) continue;
         const ox = from.x, oy = from.y;
         from.x = x;
         from.y = groundAt(x) - from.r;
@@ -1813,6 +1941,7 @@
       const opts = [1, -1];
       for (let i = 0; i < opts.length; i++) {
         const nx = clamp(ox + LEAP_DX * opts[i], 22, VW - 22);
+        if (isDeathVoid(nx)) continue;
         from.x = nx;
         from.y = groundAt(nx) - from.r;
         const sc = solveAI(from).score;
@@ -1825,8 +1954,24 @@
         if (gL < groundAt(from.x) - 10) leapDir = -1;
         if (gR < groundAt(from.x) - 10) leapDir = 1;
       }
+      if (!leapDir && Math.random() < 0.30) {
+        const opts2 = [1, -1];
+        for (let i = 0; i < opts2.length; i++) {
+          const nx = clamp(ox + LEAP_DX * opts2[i], 22, VW - 22);
+          if (isDeathVoid(nx)) continue;
+          from.x = nx;
+          from.y = groundAt(nx) - from.r;
+          const sc = solveAI(from).score;
+          if (sc > score0 + 60) leapDir = opts2[i];
+        }
+        from.x = ox; from.y = oy;
+      }
       if (G.kind === 'core' && from.hp <= 18 && G.p && G.p.rage >= 80) {
         leapDir = from.x < G.p.x ? -1 : 1;
+      }
+      if (G.sudden) {
+        if (from.x > G.safeR - 28 && !isDeathVoid(from.x - LEAP_DX)) leapDir = -1;
+        else if (from.x < G.safeL + 28 && !isDeathVoid(from.x + LEAP_DX)) leapDir = 1;
       }
       plan.leap = leapDir;
     }
@@ -1843,7 +1988,18 @@
     const aj = loose ? 3 : 1.5;
     const pj = loose ? 4 : 2;
     best.ang = clamp(best.ang + rand(-aj, aj), 5, 175);
-    best.pow = clamp(best.pow + rand(-pj, pj), 16, 100);
+    let toasted = false;
+    if (Math.abs(elev(best.ang) - 65) <= 8) {
+      const jit = rand(0.05, 0.08) * (Math.random() < 0.5 ? -1 : 1);
+      best.pow = clamp(best.pow * (1 + jit), 16, 100);
+      if (Math.random() < 0.16) {
+        toast('烬丸补角', false, false);
+        toasted = true;
+      }
+    } else {
+      best.pow = clamp(best.pow + rand(-pj, pj), 16, 100);
+    }
+    if (!toasted && Math.random() < 0.10 && best.score >= 4000) toast('烬丸冷笑', false, true);
     AI.wait = 0.2;
     AI.walked = false;
     AI.walkTo = moved.walkTo;
@@ -1912,7 +2068,9 @@
       if (Math.abs(dx) > 2 && G.walk > 0 && u.stam > 0) {
         const dir = dx > 0 ? 1 : -1;
         const step = Math.min(G.walk, u.stam, 78 * dt, Math.abs(dx));
-        u.x = clamp(u.x + dir * step, 22, VW - 22);
+        const lo = G.sudden ? G.safeL + 18 : 22;
+        const hi = G.sudden ? G.safeR - 18 : VW - 22;
+        u.x = clamp(u.x + dir * step, lo, hi);
         G.walk -= step;
         u.stam -= step;
         u.face = dir;
@@ -2025,6 +2183,10 @@
     cam.y = cam.ty = VH * 0.5;
     cam.z = cam.tz = 1;
     G.camHold = false;
+    G.sudden = false;
+    G.safeL = 0;
+    G.safeR = VW - 1;
+    G.slowMo = 0;
   }
 
   function startGame(kind) {
@@ -2283,8 +2445,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -2341,6 +2503,20 @@
         else g.lineTo(x, yb);
       }
       if (drawing) g.stroke();
+    }
+    if (G.mapId === 'isles') {
+      g.save();
+      g.globalCompositeOperation = 'destination-out';
+      for (let x = 0; x < VW; x++) {
+        if (H[x] >= ISLE_VOID - 8) {
+          g.fillRect(x, 0, 1, VH);
+        } else {
+          const holeY = H[x] + ISLE_THICK;
+          const holeH = Math.max(0, VH - holeY);
+          if (holeH > 4) g.fillRect(x, holeY, 1, holeH);
+        }
+      }
+      g.restore();
     }
     terrainDirty = false;
   }
@@ -2550,13 +2726,20 @@
   function drawShot(g) {
     const s = G.shot;
     if (!s) return;
-    const rgb = s.ult ? GOLD : (s.wep && s.wep.id === 3 ? ICE : (s.wep && s.wep.id === 4 ? HOT : (s.owner && s.owner.side === 'p' ? CYN : MAG)));
+    const rgb = s.ult ? GOLD : (s.wep && s.wep.id === 3 ? ICE : (s.wep && s.wep.id === 4 ? HOT : (s.wep && s.wep.id === 5 ? RAIL : (s.owner && s.owner.side === 'p' ? CYN : MAG))));
     g.save();
     g.lineCap = 'round';
+    g.lineJoin = 'round';
     for (let i = 1; i < trail.length; i++) {
       const a = i / trail.length;
-      g.strokeStyle = rgba(rgb, a * 0.7);
-      g.lineWidth = 1.4 + a * 2;
+      g.strokeStyle = rgba(rgb, a * 0.32);
+      g.lineWidth = 6.2 + a * 4.4;
+      g.beginPath();
+      g.moveTo(trail[i - 1].x, trail[i - 1].y);
+      g.lineTo(trail[i].x, trail[i].y);
+      g.stroke();
+      g.strokeStyle = rgba(rgb, a * 0.88);
+      g.lineWidth = 2.6 + a * 3.2;
       g.beginPath();
       g.moveTo(trail[i - 1].x, trail[i - 1].y);
       g.lineTo(trail[i].x, trail[i].y);
@@ -2566,24 +2749,27 @@
     g.shadowColor = rgba(rgb, 0.9);
     g.shadowBlur = 12;
     g.beginPath();
-    g.arc(s.x, s.y, s.wep.id === 1 ? 5.2 : (s.wep.id === 4 ? 4.4 : 3.6), 0, TAU);
+    g.arc(s.x, s.y, s.wep.id === 1 ? 5.2 : (s.wep.id === 4 ? 4.4 : (s.wep.id === 5 ? 4.0 : 3.6)), 0, TAU);
     g.fill();
     g.restore();
   }
 
   function drawChargeBar(g, u) {
     if (!(G.phase === 'charge' && curUnit() === u)) return;
-    const w = 42;
+    const w = 52;
     const x = u.x - w * 0.5;
     const y = u.y + 20;
-    g.fillStyle = 'rgba(0,0,0,0.5)';
-    g.fillRect(x, y, w, 6);
+    g.fillStyle = 'rgba(0,0,0,0.55)';
+    g.fillRect(x, y, w, 7);
     const t = G.power / 100;
     g.fillStyle = t > 0.92 ? rgba(GOLD, 1) : rgba(u.side === 'p' ? CYN : MAG, 0.95);
-    g.fillRect(x, y, w * t, 6);
+    g.fillRect(x, y, w * t, 7);
+    g.strokeStyle = rgba(GOLD, 0.35 + t * 0.45);
+    g.lineWidth = 1.2;
+    g.strokeRect(x - 1, y - 1, w + 2, 9);
     if (t > 0.98) {
-      g.strokeStyle = rgba(GOLD, 0.8);
-      g.strokeRect(x - 1, y - 1, w + 2, 8);
+      g.strokeStyle = rgba(GOLD, 0.9);
+      g.strokeRect(x - 2, y - 2, w + 4, 11);
     }
   }
 
@@ -2669,14 +2855,16 @@
     const dt = 1 / 60;
     pts.push({ x: x, y: y });
     let len = 0;
+    let t = 0;
     for (let i = 0; i < 420; i++) {
-      vx += G.wind * WIND_K * dt;
+      vx += G.wind * windKAt(wep, t) * dt;
       vy += (GRAV + gustAy(x)) * dt;
       const nx = x + vx * dt;
       const ny = y + vy * dt;
       len += hypot(nx - x, ny - y);
       x = nx;
       y = ny;
+      t += dt;
       pts.push({ x: x, y: y });
       if (x < 2 || x > VW - 2 || y > VH + 8) break;
       if (inGround(x, y)) break;
@@ -2776,6 +2964,11 @@
     if (terrainDirty) paintTerrain();
     if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
     drawGust(ctx);
+    if (G.sudden) {
+      ctx.fillStyle = 'rgba(8, 4, 12, 0.42)';
+      if (G.safeL > 0) ctx.fillRect(0, 0, G.safeL, VH);
+      if (G.safeR < VW - 1) ctx.fillRect(G.safeR, 0, VW - G.safeR, VH);
+    }
     drawRuler(ctx);
     drawGhostPath(ctx);
     drawPredict(ctx);
@@ -2810,13 +3003,17 @@
       ctx.arc(r.x, r.y, r.r, 0, TAU);
       ctx.stroke();
     }
-    ctx.font = 'bold 12px Segoe UI, PingFang SC, sans-serif';
     ctx.textAlign = 'center';
     for (let i = 0; i < floats.length; i++) {
       const f = floats[i];
+      const pop = 1 + (f.big ? 0.58 : 0.32) * Math.max(0, 1 - f.t / 0.2);
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.scale(pop, pop);
       ctx.fillStyle = rgba(f.rgb, 1 - f.t / 0.85);
-      ctx.font = (f.big ? 'bold 16px ' : 'bold 12px ') + 'Segoe UI, PingFang SC, sans-serif';
-      ctx.fillText(f.s, f.x, f.y);
+      ctx.font = (f.big ? 'bold 18px ' : 'bold 13px ') + 'Segoe UI, PingFang SC, sans-serif';
+      ctx.fillText(f.s, 0, 0);
+      ctx.restore();
     }
 
     ctx.restore();
@@ -2939,6 +3136,7 @@
     if (k === '2') setWep(1);
     if (k === '3') setWep(2);
     if (k === '4') setWep(3);
+    if (k === '5') setWep(4);
   }
 
   function bindPad() {
@@ -3083,7 +3281,25 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps five', MAP_IDS.length === 5 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥');
+    ok('maps six', MAP_IDS.length === 6 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛');
+    G.H = buildHeight('isles');
+    G.mapId = 'isles';
+    ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
+    ok('isles mid high', G.H[480] < G.H[160] - 40, Math.round(G.H[480]));
+    ok('isles gap void', G.H[340] >= 500, Math.round(G.H[340]));
+    ok('isles spawn', spawnX('isles', 'p') === 160 && spawnX('isles', 'f') === 800);
+    G.mapId = 'plain';
+    ok('霓轨 stats', WEPS[4] && WEPS[4].name === '霓轨' && WEPS[4].spd === 0.70 && WEPS[4].direct === 20 && WEPS[4].id === 5);
+    ok('霓轨 ride 0', Math.abs(windKAt(WEPS[4], 0) - WIND_K) < 0.001);
+    ok('霓轨 ride tick', windKAt(WEPS[4], 0.05) > WIND_K * 1.1);
+    ok('normal no ride', windKAt(WEPS[0], 1) === WIND_K);
+    G.H = buildHeight('plain');
+    const rail0 = traceShot(152, G.H[152] - 18, 65, 80, 0, WEPS[4], G.H, G.p);
+    const rail8 = traceShot(152, G.H[152] - 18, 65, 80, 8, WEPS[4], G.H, G.p);
+    ok('霓轨 wind ride', Math.abs(rail8.x - rail0.x) > 18, Math.round(rail8.x - rail0.x));
+    ok('sudden off', G.sudden === false);
+    ok('sudden nums', SUDDEN_TURN === 12 && SUDDEN_HP === 35 && GRAV === 260 && VK === 420);
+    ok('assist still 0-3', ASSIST_NAME.length === 4 && G.assist === 2);
     G.H = buildHeight('plain');
     G.wind = 3;
     G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', ang: 65, face: 1 };
@@ -3245,6 +3461,10 @@
     last = t;
     if (dt > 0.05) dt = 0.05;
     if (dt < 0) dt = 0;
+    if (G.slowMo > 0 && G.stop <= 0 && !REDUCE) {
+      G.slowMo -= dt;
+      dt = dt * 0.28;
+    }
     acc += dt;
     let steps = 0;
     while (acc >= STEP && steps < 5) {
