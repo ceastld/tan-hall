@@ -31,6 +31,12 @@
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1 };
   const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0 };
+  const ITEM_KEYS = ['leap', 'warp', 'neon', 'drum'];
+  const ITEM_NAME = { leap: '飞步', warp: '影挪', neon: '霓弹', drum: '鼓息' };
+  const FRUIT_R = 12;
+  const FRUIT_GOLD_P = 0.15;
+  const FRUIT_RAGE = 25;
+  const FRUIT_WALL = 36;
   const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台' };
   const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge'];
   const WALL_MAXH = 160;
@@ -233,7 +239,8 @@
     safeR: VW - 1,
     slowMo: 0,
     fires: [],
-    walls: []
+    walls: [],
+    fruits: []
   };
 
   const particles = [];
@@ -1532,6 +1539,7 @@
     if (!pd && !fd) return false;
     G.mode = 'end';
     G.phase = 'end';
+    clearFruits(true);
     audio.chargeStop();
     const turns = G.turns;
     if (pd && fd) {
@@ -1581,6 +1589,7 @@
   }
 
   function beginTurn(who) {
+    clearFruits(true);
     if (G.kind === 'drill') who = 'p';
     G.turn = who;
     G.phase = 'aim';
@@ -1756,6 +1765,152 @@
     if (u.ult) audio.beep(90, 0.28, 'sine', 0.06, 36);
     burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : (u.side === 'p' ? CYN : MAG)))), 8, 80, 0.25);
     u.walkT = 0;
+    spawnFruits();
+  }
+
+  function fruitModeOk() {
+    if (G.kind === 'drill') return false;
+    if (G.kind !== 'hall' && G.kind !== 'core' && G.kind !== 'seat') return false;
+    if ((G.turns | 0) <= 1 && G.turn === 'p') return false;
+    return true;
+  }
+
+  function fruitCap(k) {
+    return (ITEM_MAX[k] || 0) + 1;
+  }
+
+  function rollFruitN() {
+    const r = Math.random();
+    if (r < 0.34) return 0;
+    if (r < 0.82) return 1;
+    return 2;
+  }
+
+  function fruitBlocked(x, y) {
+    if (x < 90 || x > VW - 90 || y < 52 || y > VH - 80) return true;
+    if (inGround(x, y) || inWall(x, y)) return true;
+    const gy = groundAt(x);
+    if (!(gy - y >= 56)) return true;
+    for (let a = 0; a < 8; a++) {
+      const th = a * TAU / 8;
+      const wx = x + Math.cos(th) * FRUIT_WALL;
+      const wy = y + Math.sin(th) * FRUIT_WALL;
+      if (inWall(wx, wy)) return true;
+    }
+    if (G.p && hypot(x - G.p.x, y - G.p.y) < 80) return true;
+    if (G.f && hypot(x - G.f.x, y - G.f.y) < 80) return true;
+    const list = G.fruits;
+    if (list) {
+      for (let i = 0; i < list.length; i++) {
+        if (hypot(x - list[i].x, y - list[i].y) < 72) return true;
+      }
+    }
+    return false;
+  }
+
+  function pickFruitSpot() {
+    for (let i = 0; i < 36; i++) {
+      const x = rand(110, VW - 110);
+      const gy = groundAt(x);
+      const yHi = Math.min(gy - 56, 340);
+      const yLo = 64;
+      if (yHi <= yLo + 8) continue;
+      const y = rand(yLo, yHi);
+      if (!fruitBlocked(x, y)) return { x: x, y: y };
+    }
+    return null;
+  }
+
+  function spawnFruits(forceN) {
+    G.fruits = G.fruits || [];
+    G.fruits.length = 0;
+    if (!fruitModeOk()) return;
+    const n = clamp(forceN != null ? forceN : rollFruitN(), 0, 2);
+    for (let i = 0; i < n; i++) {
+      const p = pickFruitSpot();
+      if (!p) continue;
+      G.fruits.push({
+        x: p.x,
+        y: p.y,
+        r: FRUIT_R,
+        gold: Math.random() < FRUIT_GOLD_P,
+        ph: rand(0, TAU)
+      });
+    }
+  }
+
+  function clearFruits(puff) {
+    const list = G.fruits;
+    if (list && puff) {
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        burst(f.x, f.y, f.gold ? GOLD : HOT, REDUCE ? 3 : 6, 46, 0.18);
+      }
+    }
+    if (list) list.length = 0;
+  }
+
+  function grantFruit(owner, gold) {
+    if (!owner || owner.stake) return null;
+    if (!owner.items) owner.items = { leap: 0, warp: 0, neon: 0, drum: 0 };
+    if (gold) {
+      addRage(owner, FRUIT_RAGE);
+      return { gold: true, name: '怒' };
+    }
+    const open = [];
+    for (let i = 0; i < ITEM_KEYS.length; i++) {
+      const k = ITEM_KEYS[i];
+      if ((owner.items[k] || 0) < fruitCap(k)) open.push(k);
+    }
+    if (!open.length) return { gold: false, name: '' };
+    const k = open[irand(0, open.length - 1)];
+    owner.items[k] = (owner.items[k] || 0) + 1;
+    return { gold: false, name: ITEM_NAME[k], id: k };
+  }
+
+  function collectFruit(idx, owner) {
+    const list = G.fruits;
+    if (!list || idx < 0 || idx >= list.length) return;
+    const f = list[idx];
+    list.splice(idx, 1);
+    const rgb = f.gold ? GOLD : HOT;
+    burst(f.x, f.y, rgb, REDUCE ? 8 : 18, 150, 0.4);
+    burst(f.x, f.y, WHT, REDUCE ? 4 : 8, 90, 0.22);
+    ringAt(f.x, f.y, rgb, 30);
+    audio.ensure();
+    audio.beep(f.gold ? 660 : 540, 0.08, 'sine', 0.042, 1040);
+    audio.beep(f.gold ? 880 : 760, 0.1, 'triangle', 0.03, 1400);
+    const got = grantFruit(owner, f.gold);
+    if (got && got.gold) {
+      toast('殿果 · 怒', false, true);
+      floatText(f.x, f.y - 14, '+25', GOLD, false);
+    } else if (got && got.name) {
+      toast('殿果 · ' + got.name, false, false);
+      floatText(f.x, f.y - 14, got.name, HOT, false);
+    } else {
+      toast('殿果', false, false);
+    }
+    syncHud();
+  }
+
+  function fruitHitAt(x, y, owner) {
+    const list = G.fruits;
+    if (!list || !list.length) return;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const f = list[i];
+      if (hypot(x - f.x, y - f.y) <= f.r + 6) collectFruit(i, owner);
+    }
+  }
+
+  function sweepFruits(x0, y0, x1, y1, owner) {
+    const list = G.fruits;
+    if (!list || !list.length) return;
+    const d = hypot(x1 - x0, y1 - y0);
+    const n = Math.max(1, Math.ceil(d / 6));
+    for (let k = 1; k <= n; k++) {
+      const t = k / n;
+      fruitHitAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, owner);
+    }
   }
 
   function explode(x, y, wep, owner, fromHit) {
@@ -1892,6 +2047,8 @@
     if (!s) return;
     s.vx += G.wind * windKAt(s.wep, s.life) * dt;
     s.vy += (GRAV + gustAy(s.x)) * dt;
+    const ox = s.x;
+    const oy = s.y;
     s.x += s.vx * dt;
     s.y += s.vy * dt;
     s.life += dt;
@@ -1899,6 +2056,7 @@
     if (trail.length > 42) trail.shift();
     if (G.ghostPend) G.ghostPend.points = trail.slice();
     setCamShot(s);
+    sweepFruits(ox, oy, s.x, s.y, s.owner);
     if (s.x < 2 || s.x > VW - 2 || s.y > VH + 20) {
       explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false);
       return;
@@ -1916,6 +2074,8 @@
         const ux = s.vx / sp;
         const uy = s.vy / sp;
         for (let k = 0; k <= 46; k += 4) carve(s.x + ux * k, s.y + uy * k, 11);
+        const px = s.x;
+        const py = s.y;
         s.x += ux * 46;
         s.y += uy * 46;
         let g = 0;
@@ -1924,6 +2084,7 @@
           s.y += uy * 3;
           g += 1;
         }
+        sweepFruits(px, py, s.x, s.y, s.owner);
         burst(s.x, s.y, HOT, 10, 120, 0.3);
         audio.tick();
         return;
@@ -2574,6 +2735,7 @@
     G.safeL = 0;
     G.safeR = VW - 1;
     G.slowMo = 0;
+    G.fruits = [];
   }
 
   function startGame(kind) {
@@ -3334,6 +3496,35 @@
     g.restore();
   }
 
+  function drawFruits(g) {
+    const list = G.fruits;
+    if (!list || !list.length) return;
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      const bob = REDUCE ? 0 : Math.sin(G.t * 3.4 + f.ph) * 3.2;
+      const y = f.y + bob;
+      const rgb = f.gold ? GOLD : HOT;
+      const glow = REDUCE ? 0.35 : (0.42 + 0.28 * (0.5 + 0.5 * Math.sin(G.t * 4.1 + f.ph)));
+      g.save();
+      g.shadowColor = rgba(rgb, glow);
+      g.shadowBlur = REDUCE ? 8 : 18;
+      g.fillStyle = rgba(rgb, 0.92);
+      g.beginPath();
+      g.arc(f.x, y, f.r, 0, TAU);
+      g.fill();
+      g.fillStyle = rgba(WHT, 0.55);
+      g.beginPath();
+      g.arc(f.x - 3.2, y - 3.4, f.r * 0.34, 0, TAU);
+      g.fill();
+      g.restore();
+      g.strokeStyle = rgba(rgb, 0.28 + glow * 0.45);
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(f.x, y, f.r + 3 + glow * 3.2, 0, TAU);
+      g.stroke();
+    }
+  }
+
   function drawChargeBar(g, u) {
     if (!(G.phase === 'charge' && curUnit() === u)) return;
     const w = 52;
@@ -3506,9 +3697,10 @@
       g.stroke();
       const land = drawPts[drawPts.length - 1];
       g.setLineDash([]);
-      g.strokeStyle = 'rgba(255,227,107,0.78)';
-      g.lineWidth = 1.4;
-      const s = 4.5;
+      const pulse = (!REDUCE && lv >= 2) ? (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(G.t * 4.4))) : 1;
+      g.strokeStyle = 'rgba(255,227,107,' + (0.58 + 0.28 * pulse) + ')';
+      g.lineWidth = 1.2 + 0.6 * pulse;
+      const s = 4.2 + 1.1 * pulse;
       g.beginPath();
       g.moveTo(land.x - s, land.y - s);
       g.lineTo(land.x + s, land.y + s);
@@ -3516,7 +3708,7 @@
       g.lineTo(land.x - s, land.y + s);
       g.stroke();
       g.beginPath();
-      g.arc(land.x, land.y, 6, 0, TAU);
+      g.arc(land.x, land.y, 5.2 + 2.2 * pulse, 0, TAU);
       g.stroke();
     }
     g.restore();
@@ -3558,6 +3750,7 @@
     drawGhostPath(ctx);
     drawPredict(ctx);
     drawWarpAim(ctx);
+    drawFruits(ctx);
 
     if (G.p && G.p.hp > 0) {
       drawSpriteUnit(ctx, G.p);
@@ -3993,9 +4186,64 @@
     ok('forge leap onto pad', FORGE_C1 + LEAP_DX > FORGE_R0 && FORGE_C1 + LEAP_DX < FORGE_R1, FORGE_C1 + LEAP_DX);
     ok('g vk still locked', GRAV === 260 && VK === 420);
     ok('assist keep default 中', G.assist === 2);
+    ok('fruit names', ITEM_NAME.leap === '飞步' && ITEM_NAME.warp === '影挪' && ITEM_NAME.neon === '霓弹' && ITEM_NAME.drum === '鼓息');
+    ok('fruit gold 15', FRUIT_GOLD_P === 0.15 && FRUIT_RAGE === 25 && FRUIT_R === 12);
+    ok('fruit cap +1', fruitCap('leap') === 3 && fruitCap('warp') === 2 && fruitCap('neon') === 3 && fruitCap('drum') === 2);
+    const bagFull = { items: { leap: 3, warp: 2, neon: 3, drum: 2 }, rage: 10, stake: false };
+    const fullGot = grantFruit(bagFull, false);
+    ok('fruit cap blocks', fullGot && !fullGot.name && bagFull.items.leap === 3);
+    const bagOpen = { items: { leap: 2, warp: 1, neon: 2, drum: 1 }, rage: 10, stake: false };
+    const openGot = grantFruit(bagOpen, false);
+    ok('fruit grant +1', openGot && openGot.id && bagOpen.items[openGot.id] === ITEM_MAX[openGot.id] + 1);
+    const bagGold = { items: { leap: 0, warp: 0, neon: 0, drum: 0 }, rage: 40, stake: false };
+    const goldGot = grantFruit(bagGold, true);
+    ok('gold fruit +25', goldGot && goldGot.gold && bagGold.rage === 65);
+    const bagRage = { items: { leap: 0, warp: 0, neon: 0, drum: 0 }, rage: 90, stake: false };
+    grantFruit(bagRage, true);
+    ok('gold fruit rage cap', bagRage.rage === 100);
+    G.kind = 'hall';
+    G.turns = 1;
+    G.turn = 'p';
+    G.fruits = [];
+    spawnFruits(2);
+    ok('first turn no fruit', G.fruits.length === 0);
+    G.kind = 'drill';
+    G.turns = 4;
+    G.turn = 'p';
+    spawnFruits(2);
+    ok('drill no fruit', G.fruits.length === 0);
+    G.kind = 'hall';
+    G.turns = 2;
+    G.turn = 'p';
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+    G.walls = [];
+    G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100 };
+    G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100 };
+    spawnFruits(2);
+    ok('fruit max 2', G.fruits.length <= 2);
+    ok('fruit spawn midair', G.fruits.length >= 1 && G.fruits.every(function (f) { return groundAt(f.x) - f.y >= 56 && !inWall(f.x, f.y); }));
+    G.kind = 'seat';
+    G.turns = 2;
+    G.turn = 'f';
+    spawnFruits(2);
+    ok('seat can fruit', fruitModeOk() && G.fruits.length <= 2);
+    G.kind = 'core';
+    ok('core can fruit', fruitModeOk());
+    G.mapId = 'ruins';
+    G.H = buildHeight('ruins');
+    buildWalls('ruins', G.H);
+    G.p = { x: 140, y: G.H[140] - 14, r: 14, hp: 100 };
+    G.f = { x: 820, y: G.H[820] - 14, r: 14, hp: 100 };
+    G.fruits = [];
+    ok('fruit not near wall', fruitBlocked(308, G.H[308] - 50) === true);
+    ok('assist still 0-3 after fruit', ASSIST_NAME.length === 4 && G.assist === 2);
+    ok('g vk fruit locked', GRAV === 260 && VK === 420);
     G.mapId = 'plain';
     G.walls = [];
     G.fires = [];
+    G.fruits = [];
+    G.kind = 'hall';
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
