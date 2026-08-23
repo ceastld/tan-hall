@@ -45,8 +45,8 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -86,6 +86,24 @@
   const ARCADE_HALF = (ARCADE_A1 - ARCADE_A0) * 0.5;
   const ARCADE_RAD = (ARCADE_HALF * ARCADE_HALF + ARCADE_RISE * ARCADE_RISE) / (2 * ARCADE_RISE);
   const ARCADE_CY = ARCADE_PAD_Y - ARCADE_RISE + ARCADE_RAD;
+  const TOWERS_GAP = 180;
+  const TOWERS_TOP_Y = 210;
+  const TOWERS_LEDGE_Y = 312;
+  const TOWERS_YARD_Y = 434;
+  const TOWERS_L0 = 52;
+  const TOWERS_L_DECK = 318;
+  const TOWERS_L_INNER = 390;
+  const TOWERS_R_INNER = 570;
+  const TOWERS_R_DECK = 642;
+  const TOWERS_R1 = 908;
+  const TOWERS_LW0 = 304;
+  const TOWERS_LW1 = 340;
+  const TOWERS_RW0 = 620;
+  const TOWERS_RW1 = 656;
+  const TOWERS_PX = 186;
+  const TOWERS_FX = 774;
+  const TOWERS_P2X = 366;
+  const TOWERS_F2X = 594;
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
@@ -691,6 +709,23 @@
         yy += Math.sin(x * 0.09) * 1.4 + Math.sin(x * 0.21) * 0.6;
         h[x] = lerp(ARCADE_VOID, yy, sm);
       }
+    } else if (id === 'towers') {
+      for (let x = 0; x < VW; x++) {
+        h[x] = TOWERS_YARD_Y + Math.sin(x * 0.07) * 2.4 + Math.sin(x * 0.19) * 1.1;
+      }
+      function towersBand(x0, x1, y, edge) {
+        for (let x = x0; x <= x1; x++) {
+          const er = Math.min(x - x0, x1 - x);
+          const ramp = clamp(er / Math.max(1, edge), 0, 1);
+          const sm = ramp * ramp * (3 - 2 * ramp);
+          const yy = y + Math.sin(x * 0.08) * 1.2 + Math.sin(x * 0.21) * 0.5;
+          h[x] = lerp(h[x], yy, sm);
+        }
+      }
+      towersBand(TOWERS_L0, TOWERS_L_DECK, TOWERS_TOP_Y, 8);
+      towersBand(TOWERS_L_DECK, TOWERS_L_INNER, TOWERS_LEDGE_Y, 6);
+      towersBand(TOWERS_R_INNER, TOWERS_R_DECK, TOWERS_LEDGE_Y, 6);
+      towersBand(TOWERS_R_DECK, TOWERS_R1, TOWERS_TOP_Y, 8);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -711,10 +746,12 @@
     if (id === 'vale') return side === 'p' ? 128 : 832;
     if (id === 'forge') return side === 'p' ? 148 : 812;
     if (id === 'arcade') return side === 'p' ? 140 : 820;
+    if (id === 'towers') return side === 'p' ? TOWERS_PX : TOWERS_FX;
     return side === 'p' ? 152 : 768;
   }
 
   function spawnAt(side, slot) {
+    if (G.mapId === 'towers' && slot) return side === 'p' ? TOWERS_P2X : TOWERS_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -733,11 +770,19 @@
 
   function buildWalls(id, H) {
     G.walls = [];
-    if (id !== 'ruins' || !H) return;
-    const specs = [
-      { x0: 288, x1: 328 },
-      { x0: 632, x1: 672 }
-    ];
+    if (!H) return;
+    let specs = null;
+    if (id === 'ruins') {
+      specs = [
+        { x0: 288, x1: 328, kind: 'ruins' },
+        { x0: 632, x1: 672, kind: 'ruins' }
+      ];
+    } else if (id === 'towers') {
+      specs = [
+        { x0: TOWERS_LW0, x1: TOWERS_LW1, kind: 'towers' },
+        { x0: TOWERS_RW0, x1: TOWERS_RW1, kind: 'towers' }
+      ];
+    } else return;
     for (let s = 0; s < specs.length; s++) {
       const spec = specs[s];
       const w = spec.x1 - spec.x0 + 1;
@@ -747,21 +792,38 @@
       for (let i = 0; i < w; i++) {
         const x = spec.x0 + i;
         const bot = Math.round(H[x]);
-        let hh = 112 + Math.sin(x * 0.31) * 10 + Math.sin(x * 0.73) * 7;
-        if ((i % 17) === 9) hh -= 24;
-        if ((i % 23) === 4) hh -= 14;
-        const top = Math.max(88, bot - hh) | 0;
+        let top;
+        if (spec.kind === 'towers') {
+          const cren = (i % 16) < 10;
+          const crown = TOWERS_TOP_Y - (cren ? 46 : 20);
+          top = Math.max(88, Math.min(bot - 8, crown)) | 0;
+        } else {
+          let hh = 112 + Math.sin(x * 0.31) * 10 + Math.sin(x * 0.73) * 7;
+          if ((i % 17) === 9) hh -= 24;
+          if ((i % 23) === 4) hh -= 14;
+          top = Math.max(88, bot - hh) | 0;
+        }
         tops[i] = top;
         bots[i] = bot;
         for (let y = top; y < bot && (y - top) < WALL_MAXH; y++) {
           const ly = y - top;
-          const notch = (i > w * 0.42 && i < w * 0.58 && ly > 36 && ly < 56);
-          const crack = (i === ((w * 0.3) | 0) && ly > 18 && ly < 34);
-          if (!notch && !crack) mask[i * WALL_MAXH + ly] = 1;
+          let solid = true;
+          if (spec.kind !== 'towers') {
+            const notch = (i > w * 0.42 && i < w * 0.58 && ly > 36 && ly < 56);
+            const crack = (i === ((w * 0.3) | 0) && ly > 18 && ly < 34);
+            solid = !notch && !crack;
+          }
+          if (solid) mask[i * WALL_MAXH + ly] = 1;
         }
       }
       G.walls.push({ x0: spec.x0, x1: spec.x1, tops: tops, bots: bots, mask: mask });
     }
+  }
+
+  function isTowersLedge(x) {
+    if (G.mapId !== 'towers') return false;
+    const i = x | 0;
+    return (i >= TOWERS_L_DECK && i <= TOWERS_L_INNER) || (i >= TOWERS_R_INNER && i <= TOWERS_R_DECK);
   }
 
   function inWall(x, y) {
@@ -2326,7 +2388,12 @@
         const s = hypot(G.shot.vx, G.shot.vy) || 1;
         const ux = G.shot.vx / s;
         const uy = G.shot.vy / s;
-        for (let s2 = 0; s2 <= 46; s2 += 4) carve(x - ux * s2, y - uy * s2, 12);
+        for (let s2 = 0; s2 <= 46; s2 += 4) {
+          const px = x - ux * s2;
+          const py = y - uy * s2;
+          carve(px, py, 12);
+          punchWall(px, py, 12);
+        }
       }
       hit = applyBlast(x, y, wep, owner) || hit;
       const rgb = wep.id === 6 ? FIRE : (hit ? unitRgb(owner) : DIRT);
@@ -2459,7 +2526,12 @@
         const sp = hypot(s.vx, s.vy) || 1;
         const ux = s.vx / sp;
         const uy = s.vy / sp;
-        for (let k = 0; k <= 46; k += 4) carve(s.x + ux * k, s.y + uy * k, 11);
+        for (let k = 0; k <= 46; k += 4) {
+          const bx = s.x + ux * k;
+          const by = s.y + uy * k;
+          carve(bx, by, 11);
+          punchWall(bx, by, 12);
+        }
         const px = s.x;
         const py = s.y;
         s.x += ux * 46;
@@ -2824,10 +2896,12 @@
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
       if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
       if (G.mapId === 'arcade' && liveArcade(foe.x)) return 3;
+      if (G.mapId === 'towers' && isTowersLedge(foe.x)) return 3;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
     if (G.mapId === 'ruins' && from && foe && coverBetween(from, foe)) return 1;
+    if (G.mapId === 'towers' && from && foe && coverBetween(from, foe)) return 2;
     if (foe) {
       const x = foe.x | 0;
       const g0 = groundAt(x);
@@ -2857,6 +2931,8 @@
     if (G.mapId === 'ruins' && (wep.id === 1 || wep.id === 4) && inWall(imp.x, imp.y)) bury += 600;
     if (G.mapId === 'forge' && isForgeCrust(imp.x) && G.H && G.H[imp.x | 0] < FORGE_VOID - 20) bury += 900;
     if (G.mapId === 'arcade' && liveArcade(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
+    if (G.mapId === 'towers' && inWall(imp.x, imp.y) && (wep.id === 1 || wep.id === 4)) bury += 600;
+    if (G.mapId === 'towers' && inWall(imp.x, imp.y) && wep.id === 2) bury += 500;
     score += bury;
     return score;
   }
@@ -3651,8 +3727,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -3788,6 +3864,16 @@
       }
       if (drawing) g.stroke();
     }
+    if (G.mapId === 'towers') {
+      g.fillStyle = 'rgba(12,8,18,0.28)';
+      g.fillRect(TOWERS_L_INNER, TOWERS_LEDGE_Y + 8, TOWERS_GAP, VH - TOWERS_LEDGE_Y - 8);
+      g.strokeStyle = 'rgba(216,196,160,0.42)';
+      g.lineWidth = 1.3;
+      g.beginPath();
+      g.moveTo(TOWERS_L_INNER, H[TOWERS_L_INNER]);
+      for (let x = TOWERS_L_INNER; x <= TOWERS_R_INNER; x++) g.lineTo(x, H[x]);
+      g.stroke();
+    }
     terrainDirty = false;
   }
 
@@ -3836,6 +3922,13 @@
       mist.addColorStop(0, 'rgba(40,24,48,0.28)');
       mist.addColorStop(1, 'rgba(40,24,48,0)');
       g.fillStyle = mist;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'towers') {
+      const shade = g.createRadialGradient(480, 360, 20, 480, 400, 280);
+      shade.addColorStop(0, 'rgba(24,16,28,0.22)');
+      shade.addColorStop(1, 'rgba(24,16,28,0)');
+      g.fillStyle = shade;
       g.fillRect(0, 0, VW, VH);
     }
     for (let i = 0; i < stars.length; i++) {
@@ -4081,6 +4174,21 @@
       g.fillStyle = 'rgba(255,210,120,' + glow + ')';
       g.beginPath();
       g.arc(px, 332, 5, 0, TAU);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  function drawTowers(g) {
+    if (G.mapId !== 'towers') return;
+    g.save();
+    const t = G.t;
+    for (let i = 0; i < 8; i++) {
+      const x = TOWERS_L_INNER + 16 + i * 22 + Math.sin(t * 0.6 + i) * 8;
+      const y = TOWERS_YARD_Y - 18 + Math.sin(t * 0.9 + i * 0.7) * 6;
+      g.fillStyle = 'rgba(32,22,40,' + (0.08 + 0.08 * Math.sin(t * 1.4 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 22 + (i % 3) * 6, 6, 0, 0, TAU);
       g.fill();
     }
     g.restore();
@@ -4576,6 +4684,7 @@
     if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
     drawLava(ctx);
     drawArcade(ctx);
+    drawTowers(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -4906,7 +5015,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps ten', MAP_IDS.length === 10 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥');
+    ok('maps eleven', MAP_IDS.length === 11 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -5064,6 +5173,61 @@
     const s65 = traceShot(apx + Math.cos(th65) * 18, apy - 4 - Math.sin(th65) * 18, 65, 70, 0, WEPS[0], G.H, null);
     ok('arcade 30 punch', s30.x > ARCADE_A0 && s30.x < ARCADE_A1 && !s30.air, Math.round(s30.x));
     ok('arcade 65 over', s65.x > ARCADE_A1 && s65.x < ARCADE_R1, Math.round(s65.x));
+    G.H = buildHeight('towers');
+    G.mapId = 'towers';
+    buildWalls('towers', G.H);
+    ok('towers spawn', spawnX('towers', 'p') === TOWERS_PX && spawnX('towers', 'f') === TOWERS_FX);
+    ok('towers spawn on top', G.H[TOWERS_PX] < 250 && G.H[TOWERS_FX] < 250, Math.round(G.H[TOWERS_PX]) + '/' + Math.round(G.H[TOWERS_FX]));
+    ok('towers gap 180', TOWERS_R_INNER - TOWERS_L_INNER === TOWERS_GAP, TOWERS_R_INNER - TOWERS_L_INNER);
+    ok('towers yard below', G.H[480] > G.H[TOWERS_PX] + 80, Math.round(G.H[480] - G.H[TOWERS_PX]));
+    ok('towers ledge nest', G.H[TOWERS_P2X] > G.H[TOWERS_PX] + 40 && G.H[TOWERS_P2X] < G.H[480] - 40, Math.round(G.H[TOWERS_P2X]));
+    ok('towers no void', !isDeathVoid(TOWERS_PX) && !isDeathVoid(TOWERS_FX) && !isDeathVoid(480));
+    ok('towers yard landable', G.H[480] < VH - 20, Math.round(G.H[480]));
+    const twL = (TOWERS_LW0 + TOWERS_LW1) >> 1;
+    const twR = (TOWERS_RW0 + TOWERS_RW1) >> 1;
+    ok('towers inner wall', inWall(twL, TOWERS_LEDGE_Y - 40) && inWall(twR, TOWERS_LEDGE_Y - 40));
+    ok('towers nest open', !inWall(TOWERS_P2X, G.H[TOWERS_P2X] - 14) && !inWall(TOWERS_F2X, G.H[TOWERS_F2X] - 14));
+    const merlonY = TOWERS_TOP_Y - 28;
+    ok('towers battlement', inWall(twL, merlonY));
+    punchCover(twL, merlonY, 48, WEPS[1]);
+    ok('towers 高爆 nibble', !inWall(twL, merlonY));
+    G.H = buildHeight('towers');
+    buildWalls('towers', G.H);
+    const stillMerlon = inWall(twR, merlonY);
+    punchCover(twR, merlonY, 30, WEPS[0]);
+    ok('towers 普通 no nibble', stillMerlon && inWall(twR, merlonY));
+    G.H = buildHeight('towers');
+    buildWalls('towers', G.H);
+    punchCover(twR, merlonY, 22, WEPS[3]);
+    ok('towers 三裂 nibble', !inWall(twR, merlonY));
+    G.H = buildHeight('towers');
+    buildWalls('towers', G.H);
+    const winY = TOWERS_LEDGE_Y - 48;
+    ok('towers window closed', inWall(twL, winY));
+    punchWall(twL, winY, 12);
+    ok('towers 穿透 window', !inWall(twL, winY));
+    G.H = buildHeight('towers');
+    G.mapId = 'towers';
+    buildWalls('towers', G.H);
+    const tpx = spawnX('towers', 'p');
+    const tpy = G.H[tpx | 0] - UNIT_R;
+    const tth65 = 65 * Math.PI / 180;
+    const tth90 = 90 * Math.PI / 180;
+    const ts65 = traceShot(tpx + Math.cos(tth65) * 18, tpy - 4 - Math.sin(tth65) * 18, 65, 70, 0, WEPS[0], G.H, null);
+    const ts90 = traceShot(tpx + Math.cos(tth90) * 18, tpy - 4 - Math.sin(tth90) * 18, 90, 95, 0, WEPS[0], G.H, null);
+    ok('towers 65 cross', ts65.x > TOWERS_R_INNER, Math.round(ts65.x));
+    ok('towers 90 dunk', Math.abs(ts90.x - tpx) < 50, Math.round(ts90.x - tpx));
+    G.kind = 'duo';
+    const tdx0 = spawnAt('p', 0);
+    const tdx1 = spawnAt('p', 1);
+    const tdr0 = spawnAt('f', 0);
+    const tdr1 = spawnAt('f', 1);
+    ok('towers duo extras on ledge', isTowersLedge(tdx1) && isTowersLedge(tdr1), tdx1 + '/' + tdr1);
+    ok('towers duo tops', tdx0 === TOWERS_PX && tdr0 === TOWERS_FX);
+    ok('towers duo not void', !isDeathVoid(tdx0) && !isDeathVoid(tdx1) && !isDeathVoid(tdr0) && !isDeathVoid(tdr1));
+    G.kind = 'hall';
+    G.mapId = 'plain';
+    G.walls = [];
     ok('g vk still locked', GRAV === 260 && VK === 420);
     ok('assist keep default 中', G.assist === 2);
     ok('fruit names', ITEM_NAME.leap === '飞步' && ITEM_NAME.warp === '影挪' && ITEM_NAME.neon === '霓弹' && ITEM_NAME.drum === '鼓息');
@@ -5288,7 +5452,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 10', MAP_IDS.length === 10 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('arcade') === 9);
+    ok('随图 pool 11', MAP_IDS.length === 11 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('towers') === 10);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
