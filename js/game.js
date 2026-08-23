@@ -107,6 +107,10 @@
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
+  const HIT_STOP_DIRECT = 0.14;
+  const KILL_SLOW = 0.22;
+  const KILL_HOLD = 0.40;
+  const COACH_MSGS = ['看风', '65° 最远', '高抛埋人'];
   const SUDDEN_TURN = 12;
   const SUDDEN_HP = 35;
   const SUDDEN_SHRINK = 40;
@@ -308,7 +312,14 @@
     fruits: [],
     veils: [],
     lastHit: null,
-    windSpinT: 0
+    windSpinT: 0,
+    coached: false,
+    coachN: 0,
+    killName: '',
+    killRgb: GOLD,
+    killHold: 0,
+    killPend: 0,
+    killVictim: null
   };
 
   const particles = [];
@@ -587,13 +598,13 @@
     cam.tz = 1.14;
   }
 
-  function setCamImpact(x, y) {
+  function setCamImpact(x, y, punch) {
     G.camHold = true;
     G.impactX = x;
     G.impactY = y;
     cam.tx = clamp(x, 140, VW - 140);
     cam.ty = clamp(y, 90, VH - 70);
-    cam.tz = 1.18;
+    cam.tz = punch ? 1.32 : 1.18;
   }
 
   function groundAt(x) {
@@ -1319,14 +1330,16 @@
 
 
   function toast(msg, warn, gold) {
-    G.toastT = 1.4;
+    const tiny = gold === 'tiny';
+    G.toastT = tiny ? 1.15 : 1.4;
     toastTok += 1;
     if (!toastEl) return;
     toastEl.textContent = msg;
     toastEl.classList.toggle('warn', !!warn);
     const ice = gold === 'ice';
     toastEl.classList.toggle('ice', ice && !warn);
-    toastEl.classList.toggle('gold', !!gold && !ice && !warn);
+    toastEl.classList.toggle('gold', !!gold && !ice && !warn && !tiny);
+    toastEl.classList.toggle('tiny', tiny);
     toastEl.classList.remove('pass');
     toastEl.classList.remove('hidden');
   }
@@ -1340,6 +1353,7 @@
     toastEl.classList.toggle('warn', mag);
     toastEl.classList.remove('ice');
     toastEl.classList.toggle('gold', !mag);
+    toastEl.classList.remove('tiny');
     toastEl.classList.add('pass');
     toastEl.classList.remove('hidden');
   }
@@ -1410,6 +1424,7 @@
       if (o.drillWind === '0' || o.drillWind === '4l' || o.drillWind === '4r' || o.drillWind === 'rand') {
         G.drillWind = o.drillWind;
       }
+      G.coached = !!o.coached;
     } catch (err) { /* */ }
   }
 
@@ -1427,7 +1442,8 @@
         ruler: !!G.ruler,
         mini: G.mini !== false,
         assist: clamp(G.assist | 0, 0, 3),
-        drillWind: G.drillWind || 'rand'
+        drillWind: G.drillWind || 'rand',
+        coached: !!G.coached
       }));
     } catch (err) { /* */ }
   }
@@ -1766,7 +1782,7 @@
   function kick(mag) {
     if (REDUCE) return;
     G.shake = Math.max(G.shake, mag);
-    G.punch = Math.max(G.punch, 1 + Math.min(0.08, mag * 0.01));
+    G.punch = Math.max(G.punch, 1 + Math.min(0.16, mag * 0.012));
     if (!stageEl || G.mode !== 'play') return;
     kickTok += 1;
     const cls = mag >= 5.5 ? 'die' : 'hit';
@@ -1817,6 +1833,68 @@
     }
   }
 
+  function dirtGeyser(x, y) {
+    const n = REDUCE ? 8 : 24;
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI * 0.5 + rand(-0.62, 0.62);
+      const s = rand(180, 380);
+      const life = rand(0.42, 0.82);
+      particles.push({
+        x: x + rand(-10, 10),
+        y: y + rand(-4, 8),
+        vx: Math.cos(a) * s * 0.42,
+        vy: Math.sin(a) * s,
+        g: 640,
+        life: life,
+        max: life,
+        r: rand(2.2, 5.8),
+        rgb: i % 3 === 0 ? STONE : DIRT
+      });
+    }
+    ringAt(x, y, DIRT, 52);
+    burst(x, y, STONE, REDUCE ? 4 : 10, 110, 0.4);
+  }
+
+  function shouldCoach() {
+    if (G.coached) return false;
+    if (G.kind !== 'hall') return false;
+    if (isSquad()) return false;
+    return true;
+  }
+
+  function coachOnFire(u) {
+    if (!shouldCoach()) return;
+    if (!isHuman(u)) return;
+    const n = G.coachN | 0;
+    if (n >= 3) {
+      G.coached = true;
+      saveBest();
+      return;
+    }
+    toast(COACH_MSGS[n], false, 'tiny');
+    G.coachN = n + 1;
+    if (G.coachN >= 3) {
+      G.coached = true;
+      saveBest();
+    }
+  }
+
+  function armKillCam(u) {
+    if (!u) return;
+    G.killName = u.name || '';
+    G.killRgb = unitRgb(u);
+    if (REDUCE) {
+      floatText(u.x, u.y - 42, G.killName, G.killRgb, true);
+      G.killHold = 0;
+      G.killPend = 0;
+      return;
+    }
+    G.slowMo = Math.max(G.slowMo || 0, KILL_SLOW);
+    G.killPend = KILL_HOLD;
+    G.killHold = 0;
+    setCamImpact(u.x, u.y, true);
+  }
+
   function floatText(x, y, s, rgb, big) {
     floats.push({ x: x, y: y, s: s, rgb: rgb, t: 0, big: !!big });
   }
@@ -1828,7 +1906,9 @@
   function hurt(u, dmg, why) {
     if (!u || dmg <= 0 || u.hp <= 0) return 0;
     dmg = Math.max(1, Math.round(dmg));
+    const was = u.hp;
     u.hp = Math.max(0, u.hp - dmg);
+    if (was > 0 && u.hp <= 0 && why === 'blast') G.killVictim = u;
     u.hitT = 0.28;
     u.flash = 0.22;
     floatText(u.x, u.y - 22, '-' + dmg, unitRgb(u), true);
@@ -2240,6 +2320,7 @@
     u.walkT = 0;
     spawnFruits();
     queueNextWind();
+    coachOnFire(u);
     syncHud();
   }
 
@@ -2391,6 +2472,7 @@
   }
 
   function explode(x, y, wep, owner, fromHit) {
+    G.killVictim = null;
     let crater = wep.crater;
     const wasUlt = !!(owner && owner.ult);
     const ultMul = wasUlt ? 1.35 : 1;
@@ -2435,7 +2517,7 @@
     if (wep.id === 6) plantFire(x, y, wasUlt, owner);
     dirtBurst(x, y, hit ? 14 : 20);
     audio.boom(hit, wep, wasUlt);
-    setCamImpact(x, y);
+    setCamImpact(x, y, !!fromHit);
     if (wasUlt) {
       floatText(x, y - 48, '殿破', GOLD, true);
       screenFlash(GOLD, 0.45);
@@ -2444,9 +2526,13 @@
     }
     if (hit) {
       audio.hit();
-      hitStop(fromHit ? 0.12 : 0.09);
+      hitStop(fromHit ? HIT_STOP_DIRECT : 0.09);
       if (fromHit && !REDUCE) G.slowMo = Math.max(G.slowMo || 0, 0.10);
-      kick(fromHit ? 7.4 : 5.6);
+      kick(fromHit ? 10.5 : 5.6);
+      if (fromHit && !REDUCE) {
+        G.punch = Math.max(G.punch, 1.14);
+        cam.tz = Math.max(cam.tz, 1.30);
+      }
       screenFlash(wasUlt ? GOLD : unitRgb(owner), wasUlt ? 0.45 : 0.28);
       G.combo += 1;
       if (G.combo >= 2) {
@@ -2462,6 +2548,10 @@
       G.combo = 0;
       audio.dirt();
       kick(2.8);
+    }
+    if (G.killVictim) {
+      armKillCam(G.killVictim);
+      G.killVictim = null;
     }
     if (owner && owner.ult) owner.ult = false;
     if (G.ghostPend) {
@@ -2904,6 +2994,7 @@
       toast('埋了', true, false);
       floatText(u.x, u.y - 28, '埋了', DIRT, true);
       burst(u.x, u.y + (u.r || 14), DIRT, REDUCE ? 8 : 20, 110, 0.55);
+      dirtGeyser(u.x, u.y + (u.r || 14));
       audio.thump();
       audio.dirt();
     }
@@ -3431,6 +3522,11 @@
     G.fruits = [];
     G.veils = [];
     G.lastHit = null;
+    G.coachN = 0;
+    G.killName = '';
+    G.killHold = 0;
+    G.killPend = 0;
+    G.killVictim = null;
     G.ctrlSide = null;
     G.windSpinT = 0;
     G.nextWind = null;
@@ -3601,6 +3697,11 @@
         G.windSpinT = 0;
         if (windArr) windArr.classList.remove('spin');
       }
+    }
+    if (G.killHold > 0) {
+      G.killHold -= dt;
+      if (G.stop > 0) G.stop -= dt;
+      return;
     }
     updateFx(dt);
     if (G.stop > 0) {
@@ -4778,6 +4879,21 @@
       ctx.fillStyle = rgba(G.flashRgb, G.flash * 0.35);
       ctx.fillRect(view.ox, view.oy, VW * view.scale, VH * view.scale);
     }
+    if (G.killHold > 0 && G.killName) {
+      const fade = G.killHold < 0.08 ? G.killHold / 0.08 : 1;
+      const cx = view.ox + VW * view.scale * 0.5;
+      const cy = view.oy + VH * view.scale * 0.36;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '900 ' + Math.round(46 * view.scale) + 'px Segoe UI, PingFang SC, Noto Sans SC, sans-serif';
+      ctx.fillStyle = rgba(G.killRgb || GOLD, fade);
+      ctx.shadowColor = rgba(G.killRgb || GOLD, 0.55 * fade);
+      ctx.shadowBlur = 22;
+      ctx.fillText(G.killName, cx, cy);
+      ctx.restore();
+    }
     drawMini();
   }
 
@@ -5580,6 +5696,51 @@
     G.windSpinT = 0;
     G.lastHit = null;
     G.phase = 'aim';
+    ok('direct stop 140', HIT_STOP_DIRECT === 0.14);
+    ok('kill slow 220', KILL_SLOW === 0.22 && KILL_HOLD === 0.40);
+    ok('coach msgs', COACH_MSGS[0] === '看风' && COACH_MSGS[1] === '65° 最远' && COACH_MSGS[2] === '高抛埋人');
+    ok('coach no banned', COACH_MSGS.join('').indexOf('传送') < 0 && COACH_MSGS.join('').indexOf('飞行') < 0 && COACH_MSGS.join('').indexOf('三叉戟') < 0 && COACH_MSGS.join('').indexOf('激怒') < 0);
+    G.kind = 'hall';
+    G.coached = false;
+    G.coachN = 0;
+    ok('coach hall first', shouldCoach() === true);
+    G.kind = 'duo';
+    ok('coach skip 对堂', shouldCoach() === false);
+    G.kind = 'quad';
+    ok('coach skip 堂座', shouldCoach() === false);
+    G.kind = 'core';
+    ok('coach skip 堂核', shouldCoach() === false);
+    G.kind = 'seat';
+    ok('coach skip 对坐', shouldCoach() === false);
+    G.kind = 'hall';
+    G.coached = false;
+    G.coachN = 0;
+    const pupil = { id: 'p', name: '岚丸', side: 'p' };
+    coachOnFire(pupil);
+    ok('coach shot1', G.coachN === 1 && G.coached === false);
+    coachOnFire(pupil);
+    ok('coach shot2', G.coachN === 2 && G.coached === false);
+    coachOnFire(pupil);
+    ok('coach shot3 persist', G.coachN === 3 && G.coached === true);
+    coachOnFire(pupil);
+    ok('coach never again', G.coachN === 3 && shouldCoach() === false);
+    G.kind = 'duo';
+    G.coached = false;
+    G.coachN = 0;
+    coachOnFire(pupil);
+    ok('coach 对堂 silent', G.coachN === 0 && G.coached === false);
+    G.kind = 'quad';
+    coachOnFire(pupil);
+    ok('coach 堂座 silent', G.coachN === 0);
+    G.kind = 'hall';
+    G.coached = true;
+    ok('coach persist skip', shouldCoach() === false);
+    ok('geyser exists', typeof dirtGeyser === 'function');
+    ok('kill cam exists', typeof armKillCam === 'function');
+    G.kind = 'hall';
+    G.coached = false;
+    G.coachN = 0;
+    ok('g vk v17', GRAV === 260 && VK === 420);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
@@ -5725,9 +5886,14 @@
     last = t;
     if (dt > 0.05) dt = 0.05;
     if (dt < 0) dt = 0;
-    if (G.slowMo > 0 && G.stop <= 0 && !REDUCE) {
+    if (G.slowMo > 0 && G.stop <= 0 && G.killHold <= 0 && !REDUCE) {
       G.slowMo -= dt;
       dt = dt * 0.28;
+    }
+    if (G.slowMo <= 0 && G.killPend > 0 && G.stop <= 0) {
+      G.killHold = G.killPend;
+      G.stop = Math.max(G.stop, G.killPend);
+      G.killPend = 0;
     }
     acc += dt;
     let steps = 0;
