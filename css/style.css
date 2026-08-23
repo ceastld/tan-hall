@@ -679,7 +679,8 @@ canvas {
   .stage.die,
   .stage.hit,
   .hp.flash .hp-bar,
-  .time-lab.pulse { animation: none; }
+  .time-lab.pulse,
+  .dly.now { animation: none; }
   .wind-arr.spin { animation: none; }
   .overlay { transition: none; }
 }
@@ -873,11 +874,12 @@ canvas {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   letter-spacing: 0.08em;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+  overflow: visible;
 }
 
 .delay-row.gone { display: none !important; }
@@ -899,12 +901,23 @@ canvas {
 .dly.p2 i, .dly.p2 b { color: #9ad8ff; }
 .dly.f i, .dly.f b { color: var(--mag); }
 .dly.f2 i, .dly.f2 b { color: #c8b6ff; }
-.dly.next {
-  border-color: rgba(255, 227, 107, 0.7);
-  box-shadow: 0 0 10px rgba(255, 227, 107, 0.28);
+.dly.next,
+.dly.now {
+  border-color: rgba(255, 227, 107, 0.85);
+  box-shadow: 0 0 14px rgba(255, 227, 107, 0.45);
+  transform: scale(1.14);
+  z-index: 1;
 }
-.dly.next i, .dly.next b { color: var(--gold); }
-.dly.dead { opacity: 0.34; }
+.dly.next i, .dly.next b,
+.dly.now i, .dly.now b { color: var(--gold); }
+.dly.now {
+  animation: dlyPulse 0.9s ease-in-out infinite;
+}
+@keyframes dlyPulse {
+  0%, 100% { transform: scale(1.12); }
+  50% { transform: scale(1.24); }
+}
+.dly.dead { opacity: 0.34; transform: none; animation: none; }
 .dly .pips {
   display: inline-flex;
   gap: 2px;
@@ -1100,6 +1113,33 @@ canvas {
   pointer-events: none;
   line-height: 1.45;
 }
+
+.mini-strip {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 3;
+  width: 160px;
+  height: 48px;
+  pointer-events: none;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 227, 107, 0.28);
+  background: rgba(8, 6, 16, 0.72);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.35);
+  image-rendering: pixelated;
+}
+
+.mini-strip.gone { display: none !important; }
+
+.next-wind {
+  color: rgba(255, 227, 107, 0.42);
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  pointer-events: none;
+  text-shadow: none;
+}
+
+.next-wind.gone { display: none !important; }
 
 .dt-title {
   color: var(--gold);

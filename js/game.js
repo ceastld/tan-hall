@@ -24,9 +24,11 @@
   const WARP_R = 220;
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
-  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · H辅';
-  const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · H辅';
+  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助 · N 地条';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · N地条 · H辅';
+  const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅';
+  const MINI_W = 160;
+  const MINI_H = 48;
   const ASSIST_NAME = ['关', '弱', '中', '强'];
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1, nixi: 1 };
@@ -196,6 +198,11 @@
   const drillWindEl = el('drill-wind');
   const aimHintEl = el('aim-hint');
   const timeLabel = el('time-label');
+  const nextWindEl = el('next-wind');
+  const nextWindArr = el('next-wind-arr');
+  const nextWindNum = el('next-wind-num');
+  const miniCv = el('mini');
+  const miniCx = miniCv ? miniCv.getContext('2d') : null;
 
   const view = { w: 1, h: 1, dpr: 1, scale: 1, ox: 0, oy: 0 };
   const keys = { l: false, r: false, u: false, d: false, fire: false };
@@ -239,8 +246,11 @@
     busy: null,
     busyT: 0,
     ruler: true,
+    mini: true,
     assist: 2,
     drillWind: 'rand',
+    nextWind: null,
+    teaseWind: false,
     ghost: null,
     ghostPend: null,
     pointer: { x: 480, y: 200 },
@@ -842,11 +852,11 @@
     return u;
   }
 
-  function rollWind() {
+  function pickWindValue() {
     if (G.kind === 'drill') {
-      if (G.drillWind === '0') { G.wind = 0; return; }
-      if (G.drillWind === '4r') { G.wind = 4; return; }
-      if (G.drillWind === '4l') { G.wind = -4; return; }
+      if (G.drillWind === '0') return 0;
+      if (G.drillWind === '4r') return 4;
+      if (G.drillWind === '4l') return -4;
     }
     const m = windMax();
     let w;
@@ -856,7 +866,29 @@
       w = irand(-m, m);
     }
     if (w === 0 && Math.random() < 0.35) w = Math.random() < 0.5 ? -1 : 1;
-    G.wind = w;
+    return w;
+  }
+
+  function rollWind() {
+    if (G.kind === 'drill' && G.nextWind != null) {
+      G.wind = G.nextWind;
+      G.nextWind = null;
+      G.teaseWind = false;
+      return;
+    }
+    G.nextWind = null;
+    G.teaseWind = false;
+    G.wind = pickWindValue();
+  }
+
+  function queueNextWind() {
+    if (G.kind !== 'drill') {
+      G.nextWind = null;
+      G.teaseWind = false;
+      return;
+    }
+    if (G.nextWind == null) G.nextWind = pickWindValue();
+    G.teaseWind = true;
   }
 
   function carve(cx, cy, r) {
@@ -1098,8 +1130,9 @@
     },
     boom(hit, wep, ult) {
       this.ensure();
-      this.noise(hit ? 0.2 : 0.14, hit ? 0.08 : 0.05, hit ? 180 : 280);
-      this.beep(hit ? 160 : 110, 0.22, 'sine', hit ? 0.07 : 0.04, 40);
+      this.noise(hit ? 0.24 : 0.14, hit ? 0.11 : 0.05, hit ? 160 : 280);
+      this.beep(hit ? 150 : 110, 0.26, 'sine', hit ? 0.10 : 0.04, 36);
+      if (hit) this.beep(72, 0.18, 'triangle', 0.055, 28);
       if (wep && wep.id === 1) this.beep(70, 0.28, 'triangle', 0.05, 32);
       if (wep && wep.id === 5) this.beep(210, 0.16, 'sine', 0.045, 90);
       if (wep && wep.id === 6) this.beep(140, 0.2, 'sawtooth', 0.045, 50);
@@ -1109,6 +1142,12 @@
         this.beep(86, 0.36, 'triangle', 0.1, 28);
         this.beep(36, 0.28, 'square', 0.06, 20);
       }
+    },
+    thump() {
+      this.ensure();
+      this.beep(48, 0.36, 'sine', 0.12, 22);
+      this.beep(36, 0.22, 'square', 0.045, 20);
+      this.noise(0.2, 0.07, 70);
     },
     hit() {
       this.ensure();
@@ -1220,6 +1259,8 @@
       if (MAP_IDS.indexOf(o.map) >= 0) G.mapId = o.map;
       if (o.ruler === false) G.ruler = false;
       else G.ruler = true;
+      if (o.mini === false) G.mini = false;
+      else G.mini = true;
       const ast = parseInt(o.assist, 10);
       if (ast === 0 || ast === 1 || ast === 2 || ast === 3) G.assist = ast;
       else G.assist = 2;
@@ -1241,6 +1282,7 @@
         mode: saveMode,
         map: G.mapId,
         ruler: !!G.ruler,
+        mini: G.mini !== false,
         assist: clamp(G.assist | 0, 0, 3),
         drillWind: G.drillWind || 'rand'
       }));
@@ -1334,12 +1376,14 @@
           const u = live[i];
           const dead = u.hp <= 0;
           const rank = dead ? -1 : order.indexOf(u);
-          const cls = 'dly ' + u.id + (u.id === nextId && !dead ? ' next' : '') + (dead ? ' dead' : '');
+          const isNow = !dead && u.id === G.turn;
+          const isNext = !dead && u.id === nextId;
+          const cls = 'dly ' + u.id + (isNow ? ' now' : '') + (isNext ? ' next' : '') + (dead ? ' dead' : '');
           let pips = '<span class="pips">';
           for (let k = 0; k < 4; k++) pips += '<em class="' + (!dead && k === rank ? 'on' : '') + '"></em>';
           pips += '</span>';
           html += '<span class="' + cls + '"><i>' + unitShort(u) + '</i><b>' + Math.round(u.delay || 0) + '</b>' + pips + '</span>';
-          sig += u.id + ':' + Math.round(u.delay || 0) + ':' + (dead ? 'x' : rank) + '|';
+          sig += u.id + ':' + Math.round(u.delay || 0) + ':' + (dead ? 'x' : rank) + ':' + (isNow ? 't' : '') + '|';
         }
         if (delayRow.getAttribute('data-sig') !== sig) {
           delayRow.setAttribute('data-sig', sig);
@@ -1355,6 +1399,17 @@
     if (windArr) windArr.textContent = G.wind > 0 ? '→' : G.wind < 0 ? '←' : '·';
     if (windNum) windNum.textContent = String(Math.abs(G.wind | 0));
     else if (windLabel) windLabel.textContent = '风 ' + windText();
+    if (nextWindEl) {
+      const tease = G.kind === 'drill' && G.teaseWind && G.nextWind != null && G.mode === 'play'
+        && (G.phase === 'fly' || G.phase === 'settle');
+      nextWindEl.classList.toggle('gone', !tease);
+      nextWindEl.setAttribute('aria-hidden', tease ? 'false' : 'true');
+      if (tease) {
+        const nw = G.nextWind | 0;
+        if (nextWindArr) nextWindArr.textContent = nw > 0 ? '→' : nw < 0 ? '←' : '·';
+        if (nextWindNum) nextWindNum.textContent = String(Math.abs(nw));
+      }
+    }
     const u = curUnit() || G.p;
     if (angLabel) angLabel.textContent = '角 ' + Math.round((u && u.ang) || 65) + '°';
     if (powLabel) powLabel.textContent = '力 ' + Math.round(G.power);
@@ -1473,6 +1528,13 @@
 
   function cycleAssist(dir) {
     setAssist((clamp(G.assist | 0, 0, 3) + (dir || 1) + 4) % 4);
+  }
+
+  function setMini(on) {
+    G.mini = !!on;
+    saveBest();
+    toast(G.mini ? '地条开' : '地条关', false, false);
+    drawMini();
   }
 
   function mottoGrid(u) {
@@ -2013,6 +2075,8 @@
     burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : unitRgb(u)))), 8, 80, 0.25);
     u.walkT = 0;
     spawnFruits();
+    queueNextWind();
+    syncHud();
   }
 
   function fruitModeOk() {
@@ -2583,6 +2647,7 @@
       toast('埋了', true, false);
       floatText(u.x, u.y - 28, '埋了', DIRT, true);
       burst(u.x, u.y + (u.r || 14), DIRT, REDUCE ? 8 : 20, 110, 0.55);
+      audio.thump();
       audio.dirt();
     }
     u.buried = now;
@@ -3082,6 +3147,8 @@
     G.fruits = [];
     G.lastHit = null;
     G.windSpinT = 0;
+    G.nextWind = null;
+    G.teaseWind = false;
     if (windArr) windArr.classList.remove('spin');
   }
 
@@ -3114,7 +3181,7 @@
     rollWind();
     audio.chargeStop();
     showOverlay('title', '弹堂', '看风，拉满或点射，把对面从石殿上轰下去。');
-    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 点地图换地形 · H 辅助');
+    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 点地图换地形 · H 辅助 · N 地条');
     syncMaps();
     syncDrillWind();
     syncHud();
@@ -3572,6 +3639,64 @@
     g.fillStyle = 'rgba(255,244,200,0.85)';
     g.arc(480, 92, 16, 0, TAU);
     g.fill();
+  }
+
+  function drawMini() {
+    if (!miniCv || !miniCx) return;
+    const show = !!G.mini && (G.mode === 'play' || G.mode === 'end');
+    miniCv.classList.toggle('gone', !show);
+    if (!show) return;
+    const g = miniCx;
+    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
+    const bw = (MINI_W * dpr) | 0;
+    const bh = (MINI_H * dpr) | 0;
+    if (miniCv.width !== bw || miniCv.height !== bh) {
+      miniCv.width = bw;
+      miniCv.height = bh;
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, MINI_W, MINI_H);
+    g.fillStyle = 'rgba(8,6,16,0.78)';
+    g.fillRect(0, 0, MINI_W, MINI_H);
+    if (G.H && G.H.length) {
+      g.beginPath();
+      g.moveTo(0, MINI_H);
+      for (let i = 0; i < MINI_W; i++) {
+        const wx = (i / Math.max(1, MINI_W - 1)) * (VW - 1);
+        const gy = G.H[wx | 0];
+        const my = clamp((gy / VH) * MINI_H, 0, MINI_H);
+        if (i === 0) g.lineTo(0, my);
+        else g.lineTo(i + 1, my);
+      }
+      g.lineTo(MINI_W, MINI_H);
+      g.closePath();
+      g.fillStyle = 'rgba(196,156,112,0.58)';
+      g.fill();
+      g.strokeStyle = 'rgba(255,227,107,0.42)';
+      g.lineWidth = 1;
+      g.stroke();
+    }
+    const units = allUnits();
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      if (!u) continue;
+      const mx = clamp((u.x / VW) * MINI_W, 2, MINI_W - 2);
+      const my = clamp((u.y / VH) * MINI_H, 3, MINI_H - 3);
+      const rgb = u.side === 'p' ? CYN : MAG;
+      const live = u.hp > 0;
+      const now = live && u.id === G.turn;
+      g.fillStyle = live ? rgba(rgb, now ? 1 : 0.88) : 'rgba(244,238,255,0.22)';
+      g.beginPath();
+      g.arc(mx, my, live ? (now ? 3.1 : 2.4) : 1.6, 0, TAU);
+      g.fill();
+      if (now && live) {
+        g.strokeStyle = rgba(GOLD, 0.85);
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(mx, my, 4.2, 0, TAU);
+        g.stroke();
+      }
+    }
   }
 
   function drawWind(g) {
@@ -4202,6 +4327,7 @@
       ctx.fillStyle = rgba(G.flashRgb, G.flash * 0.35);
       ctx.fillRect(view.ox, view.oy, VW * view.scale, VH * view.scale);
     }
+    drawMini();
   }
 
   function worldFromEvent(e) {
@@ -4279,6 +4405,11 @@
     if (k === 'h' || k === 'H') {
       e.preventDefault();
       cycleAssist(1);
+      return;
+    }
+    if (k === 'n' || k === 'N') {
+      e.preventDefault();
+      setMini(!G.mini);
       return;
     }
     if (k === '[') {
@@ -4747,6 +4878,37 @@
     ok('last hit skip mate', G.lastHit === sh);
     ok('随图 pool 9', MAP_IDS.length === 9 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }));
     ok('g vk v1', GRAV === 260 && VK === 420);
+    ok('mini size', MINI_W === 160 && MINI_H === 48);
+    ok('mini default on', G.mini !== false);
+    G.kind = 'hall';
+    G.nextWind = 7;
+    G.teaseWind = true;
+    queueNextWind();
+    ok('hall no next leak', G.nextWind == null && G.teaseWind === false);
+    G.kind = 'core';
+    G.nextWind = 3;
+    G.teaseWind = true;
+    queueNextWind();
+    ok('core no next leak', G.nextWind == null && G.teaseWind === false);
+    G.kind = 'seat';
+    queueNextWind();
+    ok('seat no next leak', G.nextWind == null && G.teaseWind === false);
+    G.kind = 'duo';
+    queueNextWind();
+    ok('duo no next leak', G.nextWind == null && G.teaseWind === false);
+    G.kind = 'drill';
+    G.drillWind = '4r';
+    G.nextWind = null;
+    G.teaseWind = false;
+    queueNextWind();
+    ok('drill tease next', G.teaseWind === true && G.nextWind === 4);
+    G.wind = 0;
+    rollWind();
+    ok('drill apply tease', G.wind === 4 && G.nextWind == null && G.teaseWind === false);
+    G.drillWind = 'rand';
+    G.kind = 'hall';
+    ok('thump exists', typeof audio.thump === 'function');
+    ok('g vk still locked v11', GRAV === 260 && VK === 420);
     G.wind = 0;
     G.windSpinT = 0;
     G.lastHit = null;

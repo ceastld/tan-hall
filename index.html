@@ -35,6 +35,7 @@
           <span id="turn-label" class="turn-lab gone">岚丸的回合</span>
           <span id="map-label">平原</span>
           <span id="wind-label" class="wind">风 <span id="wind-arr" class="wind-arr">·</span> <span id="wind-num">0</span></span>
+          <span id="next-wind" class="next-wind gone" aria-hidden="true">下 <span id="next-wind-arr">·</span> <span id="next-wind-num">0</span></span>
           <span id="time-label" class="time-lab gone">时 20</span>
           <span id="ang-label">角 65°</span>
           <span id="pow-label">力 12</span>
@@ -118,13 +119,14 @@
         <p id="dt-65">65° 建议 —</p>
         <p id="dt-90">90° 建议 —</p>
       </div>
+      <canvas id="mini" class="mini-strip gone" width="160" height="48" aria-hidden="true"></canvas>
       <div id="toast" class="toast hidden"></div>
       <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="ov-title">
         <div class="panel" id="panel">
           <p class="kicker" id="ov-kicker">TAN HALL</p>
           <h1 id="ov-title">弹堂</h1>
           <p class="lead" id="ov-lead">看风，拉满或点射，把对面从石殿上轰下去。</p>
-          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助</p>
+          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助 · N 地条</p>
           <div class="maps" id="ov-maps">
             <button type="button" data-map="plain" class="on" id="map-plain">平原</button>
             <button type="button" data-map="canyon" id="map-canyon">峡谷</button>
