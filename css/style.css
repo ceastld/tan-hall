@@ -316,6 +316,11 @@ body {
 
 #c:focus { outline: none; }
 
+#btn-assist.on {
+  border-color: rgba(255, 227, 107, 0.55);
+  color: var(--gold);
+}
+
 #btn-mute.muted {
   border-color: rgba(255, 61, 184, 0.45);
   color: var(--mag);

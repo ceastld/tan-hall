@@ -24,9 +24,10 @@
   const WARP_R = 220;
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
-  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · R 重开 · M 静音';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 · 65°查表 · Tab尺';
-  const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩';
+  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · R 重开 · M 静音 · H 辅助';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 · 65°查表 · Tab尺 · H辅';
+  const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · H辅';
+  const ASSIST_NAME = ['关', '弱', '中', '强'];
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1 };
   const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0 };
@@ -74,6 +75,11 @@
   function irand(a, b) { return (a + Math.random() * (b - a + 1)) | 0; }
   function hypot(ax, ay) { return Math.sqrt(ax * ax + ay * ay); }
   function lerp(a, b, t) { return a + (b - a) * t; }
+  function approach(a, b, step) {
+    if (a < b) return Math.min(a + step, b);
+    if (a > b) return Math.max(a - step, b);
+    return b;
+  }
   function rgba(rgb, a) { return 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')'; }
   function elev(ang) { return ang <= 90 ? ang : 180 - ang; }
 
@@ -100,6 +106,7 @@
   const ovModes = el('ov-modes');
   const btnMute = el('btn-mute');
   const btnRetry = el('btn-retry');
+  const btnAssist = el('btn-assist');
   const scoreEl = el('score');
   const bestEl = el('best');
   const scoreBox = el('score-box');
@@ -176,6 +183,7 @@
     busy: null,
     busyT: 0,
     ruler: true,
+    assist: 2,
     drillWind: 'rand',
     ghost: null,
     ghostPend: null,
@@ -754,6 +762,9 @@
       if (MAP_IDS.indexOf(o.map) >= 0) G.mapId = o.map;
       if (o.ruler === false) G.ruler = false;
       else G.ruler = true;
+      const ast = parseInt(o.assist, 10);
+      if (ast === 0 || ast === 1 || ast === 2 || ast === 3) G.assist = ast;
+      else G.assist = 2;
       if (o.drillWind === '0' || o.drillWind === '4l' || o.drillWind === '4r' || o.drillWind === 'rand') {
         G.drillWind = o.drillWind;
       }
@@ -772,6 +783,7 @@
         mode: saveMode,
         map: G.mapId,
         ruler: !!G.ruler,
+        assist: clamp(G.assist | 0, 0, 3),
         drillWind: G.drillWind || 'rand'
       }));
     } catch (err) { /* */ }
@@ -842,6 +854,7 @@
       bar(rgF, (G.f.rage || 0) / 100);
     }
     syncItems();
+    syncAssist();
     syncDrillHud();
     if (comboEl) {
       if (G.combo >= 2 && G.mode === 'play') {
@@ -899,6 +912,29 @@
     for (let i = 0; i < btns.length; i++) {
       btns[i].classList.toggle('on', btns[i].getAttribute('data-dw') === G.drillWind);
     }
+  }
+
+  function assistName() {
+    return ASSIST_NAME[clamp(G.assist | 0, 0, 3)];
+  }
+
+  function syncAssist() {
+    if (!btnAssist) return;
+    const n = assistName();
+    btnAssist.textContent = '辅 ' + n;
+    btnAssist.setAttribute('aria-label', '辅助 ' + n);
+    btnAssist.classList.toggle('on', (G.assist | 0) > 0);
+  }
+
+  function setAssist(n) {
+    G.assist = clamp(n | 0, 0, 3);
+    saveBest();
+    syncAssist();
+    toast('辅助 · ' + assistName(), false, G.assist >= 2);
+  }
+
+  function cycleAssist(dir) {
+    setAssist((clamp(G.assist | 0, 0, 3) + (dir || 1) + 4) % 4);
   }
 
   function mottoGrid(u) {
@@ -1940,6 +1976,31 @@
     G.p.ang = clamp(G.p.ang + dir * 70 * dt, 0, 180);
   }
 
+  function assistSnap(dt) {
+    if ((G.assist | 0) < 3 || G.turn !== 'p' || G.busy) return;
+    if (G.phase !== 'aim' && G.phase !== 'charge') return;
+    if (!G.p || !G.f) return;
+    const tip = schoolTips(G.p, G.f);
+    const holdAng = keys.u || keys.d || padHold.u || padHold.d;
+    if (!holdAng && Math.abs(G.p.ang - tip.ang65) <= 3) {
+      G.p.ang = clamp(approach(G.p.ang, tip.ang65, 40 * dt), 0, 180);
+    }
+  }
+
+  function applyCharge(dt) {
+    const rate = (100 - TAP_POW) / CHARGE_T;
+    if ((G.assist | 0) >= 3 && G.p && G.f) {
+      const tip = schoolTips(G.p, G.f);
+      const err = tip.pow65 - G.power;
+      if (Math.abs(err) <= 4) {
+        if (err > 0) G.power = approach(G.power, tip.pow65, 40 * dt);
+        else G.power = Math.min(100, G.power + rate * 0.25 * dt);
+        return;
+      }
+    }
+    G.power = Math.min(100, G.power + rate * dt);
+  }
+
   function resetWorld() {
     G.H = buildHeight(G.mapId);
     terrainDirty = true;
@@ -1990,7 +2051,7 @@
     rollWind();
     audio.chargeStop();
     showOverlay('title', '弹堂', '看风，拉满或点射，把对面从石殿上轰下去。');
-    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 点地图换地形');
+    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 点地图换地形 · H 辅助');
     syncMaps();
     syncDrillWind();
     syncHud();
@@ -2121,9 +2182,10 @@
         if (!G.busy) {
           walkPlayer(dt);
           aimPlayer(dt);
+          assistSnap(dt);
         }
         if (G.phase === 'charge' && !G.busy) {
-          G.power = Math.min(100, G.power + (100 - TAP_POW) / CHARGE_T * dt);
+          applyCharge(dt);
           audio.chargeTick(G.power);
         }
       } else if (G.kind !== 'drill') {
@@ -2594,11 +2656,9 @@
     g.restore();
   }
 
-  function drawPredict(g) {
-    if (G.kind !== 'drill' || G.mode !== 'play') return;
-    if (G.phase !== 'aim' && G.phase !== 'charge') return;
-    const u = G.p;
-    if (!u) return;
+  function collectPredict(u) {
+    const pts = [];
+    if (!u) return { points: pts, len: 0 };
     const wep = wepOf();
     const th = u.ang * Math.PI / 180;
     let x = u.x + Math.cos(th) * 18;
@@ -2607,20 +2667,89 @@
     let vx = Math.cos(th) * spd;
     let vy = -Math.sin(th) * spd;
     const dt = 1 / 60;
-    g.save();
-    g.strokeStyle = 'rgba(255,227,107,0.35)';
-    g.lineWidth = 1.2;
-    g.beginPath();
-    g.moveTo(x, y);
-    for (let i = 0; i < 180; i++) {
+    pts.push({ x: x, y: y });
+    let len = 0;
+    for (let i = 0; i < 420; i++) {
       vx += G.wind * WIND_K * dt;
       vy += (GRAV + gustAy(x)) * dt;
-      x += vx * dt;
-      y += vy * dt;
-      g.lineTo(x, y);
-      if (x < 2 || x > VW - 2 || y > VH + 8 || inGround(x, y)) break;
+      const nx = x + vx * dt;
+      const ny = y + vy * dt;
+      len += hypot(nx - x, ny - y);
+      x = nx;
+      y = ny;
+      pts.push({ x: x, y: y });
+      if (x < 2 || x > VW - 2 || y > VH + 8) break;
+      if (inGround(x, y)) break;
+      if (unitAt(x, y, u)) break;
     }
-    g.stroke();
+    return { points: pts, len: len };
+  }
+
+  function drawPredict(g) {
+    if (G.mode !== 'play') return;
+    if (G.phase !== 'aim' && G.phase !== 'charge') return;
+    if (G.turn !== 'p') return;
+    const lv = G.assist | 0;
+    if (lv <= 0) return;
+    const u = G.p;
+    if (!u || u.hp <= 0) return;
+    const pred = collectPredict(u);
+    const pts = pred.points;
+    if (pts.length < 2) return;
+    let drawPts = pts;
+    const weak = lv === 1;
+    if (weak) {
+      const cap = Math.min(pred.len * 0.4, 8 * GRID);
+      drawPts = [pts[0]];
+      let acc = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const d = hypot(b.x - a.x, b.y - a.y);
+        if (acc + d >= cap) {
+          const t = clamp((cap - acc) / (d || 1), 0, 1);
+          drawPts.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+          break;
+        }
+        acc += d;
+        drawPts.push(b);
+      }
+    }
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.setLineDash([5, 6]);
+    g.lineWidth = 1.6;
+    if (weak) {
+      for (let i = 1; i < drawPts.length; i++) {
+        const a = 1 - i / drawPts.length;
+        g.strokeStyle = rgba(GOLD, 0.08 + a * 0.42);
+        g.beginPath();
+        g.moveTo(drawPts[i - 1].x, drawPts[i - 1].y);
+        g.lineTo(drawPts[i].x, drawPts[i].y);
+        g.stroke();
+      }
+    } else {
+      g.strokeStyle = 'rgba(255,227,107,0.55)';
+      g.beginPath();
+      g.moveTo(drawPts[0].x, drawPts[0].y);
+      for (let i = 1; i < drawPts.length; i++) g.lineTo(drawPts[i].x, drawPts[i].y);
+      g.stroke();
+      const land = drawPts[drawPts.length - 1];
+      g.setLineDash([]);
+      g.strokeStyle = 'rgba(255,227,107,0.78)';
+      g.lineWidth = 1.4;
+      const s = 4.5;
+      g.beginPath();
+      g.moveTo(land.x - s, land.y - s);
+      g.lineTo(land.x + s, land.y + s);
+      g.moveTo(land.x + s, land.y - s);
+      g.lineTo(land.x - s, land.y + s);
+      g.stroke();
+      g.beginPath();
+      g.arc(land.x, land.y, 6, 0, TAU);
+      g.stroke();
+    }
     g.restore();
   }
 
@@ -2769,12 +2898,25 @@
       restart();
       return;
     }
+    if (k === 'h' || k === 'H') {
+      e.preventDefault();
+      cycleAssist(1);
+      return;
+    }
+    if (k === '[') {
+      e.preventDefault();
+      cycleAssist(-1);
+      return;
+    }
+    if (k === ']') {
+      e.preventDefault();
+      cycleAssist(1);
+      return;
+    }
     if (G.mode === 'title') {
       if (k === '1' || k === 'Enter') { startGame('hall'); return; }
       if (k === '2') { startGame('core'); return; }
       if (k === '3') { startGame('drill'); return; }
-      if (k === '[') { setMap(MAP_IDS[(MAP_IDS.indexOf(G.mapId) + MAP_IDS.length - 1) % MAP_IDS.length]); return; }
-      if (k === ']') { setMap(MAP_IDS[(MAP_IDS.indexOf(G.mapId) + 1) % MAP_IDS.length]); return; }
       return;
     }
     if (k === 'Escape' || k === 'Esc') { cancelWarp(); return; }
@@ -2948,6 +3090,16 @@
     G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100, max: 100, side: 'f', ang: 115, face: -1 };
     const tip = schoolTips(G.p, G.f);
     ok('aim hint 65+2wind', Math.round(tip.ang65) === 71, Math.round(tip.ang65) + ' / ' + tip.pow65);
+    ok('assist default 中', G.assist === 2 && ASSIST_NAME[2] === '中');
+    ok('assist wrap', (3 + 1 + 4) % 4 === 0 && (0 - 1 + 4) % 4 === 3);
+    G.power = 70;
+    G.wep = 0;
+    G.neonOn = false;
+    G.wind = 0;
+    const pr = collectPredict(G.p);
+    ok('predict collects', pr.points.length > 8 && pr.len > 200, pr.points.length + ' ' + Math.round(pr.len));
+    const cap = Math.min(pr.len * 0.4, 8 * GRID);
+    ok('weak slice shorter', cap < pr.len && cap <= 8 * GRID + 0.01, Math.round(cap) + ' / ' + Math.round(pr.len));
     ok('bury threshold', BURY_PX === 40);
     const pitH = new Float32Array(VW);
     for (let i = 0; i < VW; i++) pitH[i] = 400;
@@ -3064,6 +3216,7 @@
   if (ovModes) ovModes.addEventListener('click', function () { audio.ensure(); goTitle(); });
   if (btnMute) btnMute.addEventListener('click', function () { audio.ensure(); audio.setMuted(!audio.muted); });
   if (btnRetry) btnRetry.addEventListener('click', function () { audio.ensure(); restart(); });
+  if (btnAssist) btnAssist.addEventListener('click', function () { audio.ensure(); cycleAssist(1); });
   if (ovMaps) {
     ovMaps.addEventListener('click', function (e) {
       const b = e.target.closest('button');
