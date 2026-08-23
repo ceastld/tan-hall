@@ -24,7 +24,7 @@
   const WARP_R = 220;
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
-  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · R 重开 · M 静音 · H 辅助';
+  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · R 重开 · M 静音 · H 辅助';
   const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · H辅';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · H辅';
   const ASSIST_NAME = ['关', '弱', '中', '强'];
@@ -143,6 +143,8 @@
   const wepsEl = el('weps');
   const padEl = el('pad');
   const btnDrill = el('btn-drill');
+  const btnSeat = el('btn-seat');
+  const turnLabel = el('turn-label');
   const itemsEl = el('items');
   const rageLabel = el('rage-label');
   const ghostLabel = el('ghost-label');
@@ -253,8 +255,21 @@
   function curUnit() { return G.turn === 'p' ? G.p : G.f; }
   function otherUnit(u) { return u === G.p ? G.f : G.p; }
   function wepOf() { return G.neonOn ? NEON : (WEPS[G.wep] || WEPS[0]); }
+  function isSeat() { return G.kind === 'seat'; }
+  function isHuman(u) {
+    if (!u || u.stake) return false;
+    if (u.side === 'p') return true;
+    return G.kind === 'seat';
+  }
+  function humanTurn() { return isHuman(curUnit()); }
+  function actorGhost() {
+    const u = curUnit();
+    if (!u || !u.ghost) return null;
+    if (!isHuman(u)) return null;
+    return u.ghost;
+  }
   function kindName() {
-    return G.kind === 'core' ? '堂核' : G.kind === 'drill' ? '演习场' : '弹堂';
+    return G.kind === 'core' ? '堂核' : G.kind === 'drill' ? '演习场' : G.kind === 'seat' ? '对坐' : '弹堂';
   }
   function addRage(u, n) {
     if (!u || u.stake) return;
@@ -307,6 +322,14 @@
     cam.tx = VW * 0.5;
     cam.ty = VH * 0.5;
     cam.tz = 1;
+    G.camHold = false;
+  }
+
+  function setCamShooter(u) {
+    if (!u) { setCamFighters(); return; }
+    cam.tx = clamp(u.x, 200, VW - 200);
+    cam.ty = clamp(u.y * 0.28 + VH * 0.36, 130, VH - 90);
+    cam.tz = 1.08;
     G.camHold = false;
   }
 
@@ -584,6 +607,8 @@
       frozen: 0,
       ragedPrompted: false,
       buried: false,
+      wep: 0,
+      ghost: null,
       items: { leap: ITEM_MAX.leap, warp: ITEM_MAX.warp, neon: ITEM_MAX.neon, drum: ITEM_MAX.drum }
     };
     u.y = groundAt(u.x) - u.r;
@@ -1019,18 +1044,34 @@
       stageLabel.textContent = kindName();
       stageLabel.classList.toggle('hot', G.kind === 'core');
     }
+    if (turnLabel) {
+      if (G.mode === 'play') {
+        const pTurn = G.kind === 'drill' || G.turn === 'p';
+        turnLabel.textContent = pTurn ? '岚丸的回合' : '烬丸的回合';
+        turnLabel.classList.remove('gone');
+        turnLabel.classList.toggle('p', pTurn);
+        turnLabel.classList.toggle('f', !pTurn);
+      } else {
+        turnLabel.classList.add('gone');
+      }
+    }
+    const hpPWrap = hasDom ? document.querySelector('.hp-p') : null;
+    const hpFWrap = hasDom ? document.querySelector('.hp-f') : null;
+    if (hpPWrap) hpPWrap.classList.toggle('on', G.mode === 'play' && (G.kind === 'drill' || G.turn === 'p'));
+    if (hpFWrap) hpFWrap.classList.toggle('on', G.mode === 'play' && G.kind !== 'drill' && G.turn === 'f');
     if (mapLabel) mapLabel.textContent = MAP_NAME[G.mapId] || '平原';
     if (windLabel) windLabel.textContent = '风 ' + windText();
     const u = curUnit() || G.p;
     if (angLabel) angLabel.textContent = '角 ' + Math.round((u && u.ang) || 65) + '°';
     if (powLabel) powLabel.textContent = '力 ' + Math.round(G.power);
-    const stam = (G.p && G.turn === 'p') ? G.p.stam : (u && u.stam != null ? u.stam : G.stam);
-    if (walkLabel) walkLabel.textContent = '体 ' + Math.max(0, Math.round(G.p ? G.p.stam : stam));
-    if (rageLabel) rageLabel.textContent = '怒 ' + Math.max(0, Math.round((G.p && G.p.rage) || 0));
+    const stam = u && u.stam != null ? u.stam : G.stam;
+    if (walkLabel) walkLabel.textContent = '体 ' + Math.max(0, Math.round(stam));
+    if (rageLabel) rageLabel.textContent = '怒 ' + Math.max(0, Math.round((u && u.rage) || 0));
     if (ghostLabel) {
-      if (G.ghost && G.mode === 'play') {
+      const gh = actorGhost();
+      if (gh && G.mode === 'play') {
         ghostLabel.classList.remove('gone');
-        ghostLabel.textContent = '上 ' + Math.round(G.ghost.ang) + '°/' + Math.round(G.ghost.power);
+        ghostLabel.textContent = '上 ' + Math.round(gh.ang) + '°/' + Math.round(gh.power);
       } else {
         ghostLabel.classList.add('gone');
       }
@@ -1090,7 +1131,8 @@
   }
 
   function syncItems() {
-    const bag = G.p && G.p.items ? G.p.items : ITEM_MAX;
+    const actor = curUnit() || G.p;
+    const bag = actor && actor.items ? actor.items : ITEM_MAX;
     const map = { leap: 'n-leap', warp: 'n-warp', neon: 'n-neon', drum: 'n-drum' };
     Object.keys(map).forEach(function (k) {
       const n = el(map[k]);
@@ -1099,14 +1141,14 @@
       if (btn) {
         const left = bag[k] || 0;
         const cost = ITEM_COST[k];
-        const stam = G.p ? G.p.stam : 0;
+        const stam = actor ? actor.stam : 0;
         btn.classList.toggle('empty', left <= 0 || stam < cost);
         btn.classList.toggle('on', k === 'neon' && G.neonOn);
       }
     });
     if (el('btn-ult')) {
-      el('btn-ult').classList.toggle('armed', !!(G.p && (G.p.rage >= 100 || G.p.ult)));
-      el('btn-ult').classList.toggle('empty', !(G.p && (G.p.rage >= 100 || G.p.ult)));
+      el('btn-ult').classList.toggle('armed', !!(actor && (actor.rage >= 100 || actor.ult)));
+      el('btn-ult').classList.toggle('empty', !(actor && (actor.rage >= 100 || actor.ult)));
     }
   }
 
@@ -1424,27 +1466,46 @@
     audio.chargeStop();
     const turns = G.turns;
     if (pd && fd) {
-      G.winStreak = 0;
+      if (G.kind !== 'seat') G.winStreak = 0;
       saveBest();
       audio.lose();
-      showOverlay('draw', '对坠', '同烬。本局 ' + turns + ' 回合 · 连胜清零');
+      toast('对坠', true, false);
+      showOverlay('draw', '对坠', G.kind === 'seat' ? ('同烬。本局 ' + turns + ' 回合') : ('同烬。本局 ' + turns + ' 回合 · 连胜清零'));
       setHint('对坠 · R 再来', 'warn');
     } else if (fd) {
-      G.winStreak += 1;
-      if (!G.bestTurns || turns < G.bestTurns) G.bestTurns = turns;
-      saveBest();
-      audio.win();
-      popStreak(1);
-      screenFlash(GOLD, 0.55);
-      showOverlay('win', '堂破了', '烬丸倒了。' + turns + ' 回合 · 连胜 ' + G.winStreak + (G.bestTurns ? ' · 最快 ' + G.bestTurns + ' 回' : ''));
-      setHint('堂破了 · R 再来', 'hot');
+      if (G.kind === 'seat') {
+        saveBest();
+        audio.win();
+        screenFlash(GOLD, 0.55);
+        toast('岚丸胜', false, true);
+        showOverlay('win', '岚丸胜', '岚丸胜。' + turns + ' 回合');
+        setHint('岚丸胜 · R 再来', 'hot');
+      } else {
+        G.winStreak += 1;
+        if (!G.bestTurns || turns < G.bestTurns) G.bestTurns = turns;
+        saveBest();
+        audio.win();
+        popStreak(1);
+        screenFlash(GOLD, 0.55);
+        showOverlay('win', '堂破了', '烬丸倒了。' + turns + ' 回合 · 连胜 ' + G.winStreak + (G.bestTurns ? ' · 最快 ' + G.bestTurns + ' 回' : ''));
+        setHint('堂破了 · R 再来', 'hot');
+      }
     } else {
-      G.winStreak = 0;
-      saveBest();
-      audio.lose();
-      screenFlash(MAG, 0.5);
-      showOverlay('lose', '落堂了', '岚丸倒下。本局 ' + turns + ' 回合');
-      setHint('落堂了 · R 再来', 'warn');
+      if (G.kind === 'seat') {
+        saveBest();
+        audio.win();
+        screenFlash(MAG, 0.5);
+        toast('烬丸胜', false, true);
+        showOverlay('win', '烬丸胜', '烬丸胜。' + turns + ' 回合');
+        setHint('烬丸胜 · R 再来', 'hot');
+      } else {
+        G.winStreak = 0;
+        saveBest();
+        audio.lose();
+        screenFlash(MAG, 0.5);
+        showOverlay('lose', '落堂了', '岚丸倒下。本局 ' + turns + ' 回合');
+        setHint('落堂了 · R 再来', 'warn');
+      }
     }
     syncHud();
     return true;
@@ -1461,13 +1522,16 @@
     G.walk = WALK_PX;
     G.timeout = TURN_T;
     G.shot = null;
+    G.neonOn = false;
     trail.length = 0;
     const u = who === 'p' ? G.p : G.f;
     if (u) {
       u.stam = STAM_MAX;
       if (G.kind === 'drill') resetItems(u);
+      if (u.wep != null) G.wep = u.wep;
     }
     G.stam = u ? u.stam : STAM_MAX;
+    G.ghost = (u && u.ghost) || null;
     rollWind();
     if (who === 'p') G.turns += 1;
     maybeSudden();
@@ -1481,11 +1545,13 @@
       syncHud();
       return;
     }
-    toast(who === 'p' ? '岚丸的回合 · 风 ' + windText() : '烬丸瞄准中 · 风 ' + windText(), false, who === 'p');
-    setHint(G.kind === 'drill' ? OPS_DRILL : (who === 'p' ? OPS_PLAY : '烬丸拉炮…'), who === 'p' ? '' : 'warn');
-    if (who === 'f' && G.kind !== 'drill') startAI();
+    const human = isHuman(u);
+    toast(who === 'p' ? '岚丸的回合 · 风 ' + windText() : (human ? '烬丸的回合 · 风 ' + windText() : '烬丸瞄准中 · 风 ' + windText()), false, who === 'p');
+    setHint(G.kind === 'drill' ? OPS_DRILL : (human ? OPS_PLAY : '烬丸拉炮…'), human ? '' : 'warn');
+    if (who === 'f' && G.kind !== 'drill' && G.kind !== 'seat') startAI();
     syncHud();
-    setCamFighters();
+    if (G.kind === 'seat') setCamShooter(u);
+    else setCamFighters();
   }
 
   function spawnCrumbs(x, y0, n) {
@@ -1557,7 +1623,7 @@
   }
 
   function startCharge() {
-    if (G.mode !== 'play' || G.phase !== 'aim' || G.turn !== 'p') return;
+    if (G.mode !== 'play' || G.phase !== 'aim' || !humanTurn()) return;
     if (G.busy) return;
     G.phase = 'charge';
     G.charging = true;
@@ -1568,8 +1634,8 @@
 
   function releaseCharge() {
     if (G.mode !== 'play') return;
-    if (G.phase === 'charge' && G.turn === 'p' && G.charging) {
-      fire(G.p);
+    if (G.phase === 'charge' && humanTurn() && G.charging) {
+      fire(curUnit());
     }
   }
 
@@ -1597,9 +1663,8 @@
       life: 0,
       ult: !!u.ult
     };
-    if (u.side === 'p') {
-      G.ghostPend = { x: sx, y: sy, ang: u.ang, power: Math.round(G.power), wepId: wep.id, wind: G.wind, points: [] };
-    }
+    u.ghostPend = { x: sx, y: sy, ang: u.ang, power: Math.round(G.power), wepId: wep.id, wind: G.wind, points: [] };
+    G.ghostPend = u.ghostPend;
     trail.length = 0;
     G.phase = 'fly';
     G.charging = false;
@@ -1692,12 +1757,14 @@
     if (G.ghostPend) {
       const pts = trail.slice();
       pts.push({ x: x, y: y, a: 1 });
-      G.ghost = {
+      const ghost = {
         x: G.ghostPend.x, y: G.ghostPend.y,
         ang: G.ghostPend.ang, power: G.ghostPend.power,
         wepId: G.ghostPend.wepId, wind: G.ghostPend.wind,
         points: pts
       };
+      G.ghost = ghost;
+      if (owner) owner.ghost = ghost;
       G.ghostPend = null;
     }
     ungroundIfAir(G.p);
@@ -1801,7 +1868,7 @@
 
 
   function playerCanAct() {
-    return G.mode === 'play' && G.turn === 'p' && G.phase === 'aim' && !G.busy;
+    return G.mode === 'play' && humanTurn() && G.phase === 'aim' && !G.busy;
   }
 
   function toastDeny(msg) { toast(msg, true, false); }
@@ -1809,11 +1876,11 @@
   function useLeap(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
     if (u.frozen) return false;
-    if (!u.grounded) { if (u.side === 'p') toastDeny('空中不能飞步'); return false; }
-    if (!u.items || u.items.leap <= 0) { if (u.side === 'p') toastDeny('本局已用完'); return false; }
-    if (u.stam < ITEM_COST.leap) { if (u.side === 'p') toastDeny('体力不足'); return false; }
+    if (!u.grounded) { if (isHuman(u)) toastDeny('空中不能飞步'); return false; }
+    if (!u.items || u.items.leap <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
+    if (u.stam < ITEM_COST.leap) { if (isHuman(u)) toastDeny('体力不足'); return false; }
     let dir = facingOf(u);
-    if (u.side === 'p') {
+    if (isHuman(u)) {
       if (keys.l || padHold.l) dir = -1;
       if (keys.r || padHold.r) dir = 1;
     }
@@ -1867,8 +1934,8 @@
 
   function beginWarp(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
-    if (!u.items || u.items.warp <= 0) { if (u.side === 'p') toastDeny('本局已用完'); return false; }
-    if (u.stam < ITEM_COST.warp) { if (u.side === 'p') toastDeny('体力不足'); return false; }
+    if (!u.items || u.items.warp <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
+    if (u.stam < ITEM_COST.warp) { if (isHuman(u)) toastDeny('体力不足'); return false; }
     G.busy = 'warpAim';
     G.warpX = validWarpX(u, G.pointer.x);
     toast('影挪 · 点地确认', false, false);
@@ -1902,7 +1969,7 @@
 
   function toggleNeon(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
-    if (!u.items || u.items.neon <= 0) { if (u.side === 'p') toastDeny('本局已用完'); return false; }
+    if (!u.items || u.items.neon <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
     G.neonOn = !G.neonOn;
     toast(G.neonOn ? '霓弹 · 本发' : '卸下霓弹', false, G.neonOn);
     syncHud();
@@ -1911,7 +1978,7 @@
 
   function useDrum(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
-    if (!u.items || u.items.drum <= 0) { if (u.side === 'p') toastDeny('本局已用完'); return false; }
+    if (!u.items || u.items.drum <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
     u.items.drum -= 1;
     if (u.rage >= 100) toast('怒已满', false, true);
     else {
@@ -1929,7 +1996,7 @@
   function useUlt(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
     if (u.ult) { toast('殿破已点亮', false, true); return false; }
-    if ((u.rage || 0) < 100) { if (u.side === 'p') toastDeny('怒气未满'); return false; }
+    if ((u.rage || 0) < 100) { if (isHuman(u)) toastDeny('怒气未满'); return false; }
     u.rage = 0;
     u.ult = true;
     toast('殿破 · 下一发', false, true);
@@ -1941,6 +2008,7 @@
 
   function skipTurn() {
     if (G.mode !== 'play' || G.phase !== 'aim' || G.busy) return;
+    if (!humanTurn()) return;
     const u = curUnit();
     if (u && u.ult) u.ult = false;
     G.neonOn = false;
@@ -1956,8 +2024,8 @@
 
   function onItem(id) {
     if (G.mode !== 'play') return;
-    if (G.turn !== 'p') return;
-    const u = G.p;
+    if (!humanTurn()) return;
+    const u = curUnit();
     if (id === 'leap') useLeap(u);
     else if (id === 'warp') {
       if (G.busy === 'warpAim') confirmWarp(u);
@@ -2340,50 +2408,58 @@
   }
 
   function walkPlayer(dt) {
-    if (G.turn !== 'p' || G.phase !== 'aim' || G.busy) return;
+    if (!humanTurn() || G.phase !== 'aim' || G.busy) return;
+    const u = curUnit();
+    if (!u) return;
     let dir = 0;
     if (keys.l || padHold.l) dir -= 1;
     if (keys.r || padHold.r) dir += 1;
-    if (!dir || G.walk <= 0 || G.p.stam <= 0) return;
-    if (walkBlocked(G.p)) {
+    if (!dir || G.walk <= 0 || u.stam <= 0) return;
+    if (walkBlocked(u)) {
       if (G.toastT <= 0.2) toast('埋了 · 飞步或影挪', true, false);
       return;
     }
-    const step = Math.min(G.walk, G.p.stam, 90 * dt);
-    const nx = clamp(G.p.x + dir * step, 22, VW - 22);
-    if (wallBlocksWalk(nx, G.p.y, G.p.r)) return;
-    G.p.x = nx;
+    const step = Math.min(G.walk, u.stam, 90 * dt);
+    const nx = clamp(u.x + dir * step, 22, VW - 22);
+    if (wallBlocksWalk(nx, u.y, u.r)) return;
+    u.x = nx;
     G.walk -= step;
-    G.p.stam -= step;
-    G.p.face = dir;
-    G.p.walkT = 0.12;
-    ungroundIfAir(G.p);
+    u.stam -= step;
+    u.face = dir;
+    u.walkT = 0.12;
+    ungroundIfAir(u);
   }
 
   function aimPlayer(dt) {
-    if (G.turn !== 'p' || G.busy || (G.phase !== 'aim' && G.phase !== 'charge')) return;
+    if (!humanTurn() || G.busy || (G.phase !== 'aim' && G.phase !== 'charge')) return;
+    const u = curUnit();
+    if (!u) return;
     let dir = 0;
     if (keys.u || padHold.u) dir += 1;
     if (keys.d || padHold.d) dir -= 1;
     if (!dir) return;
-    G.p.ang = clamp(G.p.ang + dir * 70 * dt, 0, 180);
+    u.ang = clamp(u.ang + dir * 70 * dt, 0, 180);
   }
 
   function assistSnap(dt) {
-    if ((G.assist | 0) < 3 || G.turn !== 'p' || G.busy) return;
+    if ((G.assist | 0) < 3 || !humanTurn() || G.busy) return;
     if (G.phase !== 'aim' && G.phase !== 'charge') return;
-    if (!G.p || !G.f) return;
-    const tip = schoolTips(G.p, G.f);
+    const from = curUnit();
+    const to = otherUnit(from);
+    if (!from || !to) return;
+    const tip = schoolTips(from, to);
     const holdAng = keys.u || keys.d || padHold.u || padHold.d;
-    if (!holdAng && Math.abs(G.p.ang - tip.ang65) <= 3) {
-      G.p.ang = clamp(approach(G.p.ang, tip.ang65, 40 * dt), 0, 180);
+    if (!holdAng && Math.abs(from.ang - tip.ang65) <= 3) {
+      from.ang = clamp(approach(from.ang, tip.ang65, 40 * dt), 0, 180);
     }
   }
 
   function applyCharge(dt) {
     const rate = (100 - TAP_POW) / CHARGE_T;
-    if ((G.assist | 0) >= 3 && G.p && G.f) {
-      const tip = schoolTips(G.p, G.f);
+    const from = curUnit();
+    const to = otherUnit(from);
+    if ((G.assist | 0) >= 3 && from && to) {
+      const tip = schoolTips(from, to);
       const err = tip.pow65 - G.power;
       if (Math.abs(err) <= 4) {
         if (err > 0) G.power = approach(G.power, tip.pow65, 40 * dt);
@@ -2430,16 +2506,19 @@
   function startGame(kind) {
     if (kind === 'drill') G.kind = 'drill';
     else if (kind === 'core') { G.kind = 'core'; G.lastKind = 'core'; }
+    else if (kind === 'seat') G.kind = 'seat';
     else { G.kind = 'hall'; G.lastKind = 'hall'; }
     G.mode = 'play';
     resetWorld();
     hideOverlay();
     audio.start();
     beginTurn('p');
-    const msg = G.kind === 'core' ? '堂核 · 薄血狂风' : G.kind === 'drill' ? '演习场 · 对着表练' : '弹堂 · 看风拉角';
+    const msg = G.kind === 'core' ? '堂核 · 薄血狂风'
+      : G.kind === 'drill' ? '演习场 · 对着表练'
+      : G.kind === 'seat' ? '对坐 · 岚丸先手'
+      : '弹堂 · 看风拉角';
     toast(msg + ' · ' + MAP_NAME[G.mapId], G.kind === 'core', G.kind !== 'core');
-    if (G.kind !== 'drill') saveBest();
-    else saveBest();
+    saveBest();
     syncHud();
     syncDrillWind();
   }
@@ -2451,7 +2530,7 @@
     rollWind();
     audio.chargeStop();
     showOverlay('title', '弹堂', '看风，拉满或点射，把对面从石殿上轰下去。');
-    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 点地图换地形 · H 辅助');
+    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 点地图换地形 · H 辅助');
     syncMaps();
     syncDrillWind();
     syncHud();
@@ -2480,6 +2559,8 @@
     if (n < 0 || n >= WEPS.length) return;
     if (G.mode === 'play' && G.phase !== 'aim' && G.phase !== 'charge') return;
     G.wep = n;
+    const actor = curUnit();
+    if (actor && G.mode === 'play') actor.wep = n;
     syncWeps();
     syncHud();
     toast(WEPS[n].name, false, n === 1);
@@ -2610,7 +2691,7 @@
         toast('超时 · 半力打出', true, false);
         return;
       }
-      if (G.turn === 'p') {
+      if (humanTurn()) {
         if (!G.busy) {
           walkPlayer(dt);
           aimPlayer(dt);
@@ -2620,6 +2701,7 @@
           applyCharge(dt);
           audio.chargeTick(G.power);
         }
+        if (G.kind === 'seat' && (G.phase === 'aim' || G.phase === 'charge')) setCamShooter(curUnit());
       } else if (G.kind !== 'drill') {
         stepAI(dt);
       }
@@ -2630,7 +2712,10 @@
       refreshBury(G.p);
       refreshBury(G.f);
       G.settleT -= dt;
-      if (G.settleT < 0.12) setCamFighters();
+      if (G.settleT < 0.12) {
+        if (G.kind === 'seat') setCamShooter(G.turn === 'p' ? G.f : G.p);
+        else setCamFighters();
+      }
       if (G.settleT <= 0 && unitsSettled()) {
         if (checkEnd()) return;
         if (G.kind === 'drill') beginTurn('p');
@@ -3045,8 +3130,8 @@
       g.stroke();
       g.restore();
     }
-    if (u.side === 'p' && G.ghost && G.turn === 'p' && (G.phase === 'aim' || G.phase === 'charge')) {
-      const gh = G.ghost.ang * Math.PI / 180;
+    if (actorGhost() && curUnit() === u && (G.phase === 'aim' || G.phase === 'charge')) {
+      const gh = actorGhost().ang * Math.PI / 180;
       g.save();
       g.strokeStyle = 'rgba(255,227,107,0.35)';
       g.lineWidth = 1.4;
@@ -3162,9 +3247,10 @@
   }
 
   function drawGhostPath(g) {
-    if (!G.ghost || G.mode !== 'play' || G.turn !== 'p') return;
+    const ghost = actorGhost();
+    if (!ghost || G.mode !== 'play') return;
     if (G.phase !== 'aim' && G.phase !== 'charge') return;
-    const pts = G.ghost.points;
+    const pts = ghost.points;
     if (!pts || pts.length < 2) return;
     g.save();
     g.setLineDash([5, 6]);
@@ -3231,10 +3317,10 @@
   function drawPredict(g) {
     if (G.mode !== 'play') return;
     if (G.phase !== 'aim' && G.phase !== 'charge') return;
-    if (G.turn !== 'p') return;
+    if (!humanTurn()) return;
     const lv = G.assist | 0;
     if (lv <= 0) return;
-    const u = G.p;
+    const u = curUnit();
     if (!u || u.hp <= 0) return;
     const pred = collectPredict(u);
     const pts = pred.points;
@@ -3473,6 +3559,7 @@
       if (k === '1' || k === 'Enter') { startGame('hall'); return; }
       if (k === '2') { startGame('core'); return; }
       if (k === '3') { startGame('drill'); return; }
+      if (k === '4') { startGame('seat'); return; }
       return;
     }
     if (k === 'Escape' || k === 'Esc') { cancelWarp(); return; }
@@ -3722,6 +3809,18 @@
     ok('timeout half still', TURN_T === 20);
     ok('assist keep 0-3', ASSIST_NAME.length === 4 && G.assist === 2);
     ok('g vk locked', GRAV === 260 && VK === 420);
+    G.kind = 'seat';
+    ok('seat name', kindName() === '对坐');
+    ok('seat hp 100', maxHp('p') === 100 && maxHp('f') === 100);
+    ok('seat wind 8', windMax() === 8);
+    ok('seat dmg x1', dmgMul() === 1);
+    ok('seat human 烬丸', isHuman({ side: 'f', stake: false }) === true);
+    ok('isSeat', isSeat() === true);
+    G.kind = 'hall';
+    ok('hall AI 烬丸', isHuman({ side: 'f' }) === false);
+    ok('hall human 岚丸', isHuman({ side: 'p' }) === true);
+    ok('hall not seat', isSeat() === false);
+    ok('assist still default 中', G.assist === 2 && ASSIST_NAME[2] === '中');
     G.mapId = 'plain';
     G.walls = [];
     G.fires = [];
@@ -3753,14 +3852,14 @@
     if (overlayOpen()) return;
     const w = worldFromEvent(e);
     G.pointer.x = w.x; G.pointer.y = w.y;
-    if (G.busy === 'warpAim' && G.turn === 'p') {
+    if (G.busy === 'warpAim' && humanTurn()) {
       G.warpX = w.x;
-      confirmWarp(G.p);
+      confirmWarp(curUnit());
       e.preventDefault();
       return;
     }
-    if (G.mode === 'play' && G.turn === 'p' && (G.phase === 'aim' || G.phase === 'charge') && !G.busy) {
-      aimFromPointer(w.x, w.y, G.p);
+    if (G.mode === 'play' && humanTurn() && (G.phase === 'aim' || G.phase === 'charge') && !G.busy) {
+      aimFromPointer(w.x, w.y, curUnit());
       if (G.phase === 'aim') startCharge();
     }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* */ }
@@ -3771,8 +3870,8 @@
     const w = worldFromEvent(e);
     G.pointer.x = w.x; G.pointer.y = w.y;
     if (G.busy === 'warpAim') G.warpX = w.x;
-    if (G.mode === 'play' && G.turn === 'p' && (G.phase === 'aim' || G.phase === 'charge') && !G.busy) {
-      aimFromPointer(w.x, w.y, G.p);
+    if (G.mode === 'play' && humanTurn() && (G.phase === 'aim' || G.phase === 'charge') && !G.busy) {
+      aimFromPointer(w.x, w.y, curUnit());
     }
   });
   canvas.addEventListener('pointerup', function () {
@@ -3798,6 +3897,7 @@
   if (btnHall) btnHall.addEventListener('click', function () { audio.ensure(); startGame('hall'); });
   if (btnCore) btnCore.addEventListener('click', function () { audio.ensure(); startGame('core'); });
   if (btnDrill) btnDrill.addEventListener('click', function () { audio.ensure(); startGame('drill'); });
+  if (btnSeat) btnSeat.addEventListener('click', function () { audio.ensure(); startGame('seat'); });
   if (itemsEl) {
     itemsEl.addEventListener('click', function (e) {
       const b = e.target.closest('button');

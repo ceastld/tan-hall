@@ -800,6 +800,33 @@ canvas {
   color: #fff3c2;
 }
 
+#btn-seat {
+  border-color: rgba(255, 61, 184, 0.5);
+  background: linear-gradient(180deg, rgba(0, 232, 255, 0.18), rgba(255, 61, 184, 0.16));
+  color: #ffe0f4;
+}
+
+.turn-lab {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.turn-lab.p {
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(0, 232, 255, 0.4);
+}
+
+.turn-lab.f {
+  color: var(--mag);
+  text-shadow: 0 0 10px rgba(255, 61, 184, 0.4);
+}
+
+.hp.on i { color: inherit; font-weight: 700; }
+.hp-p.on i { color: var(--cyan); }
+.hp-f.on i { color: var(--mag); }
+.hp-p.on .hp-bar { box-shadow: 0 0 10px rgba(0, 232, 255, 0.35); }
+.hp-f.on .hp-bar { box-shadow: 0 0 10px rgba(255, 61, 184, 0.35); }
+
 .pad {
   flex-direction: column;
   align-items: center;

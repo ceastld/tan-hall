@@ -32,6 +32,7 @@
         </div>
         <div class="row">
           <span id="stage-label">弹堂</span>
+          <span id="turn-label" class="turn-lab gone">岚丸的回合</span>
           <span id="map-label">平原</span>
           <span id="wind-label" class="wind">风 · 0</span>
           <span id="time-label" class="time-lab gone">时 20</span>
@@ -103,7 +104,7 @@
           <p class="kicker" id="ov-kicker">TAN HALL</p>
           <h1 id="ov-title">弹堂</h1>
           <p class="lead" id="ov-lead">看风，拉满或点射，把对面从石殿上轰下去。</p>
-          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · R 重开 · M 静音 · H 辅助</p>
+          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · R 重开 · M 静音 · H 辅助</p>
           <div class="maps" id="ov-maps">
             <button type="button" data-map="plain" class="on" id="map-plain">平原</button>
             <button type="button" data-map="canyon" id="map-canyon">峡谷</button>
@@ -124,6 +125,7 @@
             <button type="button" id="btn-hall">弹堂</button>
             <button type="button" id="btn-core">堂核</button>
             <button type="button" id="btn-drill">演习场</button>
+            <button type="button" id="btn-seat">对坐</button>
           </div>
           <div class="ov-actions gone" id="ov-end">
             <button type="button" id="ov-retry">再来</button>
