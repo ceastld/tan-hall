@@ -417,7 +417,6 @@
   function isHuman(u) {
     if (!u || u.stake) return false;
     if (G.kind === 'seat') return true;
-    if (G.kind === 'duo') return u.id === 'p';
     return u.side === 'p';
   }
   function humanTurn() { return isHuman(curUnit()); }
@@ -1197,7 +1196,9 @@
     if (!toastEl) return;
     toastEl.textContent = msg;
     toastEl.classList.toggle('warn', !!warn);
-    toastEl.classList.toggle('gold', !!gold && !warn);
+    const ice = gold === 'ice';
+    toastEl.classList.toggle('ice', ice && !warn);
+    toastEl.classList.toggle('gold', !!gold && !ice && !warn);
     toastEl.classList.remove('hidden');
   }
 
@@ -1335,13 +1336,15 @@
         if (G.kind === 'drill') lab = '岚丸的回合';
         else if (isDuo()) {
           const nm = (actor && actor.name) || '岚丸';
-          lab = isHuman(actor) ? (nm + '的回合') : (nm + '瞄准中');
+          lab = isHuman(actor) ? (nm + '出手') : (nm + '瞄准中');
         } else {
           lab = pTurn ? '岚丸的回合' : '烬丸的回合';
         }
         turnLabel.textContent = lab;
         turnLabel.classList.remove('gone');
-        turnLabel.classList.toggle('p', pTurn);
+        const isP2 = isDuo() && actor && actor.id === 'p2';
+        turnLabel.classList.toggle('p', pTurn && !isP2);
+        turnLabel.classList.toggle('p2', !!isP2);
         turnLabel.classList.toggle('f', !pTurn);
       } else {
         turnLabel.classList.add('gone');
@@ -1353,11 +1356,17 @@
     const hpF2Wrap = el('hp-f2-wrap');
     const actorNow = curUnit();
     if (hpRow) hpRow.classList.toggle('duo', G.mode === 'play' && isDuo());
-    if (hpPWrap) hpPWrap.classList.toggle('on', G.mode === 'play' && !!actorNow && actorNow.id === 'p');
+    const inhabitP = G.mode === 'play' && isDuo() && !!actorNow && actorNow.id === 'p' && isHuman(actorNow);
+    const inhabitP2 = G.mode === 'play' && isDuo() && !!actorNow && actorNow.id === 'p2' && isHuman(actorNow);
+    if (hpPWrap) {
+      hpPWrap.classList.toggle('on', G.mode === 'play' && !!actorNow && actorNow.id === 'p');
+      hpPWrap.classList.toggle('inhabit', inhabitP);
+    }
     if (hpFWrap) hpFWrap.classList.toggle('on', G.mode === 'play' && G.kind !== 'drill' && !!actorNow && actorNow.id === 'f');
     if (hpP2Wrap) {
       hpP2Wrap.classList.toggle('gone', !(G.mode === 'play' && isDuo()));
       hpP2Wrap.classList.toggle('on', G.mode === 'play' && isDuo() && !!actorNow && actorNow.id === 'p2');
+      hpP2Wrap.classList.toggle('inhabit', inhabitP2);
     }
     if (hpF2Wrap) {
       hpF2Wrap.classList.toggle('gone', !(G.mode === 'play' && isDuo()));
@@ -1931,7 +1940,8 @@
     }
     const human = isHuman(u);
     const nm = (u && u.name) || (G.turn === 'p' ? '岚丸' : '烬丸');
-    if (human) toast(nm + '的回合 · 风 ' + windText(), false, u && u.side === 'p');
+    if (isDuo() && human) toast(nm + '出手', false, u && u.id === 'p2' ? 'ice' : true);
+    else if (human) toast(nm + '的回合 · 风 ' + windText(), false, u && u.side === 'p');
     else toast(nm + '瞄准中 · 风 ' + windText(), false, false);
     setHint(G.kind === 'drill' ? OPS_DRILL : (human ? OPS_PLAY : (nm + '拉炮…')), human ? '' : 'warn');
     if (!human && G.kind !== 'drill') startAI();
@@ -3114,7 +3124,7 @@
     G.p = makeUnit('p', { id: 'p', name: '岚丸', delay: 0, ord: 0, slot: 0 });
     G.f = makeUnit('f', { id: 'f', name: G.kind === 'drill' ? '石俑' : '烬丸', delay: isDuo() ? 8 : 0, ord: 1, slot: 0 });
     if (isDuo()) {
-      G.p2 = makeUnit('p', { id: 'p2', name: '霜丸', delay: 16, ord: 2, slot: 1, ai: true });
+      G.p2 = makeUnit('p', { id: 'p2', name: '霜丸', delay: 16, ord: 2, slot: 1 });
       G.f2 = makeUnit('f', { id: 'f2', name: '霆丸', delay: 24, ord: 3, slot: 1, ai: true });
     } else {
       G.p2 = null;
@@ -3166,9 +3176,9 @@
     const msg = G.kind === 'core' ? '堂核 · 薄血狂风'
       : G.kind === 'drill' ? '演习场 · 对着表练'
       : G.kind === 'seat' ? '对坐 · 岚丸先手'
-      : isDuo() ? '对堂 · 延迟出手'
+      : isDuo() ? '对堂 · 岚霜出手'
       : '弹堂 · 看风拉角';
-    toast(msg + ' · ' + MAP_NAME[G.mapId], G.kind === 'core', G.kind !== 'core');
+    if (!isDuo()) toast(msg + ' · ' + MAP_NAME[G.mapId], G.kind === 'core', G.kind !== 'core');
     saveBest();
     syncHud();
     syncDrillWind();
@@ -3860,9 +3870,11 @@
     g.save();
     g.translate(u.x, u.y + Math.sin(u.bob) * 1.4);
     if (u.hitT > 0) g.translate(rand(-2, 2), 0);
-    g.fillStyle = rgba(rgb, 0.18);
+    const inhabit = isDuo() && G.mode === 'play' && curUnit() === u && isHuman(u)
+      && (G.phase === 'aim' || G.phase === 'charge');
+    g.fillStyle = rgba(rgb, inhabit ? 0.42 : 0.18);
     g.beginPath();
-    g.arc(0, 2, 16, 0, TAU);
+    g.arc(0, 2, inhabit ? 18 : 16, 0, TAU);
     g.fill();
     g.fillStyle = '#1a1028';
     g.beginPath();
@@ -3909,10 +3921,12 @@
     g.scale(face, 1);
     const h = 46;
     const w = h * (fr.width / fr.height);
-    if (u.id === 'p2' || u.id === 'f2') {
-      g.fillStyle = rgba(unitRgb(u), 0.28);
+    const inhabit = isDuo() && G.mode === 'play' && curUnit() === u && isHuman(u)
+      && (G.phase === 'aim' || G.phase === 'charge');
+    if (u.id === 'p2' || u.id === 'f2' || inhabit) {
+      g.fillStyle = rgba(unitRgb(u), inhabit ? 0.46 : 0.28);
       g.beginPath();
-      g.ellipse(0, 2, 15, 18, 0, 0, TAU);
+      g.ellipse(0, 2, inhabit ? 18 : 15, inhabit ? 21 : 18, 0, 0, TAU);
       g.fill();
     }
     g.drawImage(fr, -w * 0.5, -h * 0.62, w, h);
@@ -3971,10 +3985,11 @@
       g.stroke();
     }
     if (isDuo() && G.mode === 'play' && curUnit() === u && (G.phase === 'aim' || G.phase === 'charge')) {
-      g.strokeStyle = rgba(GOLD, 0.75);
-      g.lineWidth = 1.6;
+      const ring = isHuman(u) ? unitRgb(u) : GOLD;
+      g.strokeStyle = rgba(ring, 0.88);
+      g.lineWidth = isHuman(u) ? 2.2 : 1.6;
       g.beginPath();
-      g.arc(u.x, u.y, 21, 0, TAU);
+      g.arc(u.x, u.y, 22, 0, TAU);
       g.stroke();
     }
   }
@@ -4799,9 +4814,17 @@
     ok('duo wind 8', windMax() === 8);
     ok('duo dmg x1', dmgMul() === 1);
     ok('duo 岚丸 human', isHuman({ id: 'p', side: 'p' }) === true);
-    ok('duo 霜丸 AI', isHuman({ id: 'p2', side: 'p' }) === false);
+    ok('duo 霜丸 human', isHuman({ id: 'p2', side: 'p' }) === true);
     ok('duo 烬丸 AI', isHuman({ id: 'f', side: 'f' }) === false);
     ok('duo 霆丸 AI', isHuman({ id: 'f2', side: 'f' }) === false);
+    G.p = { id: 'p', name: '岚丸', side: 'p', hp: 100 };
+    G.p2 = { id: 'p2', name: '霜丸', side: 'p', hp: 100 };
+    G.f = { id: 'f', name: '烬丸', side: 'f', hp: 100 };
+    G.turn = 'p2';
+    ok('duo 霜丸 humanTurn', humanTurn() === true);
+    G.turn = 'f';
+    ok('duo 烬丸 not humanTurn', humanTurn() === false);
+    G.turn = 'p';
     G.kind = 'seat';
     ok('seat still 1v1 human', isHuman({ side: 'f', stake: false }) === true && isSeat() === true);
     G.kind = 'hall';
@@ -4834,6 +4857,10 @@
     const px1 = spawnAt('p', 1);
     ok('plain duo stagger', Math.abs(px1 - px0) >= 20, Math.round(Math.abs(px1 - px0)));
     ok('duo names locked', G.p2.name === '霜丸' && G.f2.name === '霆丸');
+    const frostU = makeUnit('p', { id: 'p2', name: '霜丸', delay: 16, ord: 2, slot: 1 });
+    ok('duo 霜丸 spawn human', isHuman(frostU) === true && frostU.ai === false && frostU.name === '霜丸');
+    const boltU = makeUnit('f', { id: 'f2', name: '霆丸', delay: 24, ord: 3, slot: 1, ai: true });
+    ok('duo 霆丸 still AI', isHuman(boltU) === false && boltU.ai === true && boltU.name === '霆丸');
     G.kind = 'duo';
     G.turns = 2;
     G.turn = 'p';
