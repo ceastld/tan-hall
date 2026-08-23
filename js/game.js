@@ -31,8 +31,8 @@
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1 };
   const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0 };
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -40,6 +40,20 @@
   const GUST_MID = 480;
   const GUST_HW = 80;
   const GUST_AY = -150;
+  const VALE_MID = 480;
+  const VALE_HW = 96;
+  const VALE_AY = -240;
+  const FORGE_VOID = 532;
+  const FORGE_THICK = 16;
+  const FORGE_PAD_THICK = 50;
+  const FORGE_PAD_Y = 268;
+  const FORGE_CRUST_Y = 294;
+  const FORGE_L0 = 36;
+  const FORGE_L1 = 252;
+  const FORGE_C0 = 292;
+  const FORGE_C1 = 668;
+  const FORGE_R0 = 708;
+  const FORGE_R1 = 924;
   const BRIDGE_X0 = 360;
   const BRIDGE_X1 = 600;
   const BRIDGE_Y = 310;
@@ -290,11 +304,22 @@
   }
 
   function gustAy(x) {
-    if (G.mapId !== 'spire') return 0;
-    const d = Math.abs(x - GUST_MID);
-    if (d >= GUST_HW) return 0;
-    const k = 1 - d / GUST_HW;
-    return GUST_AY * k * k;
+    let mid;
+    let hw;
+    let ay;
+    if (G.mapId === 'spire') {
+      mid = GUST_MID;
+      hw = GUST_HW;
+      ay = GUST_AY;
+    } else if (G.mapId === 'vale') {
+      mid = VALE_MID;
+      hw = VALE_HW;
+      ay = VALE_AY;
+    } else return 0;
+    const d = Math.abs(x - mid);
+    if (d >= hw) return 0;
+    const k = 1 - d / hw;
+    return ay * k * k;
   }
 
   function windKAt(wep, t) {
@@ -305,9 +330,15 @@
 
   function isDeathVoid(x) {
     if (!G.H) return false;
-    if (G.mapId === 'isles' && groundAt(x) >= VH - 14) return true;
+    if ((G.mapId === 'isles' || G.mapId === 'forge') && groundAt(x) >= VH - 14) return true;
     if (G.sudden && (x < G.safeL || x > G.safeR)) return true;
     return false;
+  }
+
+  function isForgeCrust(x) {
+    if (G.mapId !== 'forge') return false;
+    const i = x | 0;
+    return i >= FORGE_C0 && i <= FORGE_C1;
   }
 
   function isBridgeCol(x) {
@@ -436,6 +467,28 @@
         const nearR = Math.max(0, 1 - Math.abs(x - 652) / 48);
         h[x] -= (nearL + nearR) * 8;
       }
+    } else if (id === 'vale') {
+      for (let x = 0; x < VW; x++) {
+        const t = x / (VW - 1);
+        const v = Math.pow(Math.sin(t * Math.PI), 1.45);
+        h[x] = 272 + v * 252 + Math.sin(t * 15.4) * 6 + Math.sin(t * 37) * 2.6;
+      }
+      padFlat(h, 56, 200, 286);
+      padFlat(h, 760, 904, 286);
+    } else if (id === 'forge') {
+      for (let x = 0; x < VW; x++) h[x] = FORGE_VOID;
+      function forgeBand(x0, x1, y) {
+        for (let x = x0; x <= x1; x++) {
+          const edge = Math.min(x - x0, x1 - x);
+          const ramp = clamp(edge / 12, 0, 1);
+          const sm = ramp * ramp * (3 - 2 * ramp);
+          const yy = y + Math.sin(x * 0.10) * 2.2 + Math.sin(x * 0.23) * 1.1;
+          h[x] = lerp(FORGE_VOID, yy, sm);
+        }
+      }
+      forgeBand(FORGE_L0, FORGE_L1, FORGE_PAD_Y);
+      forgeBand(FORGE_C0, FORGE_C1, FORGE_CRUST_Y);
+      forgeBand(FORGE_R0, FORGE_R1, FORGE_PAD_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -453,6 +506,8 @@
     if (id === 'bridge') return side === 'p' ? 150 : 810;
     if (id === 'isles') return side === 'p' ? 160 : 800;
     if (id === 'ruins') return side === 'p' ? 140 : 820;
+    if (id === 'vale') return side === 'p' ? 128 : 832;
+    if (id === 'forge') return side === 'p' ? 148 : 812;
     return side === 'p' ? 152 : 768;
   }
 
@@ -656,6 +711,20 @@
     for (let x = x0; x <= x1; x++) {
       if (G.H[x] < BRIDGE_VOID - 20) {
         G.H[x] = BRIDGE_VOID;
+        any = true;
+      }
+    }
+    if (any) terrainDirty = true;
+  }
+
+  function snapForge(cx, r) {
+    if (G.mapId !== 'forge' || !G.H) return;
+    const x0 = Math.max(FORGE_C0, Math.floor(cx - r - 8));
+    const x1 = Math.min(FORGE_C1, Math.ceil(cx + r + 8));
+    let any = false;
+    for (let x = x0; x <= x1; x++) {
+      if (G.H[x] < FORGE_VOID - 20 && G.H[x] > FORGE_CRUST_Y + 6) {
+        G.H[x] = FORGE_VOID;
         any = true;
       }
     }
@@ -1407,11 +1476,11 @@
       const ny = u.y + u.vy * dt;
       u.fall += Math.max(0, ny - u.y);
       u.y = ny;
-      if (u.y > VH + 40) {
+      if (u.y > VH + 40 || (G.mapId === 'forge' && isDeathVoid(u.x) && u.y > 400)) {
         addRage(u, 20);
         u.hp = 0;
         u.rage = 0;
-        floatText(u.x, VH - 40, '坠亡', MAG, true);
+        floatText(u.x, Math.min(u.y, VH - 40), '坠亡', MAG, true);
         audio.fall();
         if (G.kind === 'drill') {
           G.stakeT = u.stake ? 1.2 : 0.4;
@@ -1700,6 +1769,7 @@
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
         snapBridge(pop.x, pop.r, wep);
+        snapForge(pop.x, pop.r);
         punchCover(pop.x, pop.y, pop.r, wep);
         if (applyBlast(pop.x, pop.y, wep, owner)) hit = true;
         burst(pop.x, pop.y, hit ? HOT : DIRT, hit ? 12 : 8, 160, 0.4);
@@ -1709,6 +1779,7 @@
     } else {
       carve(x, y, crater);
       snapBridge(x, crater, wep);
+      snapForge(x, crater);
       punchCover(x, y, crater, wep);
       if (wep.id === 2 && G.shot && G.shot.pierced) {
         const s = hypot(G.shot.vx, G.shot.vy) || 1;
@@ -2074,6 +2145,7 @@
     if (foe) {
       if (thinLedge(foe) || pitDepth(foe) > 16) return 3;
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
+      if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -2107,6 +2179,7 @@
     if (pitDepth(t) > 28 && feetX < 50) bury += 1400;
     if (G.mapId === 'bridge' && liveBridge(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
     if (G.mapId === 'ruins' && (wep.id === 1 || wep.id === 4) && inWall(imp.x, imp.y)) bury += 600;
+    if (G.mapId === 'forge' && isForgeCrust(imp.x) && G.H && G.H[imp.x | 0] < FORGE_VOID - 20) bury += 900;
     score += bury;
     const selfD = hypot(imp.x - from.x, imp.y - from.y);
     if (selfD < wep.splash * 0.45) {
@@ -2800,8 +2873,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -2873,6 +2946,34 @@
       }
       g.restore();
     }
+    if (G.mapId === 'forge') {
+      g.save();
+      g.globalCompositeOperation = 'destination-out';
+      for (let x = 0; x < VW; x++) {
+        if (H[x] >= FORGE_VOID - 8) {
+          g.fillRect(x, 0, 1, VH);
+        } else {
+          const thick = (x >= FORGE_C0 && x <= FORGE_C1) ? FORGE_THICK : FORGE_PAD_THICK;
+          const holeY = H[x] + thick;
+          const holeH = Math.max(0, VH - holeY);
+          if (holeH > 4) g.fillRect(x, holeY, 1, holeH);
+        }
+      }
+      g.restore();
+      const lava = g.createLinearGradient(0, 318, 0, VH);
+      lava.addColorStop(0, 'rgba(255,90,24,0.12)');
+      lava.addColorStop(0.12, 'rgba(255,80,20,0.55)');
+      lava.addColorStop(0.38, '#c42810');
+      lava.addColorStop(0.74, '#6a1008');
+      lava.addColorStop(1, '#1a0608');
+      g.fillStyle = lava;
+      g.fillRect(0, 318, VW, VH - 318);
+      g.fillStyle = 'rgba(255,170,50,0.32)';
+      for (let x = 0; x < VW; x += 3) {
+        const y = 332 + Math.sin(x * 0.07) * 6 + Math.sin(x * 0.19) * 3;
+        g.fillRect(x, y, 3, 4);
+      }
+    }
     terrainDirty = false;
   }
 
@@ -2902,6 +3003,20 @@
     neb2.addColorStop(1, 'rgba(255,61,184,0)');
     g.fillStyle = neb2;
     g.fillRect(0, 0, VW, VH);
+    if (G.mapId === 'forge') {
+      const heat = g.createRadialGradient(480, VH, 20, 480, VH, 340);
+      heat.addColorStop(0, 'rgba(255,80,20,0.22)');
+      heat.addColorStop(1, 'rgba(255,80,20,0)');
+      g.fillStyle = heat;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'vale') {
+      const lift = g.createRadialGradient(VALE_MID, 220, 10, VALE_MID, 240, 200);
+      lift.addColorStop(0, 'rgba(120,240,255,0.12)');
+      lift.addColorStop(1, 'rgba(120,240,255,0)');
+      g.fillStyle = lift;
+      g.fillRect(0, 0, VW, VH);
+    }
     for (let i = 0; i < stars.length; i++) {
       const s = stars[i];
       const a = s.a * (0.55 + 0.45 * Math.sin(s.tw));
@@ -3023,21 +3138,46 @@
   }
 
   function drawGust(g) {
-    if (G.mapId !== 'spire') return;
+    if (G.mapId !== 'spire' && G.mapId !== 'vale') return;
+    const mid = G.mapId === 'vale' ? VALE_MID : GUST_MID;
+    const hw = G.mapId === 'vale' ? VALE_HW : GUST_HW;
+    const strong = G.mapId === 'vale';
     g.save();
-    const veil = g.createLinearGradient(GUST_MID - GUST_HW, 0, GUST_MID + GUST_HW, 0);
+    const veil = g.createLinearGradient(mid - hw, 0, mid + hw, 0);
     veil.addColorStop(0, 'rgba(154,240,255,0)');
-    veil.addColorStop(0.5, 'rgba(154,240,255,0.10)');
+    veil.addColorStop(0.5, strong ? 'rgba(154,240,255,0.16)' : 'rgba(154,240,255,0.10)');
     veil.addColorStop(1, 'rgba(154,240,255,0)');
     g.fillStyle = veil;
-    g.fillRect(GUST_MID - GUST_HW, 0, GUST_HW * 2, VH);
-    for (let i = 0; i < 18; i++) {
-      const span = GUST_HW * 2;
-      const x = GUST_MID - GUST_HW + ((i * 41 + G.t * 28) % span);
-      const y = VH - 40 - ((G.t * 78 + i * 31) % (VH - 60));
-      const a = 0.16 + 0.14 * Math.sin(G.t * 3.2 + i);
+    g.fillRect(mid - hw, 0, hw * 2, VH);
+    const n = strong ? 26 : 18;
+    for (let i = 0; i < n; i++) {
+      const span = hw * 2;
+      const x = mid - hw + ((i * 41 + G.t * (strong ? 36 : 28)) % span);
+      const y = VH - 40 - ((G.t * (strong ? 110 : 78) + i * 31) % (VH - 60));
+      const a = (strong ? 0.22 : 0.16) + 0.14 * Math.sin(G.t * 3.2 + i);
       g.fillStyle = 'rgba(180,244,255,' + a + ')';
-      g.fillRect(x, y, 2.2, 11 + (i % 4) * 3);
+      g.fillRect(x, y, strong ? 2.6 : 2.2, (strong ? 14 : 11) + (i % 4) * 3);
+    }
+    g.restore();
+  }
+
+  function drawLava(g) {
+    if (G.mapId !== 'forge') return;
+    g.save();
+    const t = G.t;
+    for (let i = 0; i < 14; i++) {
+      const x = 40 + i * 66 + Math.sin(t * 1.4 + i) * 18;
+      const y = 338 + Math.sin(t * 2.1 + i * 0.7) * 7;
+      g.fillStyle = 'rgba(255,' + (110 + ((i * 17) % 80)) + ',30,' + (0.16 + 0.12 * Math.sin(t * 3 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 28 + (i % 3) * 8, 6, 0, 0, TAU);
+      g.fill();
+    }
+    for (let k = 0; k < 10; k++) {
+      const px = 80 + ((k * 97 + t * 40) % 800);
+      const py = 352 - ((t * 28 + k * 19) % 36);
+      g.fillStyle = 'rgba(255,190,70,' + (0.22 + 0.2 * Math.sin(t * 6 + k)) + ')';
+      g.fillRect(px, py, 2, 5 + (k % 3));
     }
     g.restore();
   }
@@ -3404,6 +3544,7 @@
     drawWind(ctx);
     if (terrainDirty) paintTerrain();
     if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
+    drawLava(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -3728,7 +3869,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps seven', MAP_IDS.length === 7 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣');
+    ok('maps nine', MAP_IDS.length === 9 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -3821,6 +3962,37 @@
     ok('hall human 岚丸', isHuman({ side: 'p' }) === true);
     ok('hall not seat', isSeat() === false);
     ok('assist still default 中', G.assist === 2 && ASSIST_NAME[2] === '中');
+    G.H = buildHeight('vale');
+    G.mapId = 'vale';
+    ok('vale spawn', spawnX('vale', 'p') === 128 && spawnX('vale', 'f') === 832);
+    ok('vale spawn safe', G.H[128] > 240 && G.H[128] < 360 && G.H[832] > 240 && G.H[832] < 360, Math.round(G.H[128]) + '/' + Math.round(G.H[832]));
+    ok('vale deep V', G.H[480] > G.H[128] + 120, Math.round(G.H[480] - G.H[128]));
+    ok('vale gust stronger', gustAy(VALE_MID) < GUST_AY && gustAy(VALE_MID) < -180, Math.round(gustAy(VALE_MID)));
+    ok('vale gust pad 0', gustAy(128) === 0);
+    G.p = { x: 128, y: G.H[128] - 14, r: 14, hp: 100, max: 100, side: 'p', ang: 65 };
+    G.f = { x: 832, y: G.H[832] - 14, r: 14, hp: 100, max: 100, side: 'f', ang: 115 };
+    const vale65 = traceShot(128, G.p.y - 4, 65, 70, 0, WEPS[0], G.H, G.p);
+    ok('vale 65 high toss', vale65.x > 420, Math.round(vale65.x));
+    G.mapId = 'spire';
+    const spireLift = gustAy(GUST_MID);
+    G.mapId = 'vale';
+    ok('vale lift > 风柱', gustAy(VALE_MID) < spireLift, Math.round(gustAy(VALE_MID)) + ' < ' + Math.round(spireLift));
+    G.H = buildHeight('forge');
+    G.mapId = 'forge';
+    ok('forge spawn', spawnX('forge', 'p') === 148 && spawnX('forge', 'f') === 812);
+    ok('forge pads high', G.H[148] < 320 && G.H[812] < 320, Math.round(G.H[148]) + '/' + Math.round(G.H[812]));
+    ok('forge crust thin', G.H[480] > G.H[148] && G.H[480] < FORGE_VOID - 80, Math.round(G.H[480]));
+    ok('forge gap void', G.H[270] >= FORGE_VOID - 8, Math.round(G.H[270]));
+    ok('forge spawn not void', !isDeathVoid(148) && !isDeathVoid(812));
+    ok('forge gap death', isDeathVoid(270));
+    const crust0 = G.H[480];
+    carve(480, crust0, 22);
+    snapForge(480, 22);
+    ok('forge snap lava', G.H[480] >= FORGE_VOID - 8, Math.round(G.H[480]));
+    ok('forge leap onto crust', FORGE_L1 + LEAP_DX > FORGE_C0 && FORGE_L1 + LEAP_DX < FORGE_C1, FORGE_L1 + LEAP_DX);
+    ok('forge leap onto pad', FORGE_C1 + LEAP_DX > FORGE_R0 && FORGE_C1 + LEAP_DX < FORGE_R1, FORGE_C1 + LEAP_DX);
+    ok('g vk still locked', GRAV === 260 && VK === 420);
+    ok('assist keep default 中', G.assist === 2);
     G.mapId = 'plain';
     G.walls = [];
     G.fires = [];
