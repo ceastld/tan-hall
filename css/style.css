@@ -646,7 +646,8 @@ canvas {
   .combo.hot,
   .stage.die,
   .stage.hit,
-  .hp.flash .hp-bar { animation: none; }
+  .hp.flash .hp-bar,
+  .time-lab.pulse { animation: none; }
   .overlay { transition: none; }
 }
 
@@ -874,6 +875,31 @@ canvas {
   color: #9affd6;
   background: rgba(100, 255, 210, 0.14);
   box-shadow: 0 0 14px rgba(100, 255, 210, 0.28);
+}
+
+.weps button[data-w="5"].on {
+  border-color: rgba(255, 120, 48, 0.8);
+  color: #ffb078;
+  background: rgba(255, 120, 48, 0.16);
+  box-shadow: 0 0 14px rgba(255, 120, 48, 0.32);
+}
+
+.time-lab {
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255, 227, 107, 0.35);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.time-lab.pulse {
+  color: var(--mag);
+  text-shadow: 0 0 12px rgba(255, 61, 184, 0.55);
+  animation: timePulse 0.55s ease-in-out infinite;
+}
+
+@keyframes timePulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.16); opacity: 0.72; }
 }
 
 .maps button {

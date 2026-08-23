@@ -25,14 +25,18 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · R 重开 · M 静音 · H 辅助';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 5霓轨 · 65°查表 · Tab尺 · H辅';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · H辅';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · H辅';
   const ASSIST_NAME = ['关', '弱', '中', '强'];
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1 };
   const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0 };
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins'];
+  const WALL_MAXH = 160;
+  const FIRE_R = 28;
+  const FIRE_DMG = 8;
+  const FIRE_LIFE = 2;
   const GUST_MID = 480;
   const GUST_HW = 80;
   const GUST_AY = -150;
@@ -62,13 +66,16 @@
   const DIRT = [92, 68, 48];
   const ICE = [160, 220, 255];
   const RAIL = [100, 255, 210];
+  const FIRE = [255, 120, 48];
+  const STONE = [196, 156, 112];
 
   const WEPS = [
     { id: 0, name: '普通弹', direct: 32, splash: 36, crater: 30, spd: 1.00 },
     { id: 1, name: '高爆', direct: 24, splash: 56, crater: 48, spd: 0.88 },
     { id: 2, name: '穿透', direct: 30, splash: 32, crater: 26, spd: 1.06 },
     { id: 4, name: '三裂', direct: 14, splash: 22, crater: 16, spd: 0.96 },
-    { id: 5, name: '霓轨', direct: 20, splash: 40, crater: 22, spd: 0.70 }
+    { id: 5, name: '霓轨', direct: 20, splash: 40, crater: 22, spd: 0.70 },
+    { id: 6, name: '霓火', direct: 18, splash: 44, crater: 20, spd: 1.00 }
   ];
   const NEON = { id: 3, name: '霓弹', direct: 8, splash: 28, crater: 18, spd: 1.00 };
 
@@ -151,6 +158,7 @@
   const dt90 = el('dt-90');
   const drillWindEl = el('drill-wind');
   const aimHintEl = el('aim-hint');
+  const timeLabel = el('time-label');
 
   const view = { w: 1, h: 1, dpr: 1, scale: 1, ox: 0, oy: 0 };
   const keys = { l: false, r: false, u: false, d: false, fire: false };
@@ -207,7 +215,9 @@
     sudden: false,
     safeL: 0,
     safeR: VW - 1,
-    slowMo: 0
+    slowMo: 0,
+    fires: [],
+    walls: []
   };
 
   const particles = [];
@@ -215,6 +225,7 @@
   const rings = [];
   const stars = [];
   const trail = [];
+  const crumbs = [];
 
   let hidden = false;
   let addTok = 0;
@@ -394,6 +405,14 @@
       isleBand(80, 280, 360);
       isleBand(400, 560, 240);
       isleBand(680, 880, 360);
+    } else if (id === 'ruins') {
+      for (let x = 0; x < VW; x++) {
+        const t = x / (VW - 1);
+        h[x] = 396 + Math.sin(t * Math.PI * 2.05) * 14 + Math.sin(t * Math.PI * 5.1) * 6 + Math.sin(t * Math.PI * 12.4) * 3.2;
+        const nearL = Math.max(0, 1 - Math.abs(x - 308) / 48);
+        const nearR = Math.max(0, 1 - Math.abs(x - 652) / 48);
+        h[x] -= (nearL + nearR) * 8;
+      }
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -410,7 +429,132 @@
     if (id === 'spire') return side === 'p' ? 140 : 820;
     if (id === 'bridge') return side === 'p' ? 150 : 810;
     if (id === 'isles') return side === 'p' ? 160 : 800;
+    if (id === 'ruins') return side === 'p' ? 140 : 820;
     return side === 'p' ? 152 : 768;
+  }
+
+  function buildWalls(id, H) {
+    G.walls = [];
+    if (id !== 'ruins' || !H) return;
+    const specs = [
+      { x0: 288, x1: 328 },
+      { x0: 632, x1: 672 }
+    ];
+    for (let s = 0; s < specs.length; s++) {
+      const spec = specs[s];
+      const w = spec.x1 - spec.x0 + 1;
+      const tops = new Int16Array(w);
+      const bots = new Int16Array(w);
+      const mask = new Uint8Array(w * WALL_MAXH);
+      for (let i = 0; i < w; i++) {
+        const x = spec.x0 + i;
+        const bot = Math.round(H[x]);
+        let hh = 112 + Math.sin(x * 0.31) * 10 + Math.sin(x * 0.73) * 7;
+        if ((i % 17) === 9) hh -= 24;
+        if ((i % 23) === 4) hh -= 14;
+        const top = Math.max(88, bot - hh) | 0;
+        tops[i] = top;
+        bots[i] = bot;
+        for (let y = top; y < bot && (y - top) < WALL_MAXH; y++) {
+          const ly = y - top;
+          const notch = (i > w * 0.42 && i < w * 0.58 && ly > 36 && ly < 56);
+          const crack = (i === ((w * 0.3) | 0) && ly > 18 && ly < 34);
+          if (!notch && !crack) mask[i * WALL_MAXH + ly] = 1;
+        }
+      }
+      G.walls.push({ x0: spec.x0, x1: spec.x1, tops: tops, bots: bots, mask: mask });
+    }
+  }
+
+  function inWall(x, y) {
+    if (!G.walls || !G.walls.length) return false;
+    const xi = x | 0;
+    const yi = y | 0;
+    for (let w = 0; w < G.walls.length; w++) {
+      const wall = G.walls[w];
+      if (xi < wall.x0 || xi > wall.x1) continue;
+      const i = xi - wall.x0;
+      const top = wall.tops[i];
+      const bot = wall.bots[i];
+      if (yi < top || yi >= bot) continue;
+      const ly = yi - top;
+      if (ly >= 0 && ly < WALL_MAXH && wall.mask[i * WALL_MAXH + ly]) return true;
+    }
+    return false;
+  }
+
+  function punchWall(cx, cy, r) {
+    if (!G.walls || !G.walls.length || r <= 0) return false;
+    const r2 = r * r;
+    let any = false;
+    for (let w = 0; w < G.walls.length; w++) {
+      const wall = G.walls[w];
+      const x0 = Math.max(wall.x0, Math.floor(cx - r));
+      const x1 = Math.min(wall.x1, Math.ceil(cx + r));
+      for (let x = x0; x <= x1; x++) {
+        const i = x - wall.x0;
+        const top = wall.tops[i];
+        const bot = wall.bots[i];
+        const y0 = Math.max(top, Math.floor(cy - r));
+        const y1 = Math.min(bot - 1, Math.ceil(cy + r));
+        for (let y = y0; y <= y1; y++) {
+          const dx = x - cx;
+          const dy = y - cy;
+          if (dx * dx + dy * dy > r2) continue;
+          const ly = y - top;
+          if (ly >= 0 && ly < WALL_MAXH && wall.mask[i * WALL_MAXH + ly]) {
+            wall.mask[i * WALL_MAXH + ly] = 0;
+            any = true;
+          }
+        }
+      }
+    }
+    return any;
+  }
+
+  function punchCover(cx, cy, r, wep) {
+    if (!wep || (wep.id !== 1 && wep.id !== 4)) return;
+    if (punchWall(cx, cy, r)) {
+      burst(cx, cy, STONE, REDUCE ? 6 : 12, 130, 0.36);
+      audio.dirt();
+    }
+  }
+
+  function clearWallCol(x) {
+    if (!G.walls || !G.walls.length) return;
+    const xi = x | 0;
+    for (let w = 0; w < G.walls.length; w++) {
+      const wall = G.walls[w];
+      if (xi < wall.x0 || xi > wall.x1) continue;
+      const i = xi - wall.x0;
+      const top = wall.tops[i];
+      const bot = wall.bots[i];
+      for (let y = top; y < bot && (y - top) < WALL_MAXH; y++) {
+        wall.mask[i * WALL_MAXH + (y - top)] = 0;
+      }
+    }
+  }
+
+  function wallBlocksWalk(x, y, r) {
+    if (!G.walls || !G.walls.length) return false;
+    r = r || UNIT_R;
+    const x0 = Math.max(0, (x - r + 2) | 0);
+    const x1 = Math.min(VW - 1, (x + r - 2) | 0);
+    for (let i = x0; i <= x1; i++) {
+      if (inWall(i, y) || inWall(i, y + r * 0.45)) return true;
+    }
+    return false;
+  }
+
+  function coverBetween(a, b) {
+    if (!a || !b || !G.walls || !G.walls.length) return false;
+    const x0 = Math.min(a.x, b.x);
+    const x1 = Math.max(a.x, b.x);
+    const y = (a.y + b.y) * 0.5;
+    for (let x = x0; x <= x1; x += 4) {
+      if (inWall(x, y) || inWall(x, b.y)) return true;
+    }
+    return false;
   }
 
   function makeUnit(side) {
@@ -550,7 +694,7 @@
         if (Hsave) G.H = old;
         return { x: x, y: y, t: t, hit: u, air: false };
       }
-      if (inGround(x, y)) {
+      if (inGround(x, y) || inWall(x, y)) {
         if (wep && wep.id === 2 && !pierced) {
           pierced = true;
           fuse = 0.18;
@@ -560,7 +704,7 @@
           x += ux * 46;
           y += uy * 46;
           let g = 0;
-          while (inGround(x, y) && g < 18) {
+          while ((inGround(x, y) || inWall(x, y)) && g < 18) {
             x += ux * 3;
             y += uy * 3;
             g += 1;
@@ -692,6 +836,7 @@
       this.beep(hit ? 160 : 110, 0.22, 'sine', hit ? 0.07 : 0.04, 40);
       if (wep && wep.id === 1) this.beep(70, 0.28, 'triangle', 0.05, 32);
       if (wep && wep.id === 5) this.beep(210, 0.16, 'sine', 0.045, 90);
+      if (wep && wep.id === 6) this.beep(140, 0.2, 'sawtooth', 0.045, 50);
       if (ult) {
         this.noise(0.42, 0.16, 70);
         this.beep(48, 0.5, 'sine', 0.14, 24);
@@ -908,6 +1053,18 @@
         comboEl.hidden = false;
         comboEl.textContent = '连堂 ×' + G.combo;
       } else comboEl.hidden = true;
+    }
+    if (timeLabel) {
+      const ticking = G.mode === 'play' && (G.phase === 'aim' || G.phase === 'charge');
+      if (ticking) {
+        const left = Math.max(0, Math.ceil(G.timeout));
+        timeLabel.textContent = '时 ' + left;
+        timeLabel.classList.toggle('pulse', left <= 5 && G.timeout > 0);
+        timeLabel.classList.remove('gone');
+      } else {
+        timeLabel.classList.add('gone');
+        timeLabel.classList.remove('pulse');
+      }
     }
     if (aimHintEl) {
       const aiming = G.mode === 'play' && (G.phase === 'aim' || G.phase === 'charge') && G.p && G.f;
@@ -1331,9 +1488,28 @@
     setCamFighters();
   }
 
+  function spawnCrumbs(x, y0, n) {
+    const count = REDUCE ? Math.min(1, n) : n;
+    for (let i = 0; i < count; i++) {
+      crumbs.push({
+        x: x + rand(-4, 4),
+        y: y0 + rand(-10, 6),
+        vx: rand(-50, 50),
+        vy: rand(20, 110),
+        g: 480,
+        r: rand(1.8, 4.2),
+        rgb: DIRT,
+        life: 1.8
+      });
+    }
+  }
+
   function dropCol(x) {
     if (!G.H || x < 0 || x >= VW) return;
+    const oldY = G.H[x];
     G.H[x] = VH - 8;
+    clearWallCol(x);
+    if ((x % 6) === 0) spawnCrumbs(x, oldY, REDUCE ? 1 : 2);
   }
 
   function crumbleBand() {
@@ -1439,8 +1615,12 @@
       audio.beep(180, 0.14, 'sine', 0.045, 520);
       audio.beep(90, 0.1, 'triangle', 0.03, 240);
     }
+    if (wep.id === 6) {
+      audio.beep(240, 0.12, 'sawtooth', 0.036, 90);
+      audio.beep(420, 0.1, 'sine', 0.03, 180);
+    }
     if (u.ult) audio.beep(90, 0.28, 'sine', 0.06, 36);
-    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 5 ? RAIL : (u.side === 'p' ? CYN : MAG))), 8, 80, 0.25);
+    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : (u.side === 'p' ? CYN : MAG)))), 8, 80, 0.25);
     u.walkT = 0;
   }
 
@@ -1455,6 +1635,7 @@
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
         snapBridge(pop.x, pop.r, wep);
+        punchCover(pop.x, pop.y, pop.r, wep);
         if (applyBlast(pop.x, pop.y, wep, owner)) hit = true;
         burst(pop.x, pop.y, hit ? HOT : DIRT, hit ? 12 : 8, 160, 0.4);
         ringAt(pop.x, pop.y, HOT, pop.r * 1.5);
@@ -1463,6 +1644,7 @@
     } else {
       carve(x, y, crater);
       snapBridge(x, crater, wep);
+      punchCover(x, y, crater, wep);
       if (wep.id === 2 && G.shot && G.shot.pierced) {
         const s = hypot(G.shot.vx, G.shot.vy) || 1;
         const ux = G.shot.vx / s;
@@ -1470,10 +1652,12 @@
         for (let s2 = 0; s2 <= 46; s2 += 4) carve(x - ux * s2, y - uy * s2, 12);
       }
       hit = applyBlast(x, y, wep, owner) || hit;
-      burst(x, y, hit ? (owner && owner.side === 'p' ? CYN : MAG) : DIRT, hit ? 28 : 16, hit ? 260 : 180, 0.55);
-      burst(x, y, GOLD, hit ? 10 : 4, 140, 0.35);
-      ringAt(x, y, hit ? GOLD : HOT, crater * 1.6);
+      const rgb = wep.id === 6 ? FIRE : (hit ? (owner && owner.side === 'p' ? CYN : MAG) : DIRT);
+      burst(x, y, rgb, hit ? 28 : 16, hit ? 260 : 180, 0.55);
+      burst(x, y, wep.id === 6 ? FIRE : GOLD, hit ? 10 : 4, 140, 0.35);
+      ringAt(x, y, wep.id === 6 ? FIRE : (hit ? GOLD : HOT), crater * 1.6);
     }
+    if (wep.id === 6) plantFire(x, y, wasUlt);
     dirtBurst(x, y, hit ? 14 : 20);
     audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y);
@@ -1521,9 +1705,48 @@
     G.shot = null;
     G.phase = 'settle';
     G.settleT = 0.22;
+    tickFires();
     refreshBury(G.p);
     refreshBury(G.f);
     syncHud();
+  }
+
+  function plantFire(x, y, ult) {
+    const gx = clamp(x, 4, VW - 4);
+    const gy = groundAt(gx);
+    G.fires.push({
+      x: gx,
+      y: Math.min(y, gy),
+      r: FIRE_R,
+      life: FIRE_LIFE,
+      ult: !!ult
+    });
+    burst(gx, gy, FIRE, REDUCE ? 8 : 16, 90, 0.4);
+    ringAt(gx, gy, FIRE, FIRE_R * 1.2);
+    audio.beep(180, 0.16, 'sawtooth', 0.04, 70);
+  }
+
+  function tickFires() {
+    if (!G.fires || !G.fires.length) return;
+    const mul = dmgMul();
+    for (let i = G.fires.length - 1; i >= 0; i--) {
+      const f = G.fires[i];
+      const list = [G.p, G.f];
+      for (let j = 0; j < list.length; j++) {
+        const u = list[j];
+        if (!u || u.hp <= 0) continue;
+        if (hypot(u.x - f.x, u.y - f.y) < f.r) {
+          let dmg = FIRE_DMG * mul;
+          if (f.ult) dmg *= 1.6;
+          hurt(u, dmg, 'fire');
+          burst(u.x, u.y, FIRE, 8, 70, 0.28);
+          floatText(u.x, u.y - 26, '烧', FIRE, false);
+          audio.beep(210, 0.08, 'sawtooth', 0.03, 80);
+        }
+      }
+      f.life -= 1;
+      if (f.life <= 0) G.fires.splice(i, 1);
+    }
   }
 
   function stepShot(dt) {
@@ -1547,7 +1770,7 @@
       explode(s.x, s.y, s.wep, s.owner, true);
       return;
     }
-    if (inGround(s.x, s.y)) {
+    if (inGround(s.x, s.y) || inWall(s.x, s.y)) {
       if (s.wep.id === 2 && !s.pierced) {
         s.pierced = true;
         s.fuse = 0.18;
@@ -1558,7 +1781,7 @@
         s.x += ux * 46;
         s.y += uy * 46;
         let g = 0;
-        while (inGround(s.x, s.y) && g < 18) {
+        while ((inGround(s.x, s.y) || inWall(s.x, s.y)) && g < 18) {
           s.x += ux * 3;
           s.y += uy * 3;
           g += 1;
@@ -1727,6 +1950,7 @@
     toast('跳过', false, false);
     G.phase = 'settle';
     G.settleT = 0.10;
+    tickFires();
     syncHud();
   }
 
@@ -1785,6 +2009,7 @@
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
+    if (G.mapId === 'ruins' && G.f && foe && coverBetween(G.f, foe)) return 1;
     if (foe) {
       const x = foe.x | 0;
       const g0 = groundAt(x);
@@ -1813,6 +2038,7 @@
     if (pitDepth(t) > 16 && feetX < 50 && wep.id === 4) bury += 1600;
     if (pitDepth(t) > 28 && feetX < 50) bury += 1400;
     if (G.mapId === 'bridge' && liveBridge(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
+    if (G.mapId === 'ruins' && (wep.id === 1 || wep.id === 4) && inWall(imp.x, imp.y)) bury += 600;
     score += bury;
     const selfD = hypot(imp.x - from.x, imp.y - from.y);
     if (selfD < wep.splash * 0.45) {
@@ -1859,6 +2085,7 @@
     for (let i = 0; i < tries.length; i++) {
       const nx = clamp(ox + tries[i], 28, VW - 28);
       if (isDeathVoid(nx)) continue;
+      if (wallBlocksWalk(nx, groundAt(nx) - from.r, from.r)) continue;
       if (G.sudden && (nx < G.safeL + 16 || nx > G.safeR - 16)) continue;
       from.x = nx;
       from.y = groundAt(nx) - from.r;
@@ -2070,7 +2297,13 @@
         const step = Math.min(G.walk, u.stam, 78 * dt, Math.abs(dx));
         const lo = G.sudden ? G.safeL + 18 : 22;
         const hi = G.sudden ? G.safeR - 18 : VW - 22;
-        u.x = clamp(u.x + dir * step, lo, hi);
+        const nx = clamp(u.x + dir * step, lo, hi);
+        if (wallBlocksWalk(nx, u.y, u.r)) {
+          AI.stage = 2;
+          AI.wait = 0.08;
+          return;
+        }
+        u.x = nx;
         G.walk -= step;
         u.stam -= step;
         u.face = dir;
@@ -2117,7 +2350,9 @@
       return;
     }
     const step = Math.min(G.walk, G.p.stam, 90 * dt);
-    G.p.x = clamp(G.p.x + dir * step, 22, VW - 22);
+    const nx = clamp(G.p.x + dir * step, 22, VW - 22);
+    if (wallBlocksWalk(nx, G.p.y, G.p.r)) return;
+    G.p.x = nx;
     G.walk -= step;
     G.p.stam -= step;
     G.p.face = dir;
@@ -2161,6 +2396,9 @@
 
   function resetWorld() {
     G.H = buildHeight(G.mapId);
+    buildWalls(G.mapId, G.H);
+    G.fires = [];
+    crumbs.length = 0;
     terrainDirty = true;
     G.p = makeUnit('p');
     G.f = makeUnit('f');
@@ -2285,6 +2523,38 @@
     for (let i = 0; i < stars.length; i++) {
       const s = stars[i];
       s.tw = (s.tw + dt * s.sp) % TAU;
+    }
+    for (let i = crumbs.length - 1; i >= 0; i--) {
+      const q = crumbs[i];
+      q.vy += q.g * dt;
+      q.x += q.vx * dt;
+      q.y += q.vy * dt;
+      q.life -= dt;
+      const gy = groundAt(q.x);
+      if (q.y >= gy) {
+        landDust(q.x, gy);
+        crumbs.splice(i, 1);
+      } else if (q.life <= 0) {
+        crumbs.splice(i, 1);
+      }
+    }
+  }
+
+  function landDust(x, y) {
+    burst(x, y, DIRT, REDUCE ? 3 : 8, 90, 0.32);
+    const extra = REDUCE ? 1 : 4;
+    for (let i = 0; i < extra; i++) {
+      particles.push({
+        x: x + rand(-8, 8),
+        y: y + rand(-2, 4),
+        vx: rand(-70, 70),
+        vy: rand(-50, 20),
+        g: 380,
+        life: 0.38,
+        max: 0.38,
+        r: rand(1.4, 3.4),
+        rgb: DIRT
+      });
     }
   }
 
@@ -2445,8 +2715,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -2579,6 +2849,91 @@
       g.lineTo(x + dir * (18 + Math.abs(G.wind)), y);
       g.stroke();
     }
+    g.restore();
+  }
+
+  function drawWalls(g) {
+    if (!G.walls || !G.walls.length) return;
+    g.save();
+    for (let w = 0; w < G.walls.length; w++) {
+      const wall = G.walls[w];
+      const ww = wall.x1 - wall.x0 + 1;
+      for (let i = 0; i < ww; i++) {
+        const x = wall.x0 + i;
+        const top = wall.tops[i];
+        const bot = wall.bots[i];
+        let run = -1;
+        for (let y = top; y <= bot; y++) {
+          const ly = y - top;
+          const solid = y < bot && ly >= 0 && ly < WALL_MAXH && wall.mask[i * WALL_MAXH + ly];
+          if (solid) {
+            if (run < 0) run = y;
+          } else if (run >= 0) {
+            const h = y - run;
+            g.fillStyle = '#3a2a22';
+            g.fillRect(x, run, 1, h);
+            g.fillStyle = 'rgba(224,192,144,0.55)';
+            g.fillRect(x, run, 1, Math.min(3, h));
+            run = -1;
+          }
+        }
+      }
+    }
+    g.restore();
+  }
+
+  function drawFires(g) {
+    if (!G.fires || !G.fires.length) return;
+    g.save();
+    for (let i = 0; i < G.fires.length; i++) {
+      const f = G.fires[i];
+      const flick = 0.55 + 0.35 * Math.sin(G.t * 9 + i * 2.1);
+      g.fillStyle = 'rgba(255,80,24,' + (0.22 + flick * 0.18) + ')';
+      g.beginPath();
+      g.ellipse(f.x, f.y + 2, f.r, f.r * 0.38, 0, 0, TAU);
+      g.fill();
+      g.strokeStyle = 'rgba(255,180,70,' + (0.4 + flick * 0.35) + ')';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.ellipse(f.x, f.y + 2, f.r, f.r * 0.38, 0, 0, TAU);
+      g.stroke();
+      for (let k = 0; k < 5; k++) {
+        const a = (G.t * 2.4 + k * 1.3 + i) % TAU;
+        const px = f.x + Math.cos(a) * (6 + (k * 4) % 18);
+        const py = f.y - ((G.t * 38 + k * 11) % 22);
+        g.fillStyle = 'rgba(255,170,60,' + (0.35 + 0.3 * Math.sin(G.t * 8 + k)) + ')';
+        g.fillRect(px, py, 2.2, 4 + (k % 3));
+      }
+    }
+    g.restore();
+  }
+
+  function drawCrumbs(g) {
+    for (let i = 0; i < crumbs.length; i++) {
+      const q = crumbs[i];
+      g.fillStyle = rgba(q.rgb, clamp(q.life / 1.8, 0.25, 0.95));
+      g.beginPath();
+      g.arc(q.x, q.y, q.r, 0, TAU);
+      g.fill();
+    }
+  }
+
+  function drawClock(g) {
+    if (G.mode !== 'play') return;
+    if (G.phase !== 'aim' && G.phase !== 'charge') return;
+    if (G.timeout > 5) return;
+    const n = Math.max(0, Math.ceil(G.timeout));
+    const pulse = REDUCE ? 1 : 1 + 0.14 * Math.sin(G.t * 11);
+    g.save();
+    g.translate(VW * 0.5, 34);
+    g.scale(pulse, pulse);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = rgba(MAG, 0.92);
+    g.font = 'bold 26px Segoe UI, PingFang SC, sans-serif';
+    g.shadowColor = 'rgba(255,61,184,0.55)';
+    g.shadowBlur = 12;
+    g.fillText(String(n), 0, 0);
     g.restore();
   }
 
@@ -2726,7 +3081,7 @@
   function drawShot(g) {
     const s = G.shot;
     if (!s) return;
-    const rgb = s.ult ? GOLD : (s.wep && s.wep.id === 3 ? ICE : (s.wep && s.wep.id === 4 ? HOT : (s.wep && s.wep.id === 5 ? RAIL : (s.owner && s.owner.side === 'p' ? CYN : MAG))));
+    const rgb = s.ult ? GOLD : (s.wep && s.wep.id === 3 ? ICE : (s.wep && s.wep.id === 4 ? HOT : (s.wep && s.wep.id === 6 ? FIRE : (s.wep && s.wep.id === 5 ? RAIL : (s.owner && s.owner.side === 'p' ? CYN : MAG)))));
     g.save();
     g.lineCap = 'round';
     g.lineJoin = 'round';
@@ -2749,7 +3104,7 @@
     g.shadowColor = rgba(rgb, 0.9);
     g.shadowBlur = 12;
     g.beginPath();
-    g.arc(s.x, s.y, s.wep.id === 1 ? 5.2 : (s.wep.id === 4 ? 4.4 : (s.wep.id === 5 ? 4.0 : 3.6)), 0, TAU);
+    g.arc(s.x, s.y, s.wep.id === 1 ? 5.2 : (s.wep.id === 4 ? 4.4 : (s.wep.id === 6 ? 4.2 : (s.wep.id === 5 ? 4.0 : 3.6))), 0, TAU);
     g.fill();
     g.restore();
   }
@@ -2867,7 +3222,7 @@
       t += dt;
       pts.push({ x: x, y: y });
       if (x < 2 || x > VW - 2 || y > VH + 8) break;
-      if (inGround(x, y)) break;
+      if (inGround(x, y) || inWall(x, y)) break;
       if (unitAt(x, y, u)) break;
     }
     return { points: pts, len: len };
@@ -2963,6 +3318,9 @@
     drawWind(ctx);
     if (terrainDirty) paintTerrain();
     if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
+    drawWalls(ctx);
+    drawFires(ctx);
+    drawCrumbs(ctx);
     drawGust(ctx);
     if (G.sudden) {
       ctx.fillStyle = 'rgba(8, 4, 12, 0.42)';
@@ -2987,6 +3345,7 @@
       drawChargeBar(ctx, G.f);
     }
     drawShot(ctx);
+    drawClock(ctx);
 
     for (let i = 0; i < particles.length; i++) {
       const q = particles[i];
@@ -3137,6 +3496,7 @@
     if (k === '3') setWep(2);
     if (k === '4') setWep(3);
     if (k === '5') setWep(4);
+    if (k === '6') setWep(5);
   }
 
   function bindPad() {
@@ -3281,7 +3641,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps six', MAP_IDS.length === 6 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛');
+    ok('maps seven', MAP_IDS.length === 7 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -3323,6 +3683,48 @@
     carveCluster(200, 400, 1);
     const buriedU = { x: 200, y: G.H[200] - 14, r: 14, hp: 100 };
     ok('pit bury', pitDepth(buriedU) >= BURY_PX && walkBlocked(buriedU), Math.round(pitDepth(buriedU)));
+
+    ok('霓火 stats', WEPS[5] && WEPS[5].name === '霓火' && WEPS[5].id === 6 && WEPS[5].direct === 18 && WEPS[5].splash === 44 && WEPS[5].crater === 20 && WEPS[5].spd === 1);
+    ok('霓火 crater < 高爆', WEPS[5].crater < WEPS[1].crater, WEPS[5].crater + ' < ' + WEPS[1].crater);
+    ok('fire burn 8', FIRE_DMG === 8 && FIRE_R === 28 && FIRE_LIFE === 2);
+    G.kind = 'hall';
+    ok('fire tick dmg', Math.round(FIRE_DMG * dmgMul()) === 8);
+    ok('fire ult dmg', Math.round(FIRE_DMG * dmgMul() * 1.6) === 13);
+    G.fires = [{ x: 152, y: 400, r: FIRE_R, life: 2, ult: false }];
+    G.p = { x: 10, y: 10, hp: 0, r: 14 };
+    G.f = { x: 10, y: 10, hp: 0, r: 14 };
+    tickFires();
+    ok('fire life 1 after settle', G.fires.length === 1 && G.fires[0].life === 1);
+    tickFires();
+    ok('fire gone after 2 settles', G.fires.length === 0);
+    G.H = buildHeight('ruins');
+    G.mapId = 'ruins';
+    buildWalls('ruins', G.H);
+    ok('ruins spawn', spawnX('ruins', 'p') === 140 && spawnX('ruins', 'f') === 820);
+    ok('ruins height', G.H[140] > 300 && G.H[140] < 480, Math.round(G.H[140]));
+    const wl = 308;
+    const wr = 652;
+    ok('ruins left wall', inWall(wl, G.H[wl] - 40), Math.round(G.H[wl] - 40));
+    ok('ruins right wall', inWall(wr, G.H[wr] - 40), Math.round(G.H[wr] - 40));
+    ok('ruins mid open', !inWall(480, G.H[480] - 40));
+    const holeY = G.H[wl] - 40;
+    punchCover(wl, holeY, 28, WEPS[1]);
+    ok('ruins punch 高爆', !inWall(wl, holeY));
+    G.H = buildHeight('ruins');
+    buildWalls('ruins', G.H);
+    const still = inWall(wr, G.H[wr] - 40);
+    punchCover(wr, G.H[wr] - 40, 20, WEPS[5]);
+    ok('霓火 no punch', still && inWall(wr, G.H[wr] - 40));
+    G.H = buildHeight('ruins');
+    buildWalls('ruins', G.H);
+    punchCover(wr, G.H[wr] - 40, 22, WEPS[3]);
+    ok('ruins punch 三裂', !inWall(wr, G.H[wr] - 40));
+    ok('timeout half still', TURN_T === 20);
+    ok('assist keep 0-3', ASSIST_NAME.length === 4 && G.assist === 2);
+    ok('g vk locked', GRAV === 260 && VK === 420);
+    G.mapId = 'plain';
+    G.walls = [];
+    G.fires = [];
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
