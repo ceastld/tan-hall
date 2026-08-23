@@ -24,7 +24,7 @@
   const WARP_R = 220;
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
-  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助 · N 地条';
+  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条';
   const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · N地条 · H辅';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅';
   const MINI_W = 160;
@@ -206,6 +206,7 @@
   const btnDrill = el('btn-drill');
   const btnSeat = el('btn-seat');
   const btnDuo = el('btn-duo');
+  const btnQuad = el('btn-quad');
   const turnLabel = el('turn-label');
   const delayRow = el('delay-row');
   const hpRow = el('hp-row');
@@ -290,6 +291,7 @@
     ghostPend: null,
     pointer: { x: 480, y: 200 },
     warpX: 0,
+    ctrlSide: null,
     lastKind: 'hall',
     stakeT: 0,
     frozenT: 0,
@@ -340,6 +342,9 @@
   function windMax() { return G.kind === 'core' ? 14 : 8; }
   function overlayOpen() { return !!(overlay && !overlay.classList.contains('hidden')); }
   function isDuo() { return G.kind === 'duo'; }
+  function isQuad() { return G.kind === 'quad'; }
+  function isSquad() { return G.kind === 'duo' || G.kind === 'quad'; }
+  function passToastFor(side) { return side === 'f' ? '把键盘给烬丸' : '把键盘给岚丸'; }
   function allUnits() {
     const a = [G.p, G.p2, G.f, G.f2];
     const out = [];
@@ -419,7 +424,7 @@
     return delayCost(a.wepId || 0, !!a.ult, !!a.skip);
   }
   function applyActDelay(u) {
-    if (!isDuo() || !u) return;
+    if (!isSquad() || !u) return;
     u.delay = (u.delay || 0) + pendingDelayAmount();
   }
   function liveActors() {
@@ -443,7 +448,7 @@
     return sortByDelay(live)[0].id || 'p';
   }
   function peekNext() {
-    if (!isDuo()) return G.turn === 'p' ? G.f : G.p;
+    if (!isSquad()) return G.turn === 'p' ? G.f : G.p;
     const live = liveActors();
     if (!live.length) return curUnit();
     return sortByDelay(live, curUnit(), pendingDelayAmount())[0];
@@ -452,7 +457,7 @@
   function isSeat() { return G.kind === 'seat'; }
   function isHuman(u) {
     if (!u || u.stake) return false;
-    if (G.kind === 'seat') return true;
+    if (G.kind === 'seat' || G.kind === 'quad') return true;
     return u.side === 'p';
   }
   function humanTurn() { return isHuman(curUnit()); }
@@ -463,7 +468,7 @@
     return u.ghost;
   }
   function kindName() {
-    return G.kind === 'core' ? '堂核' : G.kind === 'drill' ? '演习场' : G.kind === 'seat' ? '对坐' : G.kind === 'duo' ? '对堂' : '弹堂';
+    return G.kind === 'core' ? '堂核' : G.kind === 'drill' ? '演习场' : G.kind === 'seat' ? '对坐' : G.kind === 'duo' ? '对堂' : G.kind === 'quad' ? '堂座' : '弹堂';
   }
   function addRage(u, n) {
     if (!u || u.stake) return;
@@ -1322,6 +1327,20 @@
     const ice = gold === 'ice';
     toastEl.classList.toggle('ice', ice && !warn);
     toastEl.classList.toggle('gold', !!gold && !ice && !warn);
+    toastEl.classList.remove('pass');
+    toastEl.classList.remove('hidden');
+  }
+
+  function toastPass(side) {
+    const mag = side === 'f';
+    G.toastT = 2.6;
+    toastTok += 1;
+    if (!toastEl) return;
+    toastEl.textContent = passToastFor(side);
+    toastEl.classList.toggle('warn', mag);
+    toastEl.classList.remove('ice');
+    toastEl.classList.toggle('gold', !mag);
+    toastEl.classList.add('pass');
     toastEl.classList.remove('hidden');
   }
 
@@ -1457,7 +1476,7 @@
         const pTurn = G.kind === 'drill' || (actor && actor.side === 'p');
         let lab;
         if (G.kind === 'drill') lab = '岚丸的回合';
-        else if (isDuo()) {
+        else if (isSquad()) {
           const nm = (actor && actor.name) || '岚丸';
           lab = isHuman(actor) ? (nm + '出手') : (nm + '瞄准中');
         } else {
@@ -1465,10 +1484,12 @@
         }
         turnLabel.textContent = lab;
         turnLabel.classList.remove('gone');
-        const isP2 = isDuo() && actor && actor.id === 'p2';
+        const isP2 = isSquad() && actor && actor.id === 'p2';
+        const isF2 = isSquad() && actor && actor.id === 'f2';
         turnLabel.classList.toggle('p', pTurn && !isP2);
         turnLabel.classList.toggle('p2', !!isP2);
-        turnLabel.classList.toggle('f', !pTurn);
+        turnLabel.classList.toggle('f', !pTurn && !isF2);
+        turnLabel.classList.toggle('f2', !!isF2);
       } else {
         turnLabel.classList.add('gone');
       }
@@ -1478,25 +1499,31 @@
     const hpP2Wrap = el('hp-p2-wrap');
     const hpF2Wrap = el('hp-f2-wrap');
     const actorNow = curUnit();
-    if (hpRow) hpRow.classList.toggle('duo', G.mode === 'play' && isDuo());
-    const inhabitP = G.mode === 'play' && isDuo() && !!actorNow && actorNow.id === 'p' && isHuman(actorNow);
-    const inhabitP2 = G.mode === 'play' && isDuo() && !!actorNow && actorNow.id === 'p2' && isHuman(actorNow);
+    if (hpRow) hpRow.classList.toggle('duo', G.mode === 'play' && isSquad());
+    const inhabitP = G.mode === 'play' && isSquad() && !!actorNow && actorNow.id === 'p' && isHuman(actorNow);
+    const inhabitP2 = G.mode === 'play' && isSquad() && !!actorNow && actorNow.id === 'p2' && isHuman(actorNow);
+    const inhabitF = G.mode === 'play' && isSquad() && !!actorNow && actorNow.id === 'f' && isHuman(actorNow);
+    const inhabitF2 = G.mode === 'play' && isSquad() && !!actorNow && actorNow.id === 'f2' && isHuman(actorNow);
     if (hpPWrap) {
       hpPWrap.classList.toggle('on', G.mode === 'play' && !!actorNow && actorNow.id === 'p');
       hpPWrap.classList.toggle('inhabit', inhabitP);
     }
-    if (hpFWrap) hpFWrap.classList.toggle('on', G.mode === 'play' && G.kind !== 'drill' && !!actorNow && actorNow.id === 'f');
+    if (hpFWrap) {
+      hpFWrap.classList.toggle('on', G.mode === 'play' && G.kind !== 'drill' && !!actorNow && actorNow.id === 'f');
+      hpFWrap.classList.toggle('inhabit', inhabitF);
+    }
     if (hpP2Wrap) {
-      hpP2Wrap.classList.toggle('gone', !(G.mode === 'play' && isDuo()));
-      hpP2Wrap.classList.toggle('on', G.mode === 'play' && isDuo() && !!actorNow && actorNow.id === 'p2');
+      hpP2Wrap.classList.toggle('gone', !(G.mode === 'play' && isSquad()));
+      hpP2Wrap.classList.toggle('on', G.mode === 'play' && isSquad() && !!actorNow && actorNow.id === 'p2');
       hpP2Wrap.classList.toggle('inhabit', inhabitP2);
     }
     if (hpF2Wrap) {
-      hpF2Wrap.classList.toggle('gone', !(G.mode === 'play' && isDuo()));
-      hpF2Wrap.classList.toggle('on', G.mode === 'play' && isDuo() && !!actorNow && actorNow.id === 'f2');
+      hpF2Wrap.classList.toggle('gone', !(G.mode === 'play' && isSquad()));
+      hpF2Wrap.classList.toggle('on', G.mode === 'play' && isSquad() && !!actorNow && actorNow.id === 'f2');
+      hpF2Wrap.classList.toggle('inhabit', inhabitF2);
     }
     if (delayRow) {
-      if (G.mode === 'play' && isDuo()) {
+      if (G.mode === 'play' && isSquad()) {
         delayRow.classList.remove('gone');
         delayRow.setAttribute('aria-hidden', 'false');
         const live = allUnits();
@@ -1568,7 +1595,7 @@
     }
     syncBars(G.p, stP, rgP, hpPN, hpP);
     syncBars(G.f, stF, rgF, hpFN, hpF);
-    if (isDuo()) {
+    if (isSquad()) {
       syncBars(G.p2, stP2, rgP2, hpP2N, hpP2);
       syncBars(G.f2, stF2, rgF2, hpF2N, hpF2);
     }
@@ -1948,19 +1975,19 @@
     audio.chargeStop();
     const turns = G.turns;
     if (pd && fd) {
-      if (G.kind !== 'seat' && G.kind !== 'duo') G.winStreak = 0;
+      if (G.kind !== 'seat' && !isSquad()) G.winStreak = 0;
       saveBest();
       audio.lose();
       toast('对坠', true, false);
-      showOverlay('draw', '对坠', (G.kind === 'seat' || isDuo()) ? ('同烬。本局 ' + turns + ' 回合') : ('同烬。本局 ' + turns + ' 回合 · 连胜清零'));
+      showOverlay('draw', '对坠', (G.kind === 'seat' || isSquad()) ? ('同烬。本局 ' + turns + ' 回合') : ('同烬。本局 ' + turns + ' 回合 · 连胜清零'));
       setHint('对坠 · R 再来', 'warn');
     } else if (fd) {
-      if (G.kind === 'seat') {
+      if (G.kind === 'seat' || isQuad()) {
         saveBest();
         audio.win();
         screenFlash(GOLD, 0.55);
         toast('岚丸胜', false, true);
-        showOverlay('win', '岚丸胜', '岚丸胜。' + turns + ' 回合');
+        showOverlay('win', '岚丸胜', isQuad() ? ('岚丸与霜丸胜。' + turns + ' 回合') : ('岚丸胜。' + turns + ' 回合'));
         setHint('岚丸胜 · R 再来', 'hot');
       } else if (isDuo()) {
         G.winStreak += 1;
@@ -1987,12 +2014,12 @@
         setHint('堂破了 · R 再来', 'hot');
       }
     } else {
-      if (G.kind === 'seat') {
+      if (G.kind === 'seat' || isQuad()) {
         saveBest();
         audio.win();
         screenFlash(MAG, 0.5);
         toast('烬丸胜', false, true);
-        showOverlay('win', '烬丸胜', '烬丸胜。' + turns + ' 回合');
+        showOverlay('win', '烬丸胜', isQuad() ? ('烬丸与霆丸胜。' + turns + ' 回合') : ('烬丸胜。' + turns + ' 回合'));
         setHint('烬丸胜 · R 再来', 'hot');
       } else if (isDuo()) {
         G.winStreak = 0;
@@ -2043,7 +2070,7 @@
     audio.chargeStop();
     if (u && u.hp <= 0) {
       if (checkEnd()) return;
-      if (isDuo()) {
+      if (isSquad()) {
         const nxt = pickNextId();
         const nu = unitById(nxt);
         if (!nu || nu === u || nu.hp <= 0) return;
@@ -2063,13 +2090,17 @@
     }
     const human = isHuman(u);
     const nm = (u && u.name) || (G.turn === 'p' ? '岚丸' : '烬丸');
-    if (isDuo() && human) toast(nm + '出手', false, u && u.id === 'p2' ? 'ice' : true);
+    if (isQuad() && human) {
+      if (G.ctrlSide && G.ctrlSide !== u.side) toastPass(u.side);
+      else toast(nm + '出手', false, u && u.id === 'p2' ? 'ice' : (u && u.side === 'p'));
+      G.ctrlSide = u.side;
+    } else if (isDuo() && human) toast(nm + '出手', false, u && u.id === 'p2' ? 'ice' : true);
     else if (human) toast(nm + '的回合 · 风 ' + windText(), false, u && u.side === 'p');
     else toast(nm + '瞄准中 · 风 ' + windText(), false, false);
     setHint(G.kind === 'drill' ? OPS_DRILL : (human ? OPS_PLAY : (nm + '拉炮…')), human ? '' : 'warn');
-    if (!human && G.kind !== 'drill') startAI();
+    if (!human && G.kind !== 'drill' && !isQuad()) startAI();
     syncHud();
-    if (G.kind === 'seat' || isDuo()) setCamShooter(u);
+    if (G.kind === 'seat' || isSquad()) setCamShooter(u);
     else setCamFighters();
   }
 
@@ -2214,7 +2245,7 @@
 
   function fruitModeOk() {
     if (G.kind === 'drill') return false;
-    if (G.kind !== 'hall' && G.kind !== 'core' && G.kind !== 'seat' && G.kind !== 'duo') return false;
+    if (G.kind !== 'hall' && G.kind !== 'core' && G.kind !== 'seat' && G.kind !== 'duo' && G.kind !== 'quad') return false;
     if ((G.turns | 0) <= 1 && G.turn === 'p') return false;
     return true;
   }
@@ -2775,7 +2806,7 @@
     const actor = curUnit();
     tickVeils(actor);
     if (G.kind === 'drill') beginTurn('p');
-    else if (isDuo()) {
+    else if (isSquad()) {
       applyActDelay(actor);
       beginTurn(pickNextId());
     } else beginTurn(G.turn === 'p' ? 'f' : 'p');
@@ -3365,10 +3396,10 @@
     crumbs.length = 0;
     terrainDirty = true;
     G.p = makeUnit('p', { id: 'p', name: '岚丸', delay: 0, ord: 0, slot: 0 });
-    G.f = makeUnit('f', { id: 'f', name: G.kind === 'drill' ? '石俑' : '烬丸', delay: isDuo() ? 8 : 0, ord: 1, slot: 0 });
-    if (isDuo()) {
+    G.f = makeUnit('f', { id: 'f', name: G.kind === 'drill' ? '石俑' : '烬丸', delay: isSquad() ? 8 : 0, ord: 1, slot: 0 });
+    if (isSquad()) {
       G.p2 = makeUnit('p', { id: 'p2', name: '霜丸', delay: 16, ord: 2, slot: 1 });
-      G.f2 = makeUnit('f', { id: 'f2', name: '霆丸', delay: 24, ord: 3, slot: 1, ai: true });
+      G.f2 = makeUnit('f', { id: 'f2', name: '霆丸', delay: 24, ord: 3, slot: 1, ai: isDuo() });
     } else {
       G.p2 = null;
       G.f2 = null;
@@ -3400,6 +3431,7 @@
     G.fruits = [];
     G.veils = [];
     G.lastHit = null;
+    G.ctrlSide = null;
     G.windSpinT = 0;
     G.nextWind = null;
     G.teaseWind = false;
@@ -3411,18 +3443,20 @@
     else if (kind === 'core') { G.kind = 'core'; G.lastKind = 'core'; }
     else if (kind === 'seat') G.kind = 'seat';
     else if (kind === 'duo') G.kind = 'duo';
+    else if (kind === 'quad') G.kind = 'quad';
     else { G.kind = 'hall'; G.lastKind = 'hall'; }
     G.mode = 'play';
     resetWorld();
     hideOverlay();
     audio.start();
-    beginTurn(isDuo() ? pickNextId() : 'p');
+    beginTurn(isSquad() ? pickNextId() : 'p');
     const msg = G.kind === 'core' ? '堂核 · 薄血狂风'
       : G.kind === 'drill' ? '演习场 · 对着表练'
       : G.kind === 'seat' ? '对坐 · 岚丸先手'
       : isDuo() ? '对堂 · 岚霜出手'
+      : isQuad() ? '堂座 · 把键盘给岚丸'
       : '弹堂 · 看风拉角';
-    if (!isDuo()) toast(msg + ' · ' + MAP_NAME[G.mapId], G.kind === 'core', G.kind !== 'core');
+    if (!isSquad()) toast(msg + ' · ' + MAP_NAME[G.mapId], G.kind === 'core', G.kind !== 'core');
     saveBest();
     syncHud();
     syncDrillWind();
@@ -3435,7 +3469,7 @@
     rollWind();
     audio.chargeStop();
     showOverlay('title', '弹堂', '看风，拉满或点射，把对面从石殿上轰下去。');
-    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 点地图换地形 · H 辅助 · N 地条');
+    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · 点地图换地形 · H 辅助 · N 地条');
     syncMaps();
     syncDrillWind();
     syncHud();
@@ -3590,7 +3624,7 @@
     if (G.mode === 'play' && G.phase !== 'fly' && G.phase !== 'settle') {
       if (checkEnd()) return;
       const actor = curUnit();
-      if (isDuo() && actor && actor.hp <= 0 && G.phase !== 'frozenWait') {
+      if (isSquad() && actor && actor.hp <= 0 && G.phase !== 'frozenWait') {
         beginTurn(pickNextId());
         return;
       }
@@ -3630,8 +3664,8 @@
           applyCharge(dt);
           audio.chargeTick(G.power);
         }
-        if ((G.kind === 'seat' || isDuo()) && (G.phase === 'aim' || G.phase === 'charge')) setCamShooter(curUnit());
-      } else if (G.kind !== 'drill') {
+        if ((G.kind === 'seat' || isSquad()) && (G.phase === 'aim' || G.phase === 'charge')) setCamShooter(curUnit());
+      } else if (G.kind !== 'drill' && !isQuad()) {
         stepAI(dt);
       }
       syncHud();
@@ -3641,7 +3675,7 @@
       eachUnit(refreshBury);
       G.settleT -= dt;
       if (G.settleT < 0.12) {
-        if (G.kind === 'seat' || isDuo()) setCamShooter(peekNext());
+        if (G.kind === 'seat' || isSquad()) setCamShooter(peekNext());
         else setCamFighters();
       }
       if (G.settleT <= 0 && unitsSettled()) {
@@ -4220,7 +4254,7 @@
     g.save();
     g.translate(u.x, u.y + Math.sin(u.bob) * 1.4);
     if (u.hitT > 0) g.translate(rand(-2, 2), 0);
-    const inhabit = isDuo() && G.mode === 'play' && curUnit() === u && isHuman(u)
+    const inhabit = isSquad() && G.mode === 'play' && curUnit() === u && isHuman(u)
       && (G.phase === 'aim' || G.phase === 'charge');
     g.fillStyle = rgba(rgb, inhabit ? 0.42 : 0.18);
     g.beginPath();
@@ -4271,7 +4305,7 @@
     g.scale(face, 1);
     const h = 46;
     const w = h * (fr.width / fr.height);
-    const inhabit = isDuo() && G.mode === 'play' && curUnit() === u && isHuman(u)
+    const inhabit = isSquad() && G.mode === 'play' && curUnit() === u && isHuman(u)
       && (G.phase === 'aim' || G.phase === 'charge');
     if (u.id === 'p2' || u.id === 'f2' || inhabit) {
       g.fillStyle = rgba(unitRgb(u), inhabit ? 0.46 : 0.28);
@@ -4334,7 +4368,7 @@
       g.arc(u.x, u.y, 18, 0, TAU);
       g.stroke();
     }
-    if (isDuo() && G.mode === 'play' && curUnit() === u && (G.phase === 'aim' || G.phase === 'charge')) {
+    if (isSquad() && G.mode === 'play' && curUnit() === u && (G.phase === 'aim' || G.phase === 'charge')) {
       const ring = isHuman(u) ? unitRgb(u) : GOLD;
       g.strokeStyle = rgba(ring, 0.88);
       g.lineWidth = isHuman(u) ? 2.2 : 1.6;
@@ -4352,7 +4386,7 @@
     g.fillRect(x, y, w, 4);
     g.fillStyle = rgba(unitRgb(u), 0.95);
     g.fillRect(x, y, w * clamp(u.hp / u.max, 0, 1), 4);
-    if (isDuo() && G.mode === 'play') {
+    if (isSquad() && G.mode === 'play') {
       g.font = 'bold 10px Segoe UI, PingFang SC, sans-serif';
       g.textAlign = 'center';
       g.textBaseline = 'bottom';
@@ -4845,6 +4879,7 @@
       if (k === '3') { startGame('drill'); return; }
       if (k === '4') { startGame('seat'); return; }
       if (k === '5') { startGame('duo'); return; }
+      if (k === '6') { startGame('quad'); return; }
       return;
     }
     if (k === 'Escape' || k === 'Esc') { cancelWarp(); return; }
@@ -5485,6 +5520,62 @@
     G.kind = 'hall';
     ok('thump exists', typeof audio.thump === 'function');
     ok('g vk still locked v11', GRAV === 260 && VK === 420);
+    G.kind = 'quad';
+    ok('quad name', kindName() === '堂座');
+    ok('quad hp 100', maxHp('p') === 100 && maxHp('f') === 100);
+    ok('quad wind 8', windMax() === 8);
+    ok('quad dmg x1', dmgMul() === 1);
+    ok('quad 岚丸 human', isHuman({ id: 'p', side: 'p' }) === true);
+    ok('quad 霜丸 human', isHuman({ id: 'p2', side: 'p' }) === true);
+    ok('quad 烬丸 human', isHuman({ id: 'f', side: 'f' }) === true);
+    ok('quad 霆丸 human', isHuman({ id: 'f2', side: 'f' }) === true);
+    ok('quad not duo', isQuad() === true && isDuo() === false && isSquad() === true);
+    G.p = { id: 'p', name: '岚丸', side: 'p', hp: 100 };
+    G.p2 = { id: 'p2', name: '霜丸', side: 'p', hp: 100 };
+    G.f = { id: 'f', name: '烬丸', side: 'f', hp: 100 };
+    G.f2 = { id: 'f2', name: '霆丸', side: 'f', hp: 100 };
+    G.turn = 'f';
+    ok('quad 烬丸 humanTurn', humanTurn() === true);
+    G.turn = 'f2';
+    ok('quad 霆丸 humanTurn', humanTurn() === true);
+    G.turn = 'p2';
+    ok('quad 霜丸 humanTurn', humanTurn() === true);
+    ok('pass 烬丸', passToastFor('f') === '把键盘给烬丸');
+    ok('pass 岚丸', passToastFor('p') === '把键盘给岚丸');
+    ok('pass side not unit', passToastFor('f') !== '把键盘给霆丸' && passToastFor('p') !== '把键盘给霜丸');
+    G.p = { id: 'p', name: '岚丸', side: 'p', hp: 100, delay: 0, ord: 0 };
+    G.p2 = { id: 'p2', name: '霜丸', side: 'p', hp: 100, delay: 16, ord: 2 };
+    G.f = { id: 'f', name: '烬丸', side: 'f', hp: 100, delay: 8, ord: 1 };
+    G.f2 = { id: 'f2', name: '霆丸', side: 'f', hp: 100, delay: 24, ord: 3 };
+    ok('quad first 岚丸', pickNextId() === 'p');
+    G.p.delay = 100;
+    ok('quad next 烬丸 same delay as 对堂', pickNextId() === 'f');
+    G.actDelay = { skip: false, wepId: 1, ult: false };
+    applyActDelay(G.f);
+    ok('quad delay 高爆', G.f.delay === 138);
+    G.kind = 'duo';
+    ok('对堂 stays PvE', isHuman({ id: 'f', side: 'f' }) === false && isHuman({ id: 'f2', side: 'f' }) === false && isDuo() === true && isQuad() === false);
+    G.turn = 'f';
+    ok('对堂 烬丸 still AI turn', humanTurn() === false);
+    G.kind = 'quad';
+    const quadBolt = makeUnit('f', { id: 'f2', name: '霆丸', delay: 24, ord: 3, slot: 1 });
+    ok('quad 霆丸 spawn human', isHuman(quadBolt) === true && quadBolt.ai === false && quadBolt.name === '霆丸');
+    G.kind = 'duo';
+    const duoBolt = makeUnit('f', { id: 'f2', name: '霆丸', delay: 24, ord: 3, slot: 1, ai: true });
+    ok('对堂 霆丸 still AI spawn', isHuman(duoBolt) === false && duoBolt.ai === true);
+    G.kind = 'quad';
+    G.turns = 2;
+    G.turn = 'f';
+    ok('quad can fruit', fruitModeOk() === true);
+    G.kind = 'quad';
+    queueNextWind();
+    ok('quad no next leak', G.nextWind == null && G.teaseWind === false);
+    G.kind = 'hall';
+    G.p2 = null;
+    G.f2 = null;
+    ok('g vk quad locked', GRAV === 260 && VK === 420);
+    ok('assist still 中 after 堂座', G.assist === 2 && ASSIST_NAME[2] === '中');
+    ok('OPS 堂座', OPS.indexOf('6 堂座') >= 0 && OPS.indexOf('5 对堂') >= 0);
     G.wind = 0;
     G.windSpinT = 0;
     G.lastHit = null;
@@ -5564,6 +5655,7 @@
   if (btnDrill) btnDrill.addEventListener('click', function () { audio.ensure(); startGame('drill'); });
   if (btnSeat) btnSeat.addEventListener('click', function () { audio.ensure(); startGame('seat'); });
   if (btnDuo) btnDuo.addEventListener('click', function () { audio.ensure(); startGame('duo'); });
+  if (btnQuad) btnQuad.addEventListener('click', function () { audio.ensure(); startGame('quad'); });
   if (itemsEl) {
     itemsEl.addEventListener('click', function (e) {
       const b = e.target.closest('button');

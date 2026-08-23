@@ -428,6 +428,16 @@ canvas {
 
 .toast.hidden { opacity: 0; }
 
+.toast.pass {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  padding: 12px 28px;
+  top: 22%;
+  border-width: 2px;
+  pointer-events: none;
+}
+
 .toast.warn {
   border-color: rgba(255, 61, 184, 0.45);
   color: #ffd0ec;
@@ -469,7 +479,7 @@ canvas {
 .overlay.hidden .panel { pointer-events: none; }
 
 .panel {
-  width: min(480px, 100%);
+  width: min(540px, 100%);
   text-align: center;
   padding: 32px 28px 26px;
   border-radius: 22px;
@@ -856,6 +866,12 @@ canvas {
   color: #e8dcff;
 }
 
+#btn-quad {
+  border-color: rgba(255, 227, 107, 0.6);
+  background: linear-gradient(180deg, rgba(255, 227, 107, 0.16), rgba(255, 61, 184, 0.14));
+  color: #fff3c2;
+}
+
 .hp-row.duo {
   width: min(720px, 100%);
   gap: 8px;
@@ -888,6 +904,16 @@ canvas {
 .hp-p2.inhabit .hp-bar {
   box-shadow: 0 0 16px rgba(154, 216, 255, 0.8);
   border-color: rgba(154, 216, 255, 0.6);
+}
+.hp-f.inhabit i { color: var(--mag); }
+.hp-f.inhabit .hp-bar {
+  box-shadow: 0 0 16px rgba(255, 61, 184, 0.75);
+  border-color: rgba(255, 61, 184, 0.55);
+}
+.hp-f2.inhabit i { color: #e8dcff; }
+.hp-f2.inhabit .hp-bar {
+  box-shadow: 0 0 16px rgba(200, 182, 255, 0.8);
+  border-color: rgba(200, 182, 255, 0.6);
 }
 
 .delay-row {
@@ -976,6 +1002,11 @@ canvas {
 .turn-lab.f {
   color: var(--mag);
   text-shadow: 0 0 10px rgba(255, 61, 184, 0.4);
+}
+
+.turn-lab.f2 {
+  color: #c8b6ff;
+  text-shadow: 0 0 10px rgba(200, 182, 255, 0.55);
 }
 
 .hp.on i { color: inherit; font-weight: 700; }
