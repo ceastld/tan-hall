@@ -25,18 +25,22 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助 · N 地条';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · N地条 · H辅';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · N地条 · H辅';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅';
   const MINI_W = 160;
   const MINI_H = 48;
   const ASSIST_NAME = ['关', '弱', '中', '强'];
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
-  const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1, nixi: 1 };
-  const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0, nixi: 15 };
+  const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1, nixi: 1, veil: 1 };
+  const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0, nixi: 15, veil: 20 };
   const ITEM_KEYS = ['leap', 'warp', 'neon', 'drum'];
-  const ITEM_NAME = { leap: '飞步', warp: '影挪', neon: '霓弹', drum: '鼓息', nixi: '逆息' };
+  const ITEM_NAME = { leap: '飞步', warp: '影挪', neon: '霓弹', drum: '鼓息', nixi: '逆息', veil: '障幕' };
   const NIXI_WIND = 5;
   const NIXI_MISS = 4000;
+  const VEIL_R = 70;
+  const VEIL_HP = 40;
+  const VEIL_GRIDS = 8;
+  const VEIL_ERR = 0.12;
   const FRUIT_R = 12;
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
@@ -282,6 +286,7 @@
     fires: [],
     walls: [],
     fruits: [],
+    veils: [],
     lastHit: null,
     windSpinT: 0
   };
@@ -451,7 +456,7 @@
     }
   }
   function freshItems() {
-    return { leap: ITEM_MAX.leap, warp: ITEM_MAX.warp, neon: ITEM_MAX.neon, drum: ITEM_MAX.drum, nixi: ITEM_MAX.nixi };
+    return { leap: ITEM_MAX.leap, warp: ITEM_MAX.warp, neon: ITEM_MAX.neon, drum: ITEM_MAX.drum, nixi: ITEM_MAX.nixi, veil: ITEM_MAX.veil };
   }
   function resetItems(u) {
     if (!u) return;
@@ -1544,8 +1549,8 @@
   function syncItems() {
     const actor = curUnit() || G.p;
     const bag = actor && actor.items ? actor.items : ITEM_MAX;
-    const map = { leap: 'n-leap', warp: 'n-warp', neon: 'n-neon', drum: 'n-drum', nixi: 'n-nixi' };
-    const btnId = { leap: 'btn-leap', warp: 'btn-warp', neon: 'btn-neon', drum: 'btn-drum', nixi: 'btn-nixi' };
+    const map = { leap: 'n-leap', warp: 'n-warp', neon: 'n-neon', drum: 'n-drum', nixi: 'n-nixi', veil: 'n-veil' };
+    const btnId = { leap: 'btn-leap', warp: 'btn-warp', neon: 'btn-neon', drum: 'btn-drum', nixi: 'btn-nixi', veil: 'btn-veil' };
     Object.keys(map).forEach(function (k) {
       const n = el(map[k]);
       if (n) n.textContent = String(bag[k] != null ? bag[k] : 0);
@@ -2231,7 +2236,7 @@
 
   function grantFruit(owner, gold) {
     if (!owner || owner.stake) return null;
-    if (!owner.items) owner.items = { leap: 0, warp: 0, neon: 0, drum: 0, nixi: 0 };
+    if (!owner.items) owner.items = { leap: 0, warp: 0, neon: 0, drum: 0, nixi: 0, veil: 0 };
     if (gold) {
       addRage(owner, FRUIT_RAGE);
       return { gold: true, name: '怒' };
@@ -2633,6 +2638,86 @@
     return rev > score + 400;
   }
 
+  function veilCovering(x, y) {
+    const list = G.veils;
+    if (!list || !list.length) return null;
+    for (let i = 0; i < list.length; i++) {
+      const v = list[i];
+      if (hypot(x - v.x, y - v.y) <= (v.r || VEIL_R)) return v;
+    }
+    return null;
+  }
+
+  function inVeil(x, y) {
+    return !!veilCovering(x, y);
+  }
+
+  function hideAssistLand(viewer, x, y) {
+    const v = veilCovering(x, y);
+    if (!v || !viewer) return false;
+    return v.side !== viewer.side;
+  }
+
+  function veilAimMul(to) {
+    if (!to || !inVeil(to.x, to.y)) return 1;
+    return 1 + VEIL_ERR;
+  }
+
+  function useVeil(u) {
+    if (!u || G.phase !== 'aim' || G.busy) return false;
+    if (u.frozen) return false;
+    if (!u.items || (u.items.veil | 0) <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
+    if (u.stam < ITEM_COST.veil) { if (isHuman(u)) toastDeny('体力不足'); return false; }
+    u.items.veil -= 1;
+    u.stam -= ITEM_COST.veil;
+    G.veils = G.veils || [];
+    G.veils.push({ x: u.x, y: u.y, r: VEIL_R, side: u.side, owner: u.id, wait: 1 });
+    toast('障幕', false, 'ice');
+    audio.ensure();
+    audio.beep(180, 0.16, 'sine', 0.036, 90);
+    audio.beep(420, 0.18, 'triangle', 0.022, 220);
+    burst(u.x, u.y, CYN, REDUCE ? 6 : 14, 70, 0.32);
+    ringAt(u.x, u.y, CYN, 28);
+    syncHud();
+    return true;
+  }
+
+  function tickVeils(actor) {
+    const list = G.veils;
+    if (!list || !list.length || !actor) return;
+    const keep = [];
+    for (let i = 0; i < list.length; i++) {
+      const v = list[i];
+      const oppose = G.kind === 'drill' ? true : (actor.side !== v.side);
+      if (!oppose) {
+        keep.push(v);
+        continue;
+      }
+      v.wait = (v.wait | 0) - 1;
+      if (v.wait > 0) keep.push(v);
+    }
+    G.veils = keep;
+  }
+
+  function continueAfterAction() {
+    const actor = curUnit();
+    tickVeils(actor);
+    if (G.kind === 'drill') beginTurn('p');
+    else if (isDuo()) {
+      applyActDelay(actor);
+      beginTurn(pickNextId());
+    } else beginTurn(G.turn === 'p' ? 'f' : 'p');
+  }
+
+  function aiWantVeil(from) {
+    if (!from || !from.items || (from.items.veil | 0) <= 0) return false;
+    if ((from.stam || 0) < ITEM_COST.veil) return false;
+    if ((from.hp || 0) >= VEIL_HP) return false;
+    const foe = otherUnit(from);
+    if (!foe) return false;
+    return Math.abs(from.x - foe.x) < VEIL_GRIDS * GRID;
+  }
+
   function useDrum(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
     if (!u.items || u.items.drum <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
@@ -2691,6 +2776,7 @@
     } else if (id === 'neon') toggleNeon(u);
     else if (id === 'drum') useDrum(u);
     else if (id === 'nixi') useNixi(u);
+    else if (id === 'veil') useVeil(u);
     else if (id === 'ult') useUlt(u);
     else if (id === 'skip') skipTurn();
   }
@@ -2907,7 +2993,7 @@
     G.wep = pickAIWeapon(from);
     G.neonOn = false;
     syncWeps();
-    const plan = { drum: false, warp: 0, leap: 0, neon: false, ult: false, nixi: false };
+    const plan = { drum: false, warp: 0, leap: 0, neon: false, ult: false, nixi: false, veil: false };
     const score0 = solveAI(from).score;
     if (from.items && from.items.drum > 0) {
       if (from.rage <= 50) plan.drum = true;
@@ -2959,6 +3045,7 @@
     const moved = planAIMove(from);
     let best = moved.best;
     if (aiWantNixi(from, best.score)) plan.nixi = true;
+    if (aiWantVeil(from)) plan.veil = true;
     const mark = otherUnit(from) || G.p;
     if (from.items && from.items.neon > 0 && G.turns - G.aiLastNeonTurn >= 2 && mark && mark.hp > 12 && best.score >= 4000) {
       const lead = from.hp - mark.hp >= 15;
@@ -2968,12 +3055,13 @@
     }
     if ((from.rage >= 100 || (plan.drum && from.rage + 50 >= 100)) && best.score >= 5000) plan.ult = true;
     const loose = G.kind === 'core' ? 0 : 1;
-    const aj = loose ? 3 : 1.5;
-    const pj = loose ? 4 : 2;
+    const fogK = veilAimMul(mark);
+    const aj = (loose ? 3 : 1.5) * fogK;
+    const pj = (loose ? 4 : 2) * fogK;
     best.ang = clamp(best.ang + rand(-aj, aj), 5, 175);
     let toasted = false;
     if (Math.abs(elev(best.ang) - 65) <= 8) {
-      const jit = rand(0.05, 0.08) * (Math.random() < 0.5 ? -1 : 1);
+      const jit = rand(0.05, 0.08) * fogK * (Math.random() < 0.5 ? -1 : 1);
       best.pow = clamp(best.pow * (1 + jit), 16, 100);
       if (Math.random() < 0.16) {
         toast((from.name || '烬丸') + '补角', false, false);
@@ -3031,6 +3119,13 @@
         AI.wait = 0.16;
         return;
       }
+      if (plan.veil) {
+        useVeil(u);
+        plan.veil = false;
+        AI.walkTo = u.x;
+        AI.wait = 0.16;
+        return;
+      }
       if (plan.neon) { G.neonOn = true; G.aiLastNeonTurn = G.turns; }
       if (plan.ult && u.rage >= 100) useUlt(u);
       AI.stage = 0;
@@ -3043,6 +3138,18 @@
       if (plan.nixi) {
         useNixi(u);
         plan.nixi = false;
+      }
+      if (plan.veil) {
+        useVeil(u);
+        plan.veil = false;
+        AI.walkTo = u.x;
+        const aimed = planAIMove(u);
+        AI.ang = aimed.best.ang;
+        AI.pow = aimed.best.pow;
+        AI.score = aimed.best.score;
+        AI.stage = 0;
+        AI.wait = 0.12;
+        return;
       }
       const moved = planAIMove(u);
       AI.walkTo = moved.walkTo;
@@ -3215,6 +3322,7 @@
     G.safeR = VW - 1;
     G.slowMo = 0;
     G.fruits = [];
+    G.veils = [];
     G.lastHit = null;
     G.windSpinT = 0;
     G.nextWind = null;
@@ -3423,11 +3531,7 @@
     if (G.phase === 'frozenWait') {
       G.frozenT -= dt;
       if (G.frozenT <= 0) {
-        if (G.kind === 'drill') beginTurn('p');
-        else if (isDuo()) {
-          applyActDelay(curUnit());
-          beginTurn(pickNextId());
-        } else beginTurn(G.turn === 'p' ? 'f' : 'p');
+        continueAfterAction();
       }
       return;
     }
@@ -3466,11 +3570,7 @@
       }
       if (G.settleT <= 0 && unitsSettled()) {
         if (checkEnd()) return;
-        if (G.kind === 'drill') beginTurn('p');
-        else if (isDuo()) {
-          applyActDelay(curUnit());
-          beginTurn(pickNextId());
-        } else beginTurn(G.turn === 'p' ? 'f' : 'p');
+        continueAfterAction();
       }
     }
   }
@@ -3808,6 +3908,22 @@
         g.beginPath();
         g.arc(mx, my, 4.2, 0, TAU);
         g.stroke();
+      }
+    }
+    const veils = G.veils;
+    if (veils) {
+      for (let i = 0; i < veils.length; i++) {
+        const v = veils[i];
+        const mx = clamp((v.x / VW) * MINI_W, 2, MINI_W - 2);
+        const my = clamp((v.y / VH) * MINI_H, 3, MINI_H - 3);
+        const rr = Math.max(3.2, (v.r / VW) * MINI_W);
+        g.strokeStyle = 'rgba(0,232,255,0.55)';
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(mx, my, rr, 0, TAU);
+        g.stroke();
+        g.fillStyle = 'rgba(0,232,255,0.12)';
+        g.fill();
       }
     }
   }
@@ -4267,6 +4383,53 @@
     g.restore();
   }
 
+  function drawVeils(g) {
+    if (G.mode !== 'play' && G.mode !== 'end') return;
+    const list = G.veils;
+    if (!list || !list.length) return;
+    g.save();
+    for (let i = 0; i < list.length; i++) {
+      const v = list[i];
+      const t = G.t || 0;
+      const grd = g.createRadialGradient(v.x, v.y, 6, v.x, v.y, v.r);
+      grd.addColorStop(0, 'rgba(0,232,255,0.22)');
+      grd.addColorStop(0.42, 'rgba(90,220,255,0.16)');
+      grd.addColorStop(1, 'rgba(0,232,255,0)');
+      g.fillStyle = grd;
+      g.beginPath();
+      g.arc(v.x, v.y, v.r, 0, TAU);
+      g.fill();
+      if (REDUCE) continue;
+      g.lineWidth = 1.6;
+      for (let k = 0; k < 4; k++) {
+        const a0 = t * (0.85 + k * 0.18) + k * 1.1;
+        g.strokeStyle = 'rgba(0,232,255,' + (0.16 + 0.08 * (k % 2)) + ')';
+        g.beginPath();
+        g.ellipse(
+          v.x + Math.cos(a0) * 7,
+          v.y + Math.sin(a0 * 1.25) * 5,
+          v.r * (0.36 + (k % 2) * 0.16),
+          v.r * 0.20,
+          a0,
+          0,
+          TAU
+        );
+        g.stroke();
+      }
+      for (let k = 0; k < 6; k++) {
+        const a = t * 1.35 + k * TAU / 6;
+        const rr = v.r * (0.32 + 0.30 * (0.5 + 0.5 * Math.sin(t * 1.6 + k)));
+        const wx = v.x + Math.cos(a) * rr;
+        const wy = v.y + Math.sin(a * 1.12) * rr * 0.7;
+        g.fillStyle = 'rgba(170,255,255,' + (0.07 + 0.10 * (0.5 + 0.5 * Math.sin(t * 2.1 + k))) + ')';
+        g.beginPath();
+        g.arc(wx, wy, 9 + (k % 3) * 3, 0, TAU);
+        g.fill();
+      }
+    }
+    g.restore();
+  }
+
   function drawWarpAim(g) {
     if (G.busy !== 'warpAim') return;
     const u = curUnit();
@@ -4370,19 +4533,21 @@
       g.stroke();
       const land = drawPts[drawPts.length - 1];
       g.setLineDash([]);
-      const pulse = (!REDUCE && lv >= 2) ? (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(G.t * 4.4))) : 1;
-      g.strokeStyle = 'rgba(255,227,107,' + (0.58 + 0.28 * pulse) + ')';
-      g.lineWidth = 1.2 + 0.6 * pulse;
-      const s = 4.2 + 1.1 * pulse;
-      g.beginPath();
-      g.moveTo(land.x - s, land.y - s);
-      g.lineTo(land.x + s, land.y + s);
-      g.moveTo(land.x + s, land.y - s);
-      g.lineTo(land.x - s, land.y + s);
-      g.stroke();
-      g.beginPath();
-      g.arc(land.x, land.y, 5.2 + 2.2 * pulse, 0, TAU);
-      g.stroke();
+      if (!hideAssistLand(u, land.x, land.y)) {
+        const pulse = (!REDUCE && lv >= 2) ? (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(G.t * 4.4))) : 1;
+        g.strokeStyle = 'rgba(255,227,107,' + (0.58 + 0.28 * pulse) + ')';
+        g.lineWidth = 1.2 + 0.6 * pulse;
+        const s = 4.2 + 1.1 * pulse;
+        g.beginPath();
+        g.moveTo(land.x - s, land.y - s);
+        g.lineTo(land.x + s, land.y + s);
+        g.moveTo(land.x + s, land.y - s);
+        g.lineTo(land.x - s, land.y + s);
+        g.stroke();
+        g.beginPath();
+        g.arc(land.x, land.y, 5.2 + 2.2 * pulse, 0, TAU);
+        g.stroke();
+      }
     }
     g.restore();
   }
@@ -4422,6 +4587,7 @@
     }
     drawRuler(ctx);
     drawGhostPath(ctx);
+    drawVeils(ctx);
     drawPredict(ctx);
     drawWarpAim(ctx);
     drawFruits(ctx);
@@ -4587,6 +4753,7 @@
     if (k === 'c' || k === 'C') { onItem('neon'); return; }
     if (k === 'v' || k === 'V') { onItem('drum'); return; }
     if (k === 'b' || k === 'B') { onItem('nixi'); return; }
+    if (k === 'g' || k === 'G') { onItem('veil'); return; }
     if (k === 'f' || k === 'F') { onItem('ult'); return; }
     if (k === 'x' || k === 'X') { onItem('skip'); return; }
     if (k === '1') setWep(0);
@@ -5069,6 +5236,51 @@
     G.wind = 5;
     ok('nixi stam gate', useNixi(nu3) === false && nu3.items.nixi === 1);
     ok('nixi ai gate', NIXI_WIND === 5 && NIXI_MISS === 4000);
+    ok('veil 障幕', ITEM_NAME.veil === '障幕' && ITEM_MAX.veil === 1 && ITEM_COST.veil === 20);
+    ok('veil not fruit', ITEM_KEYS.indexOf('veil') < 0 && ITEM_KEYS.length === 4);
+    ok('veil bag', freshItems().veil === 1 && freshItems().nixi === 1);
+    ok('veil r 70', VEIL_R === 70 && VEIL_HP === 40 && VEIL_GRIDS === 8 && VEIL_ERR === 0.12);
+    G.phase = 'aim';
+    G.busy = null;
+    G.veils = [];
+    G.kind = 'hall';
+    const vu = { items: freshItems(), stam: 100, frozen: 0, x: 200, y: 300, side: 'p', id: 'p' };
+    const vUsed = useVeil(vu);
+    ok('veil use', vUsed === true && vu.items.veil === 0 && vu.stam === 80 && G.veils.length === 1 && G.veils[0].r === 70);
+    ok('veil once', useVeil(vu) === false && G.veils.length === 1);
+    ok('veil disk', inVeil(200, 300) === true && inVeil(200 + 70, 300) === true && inVeil(200 + 71, 300) === false);
+    ok('veil hide foe land', hideAssistLand({ side: 'f' }, 200, 300) === true);
+    ok('veil own land shown', hideAssistLand({ side: 'p' }, 200, 300) === false);
+    const vu2 = { items: freshItems(), stam: 19, frozen: 0, x: 200, y: 300, side: 'p', id: 'p' };
+    ok('veil stam gate', useVeil(vu2) === false && vu2.items.veil === 1 && G.veils.length === 1);
+    G.veils = [{ x: 200, y: 300, r: 70, side: 'p', wait: 1 }];
+    tickVeils({ side: 'p', id: 'p' });
+    ok('veil keep same side', G.veils.length === 1);
+    tickVeils({ side: 'f', id: 'f' });
+    ok('veil expire after foe', G.veils.length === 0);
+    G.kind = 'duo';
+    G.veils = [{ x: 100, y: 100, r: 70, side: 'p', wait: 1 }];
+    tickVeils({ side: 'p', id: 'p2' });
+    ok('veil keep teammate', G.veils.length === 1);
+    tickVeils({ side: 'f', id: 'f' });
+    ok('veil expire 1 foe act', G.veils.length === 0);
+    G.kind = 'hall';
+    G.p = { x: 152, hp: 100, side: 'p', id: 'p' };
+    G.f = { x: 152 + 7 * GRID, hp: 30, side: 'f', id: 'f', items: freshItems(), stam: 100 };
+    ok('ai want veil close low hp', aiWantVeil(G.f) === true);
+    G.f.hp = 40;
+    ok('ai veil hp 40 no', aiWantVeil(G.f) === false);
+    G.f.hp = 30;
+    G.f.x = 152 + 8 * GRID;
+    ok('ai veil dist 8 no', aiWantVeil(G.f) === false);
+    G.veils = [{ x: 152, y: 300, r: 70, side: 'p', wait: 1 }];
+    G.p.x = 152; G.p.y = 300;
+    ok('veil aim +12', Math.abs(veilAimMul(G.p) - 1.12) < 0.001);
+    G.p.x = 800; G.p.y = 300;
+    ok('veil aim clear', veilAimMul(G.p) === 1);
+    G.veils = [];
+    G.kind = 'hall';
+    ok('g vk veil locked', GRAV === 260 && VK === 420);
     G.lastHit = { id: 'p2', name: '霜丸', side: 'p' };
     ok('duo 收击', duoFinisherName() === '霜丸');
     const sh = { id: 'p', name: '岚丸', side: 'p' };

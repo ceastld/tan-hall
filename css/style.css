@@ -834,6 +834,10 @@ canvas {
   opacity: 0.45;
 }
 
+.items button#btn-veil:not(.empty) {
+  border-color: rgba(0, 232, 255, 0.42);
+}
+
 #btn-drill {
   border-color: rgba(255, 227, 107, 0.55);
   background: linear-gradient(180deg, rgba(255, 227, 107, 0.18), rgba(139, 92, 255, 0.08));
