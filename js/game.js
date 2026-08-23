@@ -25,13 +25,27 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · R 重开 · M 静音';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 65°查表 · Tab尺';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 · 65°查表 · Tab尺';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩';
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1 };
   const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0 };
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台' };
-  const MAP_IDS = ['plain', 'canyon', 'twin'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge'];
+  const GUST_MID = 480;
+  const GUST_HW = 80;
+  const GUST_AY = -150;
+  const BRIDGE_X0 = 360;
+  const BRIDGE_X1 = 600;
+  const BRIDGE_Y = 310;
+  const BRIDGE_THICK = 22;
+  const BRIDGE_VOID = 528;
+  const BURY_PX = 40;
+  const CLUSTER = [
+    { dx: 0, dy: 0, r: 22 },
+    { dx: -12, dy: 1, r: 18 },
+    { dx: 12, dy: 2, r: 18 }
+  ];
 
   const CYN = [0, 232, 255];
   const MAG = [255, 61, 184];
@@ -44,7 +58,8 @@
   const WEPS = [
     { id: 0, name: '普通弹', direct: 32, splash: 36, crater: 30, spd: 1.00 },
     { id: 1, name: '高爆', direct: 24, splash: 56, crater: 48, spd: 0.88 },
-    { id: 2, name: '穿透', direct: 30, splash: 32, crater: 26, spd: 1.06 }
+    { id: 2, name: '穿透', direct: 30, splash: 32, crater: 26, spd: 1.06 },
+    { id: 4, name: '三裂', direct: 14, splash: 22, crater: 16, spd: 0.96 }
   ];
   const NEON = { id: 3, name: '霓弹', direct: 8, splash: 28, crater: 18, spd: 1.00 };
 
@@ -120,6 +135,7 @@
   const dt65 = el('dt-65');
   const dt90 = el('dt-90');
   const drillWindEl = el('drill-wind');
+  const aimHintEl = el('aim-hint');
 
   const view = { w: 1, h: 1, dpr: 1, scale: 1, ox: 0, oy: 0 };
   const keys = { l: false, r: false, u: false, d: false, fire: false };
@@ -168,7 +184,10 @@
     lastKind: 'hall',
     stakeT: 0,
     frozenT: 0,
-    aiLastNeonTurn: -9
+    aiLastNeonTurn: -9,
+    camHold: false,
+    impactX: VW * 0.5,
+    impactY: VH * 0.5
   };
 
   const particles = [];
@@ -224,6 +243,47 @@
     return u.ang > 90 ? -1 : 1;
   }
 
+  function gustAy(x) {
+    if (G.mapId !== 'spire') return 0;
+    const d = Math.abs(x - GUST_MID);
+    if (d >= GUST_HW) return 0;
+    const k = 1 - d / GUST_HW;
+    return GUST_AY * k * k;
+  }
+
+  function isBridgeCol(x) {
+    return G.mapId === 'bridge' && x >= BRIDGE_X0 && x <= BRIDGE_X1;
+  }
+
+  function liveBridge(x) {
+    return isBridgeCol(x) && G.H && G.H[x | 0] < BRIDGE_VOID - 20;
+  }
+
+  function setCamFighters() {
+    cam.tx = VW * 0.5;
+    cam.ty = VH * 0.5;
+    cam.tz = 1;
+    G.camHold = false;
+  }
+
+  function setCamShot(s) {
+    if (!s) return;
+    const lookX = s.x + s.vx * 0.20;
+    const lookY = s.y + s.vy * 0.14;
+    cam.tx = clamp(lookX, 140, VW - 140);
+    cam.ty = clamp(lookY, 100, VH - 70);
+    cam.tz = 1.14;
+  }
+
+  function setCamImpact(x, y) {
+    G.camHold = true;
+    G.impactX = x;
+    G.impactY = y;
+    cam.tx = clamp(x, 140, VW - 140);
+    cam.ty = clamp(y, 90, VH - 70);
+    cam.tz = 1.18;
+  }
+
   function groundAt(x) {
     const H = G.H;
     if (!H) return VH - 8;
@@ -265,6 +325,28 @@
         const right = sm(0.60, 0.70, t) * (1 - sm(0.84, 0.98, t));
         h[x] = 508 - Math.max(left, right) * 198 + Math.sin(t * 13) * 5;
       }
+    } else if (id === 'spire') {
+      for (let x = 0; x < VW; x++) {
+        const t = x / (VW - 1);
+        h[x] = 392 + Math.sin(t * Math.PI * 2.05) * 14 + Math.sin(t * Math.PI * 5.1) * 7 + Math.sin(t * Math.PI * 11.2) * 3;
+        h[x] += Math.sin(t * Math.PI) * 16;
+      }
+    } else if (id === 'bridge') {
+      for (let x = 0; x < VW; x++) {
+        const t = x / (VW - 1);
+        const sm = function (a, b, u) {
+          const k = clamp((u - a) / (b - a), 0, 1);
+          return k * k * (3 - 2 * k);
+        };
+        const left = sm(0.02, 0.16, t) * (1 - sm(0.28, 0.36, t));
+        const right = sm(0.64, 0.72, t) * (1 - sm(0.84, 0.98, t));
+        h[x] = 508 - Math.max(left, right) * 198 + Math.sin(t * 13) * 4;
+        if (x >= BRIDGE_X0 && x <= BRIDGE_X1) {
+          const edge = Math.min(x - BRIDGE_X0, BRIDGE_X1 - x);
+          const ramp = clamp(edge / 14, 0, 1);
+          h[x] = lerp(h[x], BRIDGE_Y + Math.sin(x * 0.11) * 1.6, ramp);
+        }
+      }
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -278,6 +360,8 @@
   function spawnX(id, side) {
     if (id === 'canyon') return side === 'p' ? 122 : 838;
     if (id === 'twin') return side === 'p' ? 148 : 812;
+    if (id === 'spire') return side === 'p' ? 140 : 820;
+    if (id === 'bridge') return side === 'p' ? 150 : 810;
     return side === 'p' ? 152 : 768;
   }
 
@@ -307,6 +391,7 @@
       ult: false,
       frozen: 0,
       ragedPrompted: false,
+      buried: false,
       items: { leap: ITEM_MAX.leap, warp: ITEM_MAX.warp, neon: ITEM_MAX.neon, drum: ITEM_MAX.drum }
     };
     u.y = groundAt(u.x) - u.r;
@@ -344,6 +429,35 @@
     terrainDirty = true;
   }
 
+  function snapBridge(cx, r, wep) {
+    if (G.mapId !== 'bridge' || !G.H || !wep) return;
+    const canSnap = wep.id === 1 || wep.id === 4;
+    if (!canSnap) return;
+    const x0 = Math.max(BRIDGE_X0, Math.floor(cx - r - 10));
+    const x1 = Math.min(BRIDGE_X1, Math.ceil(cx + r + 10));
+    let any = false;
+    for (let x = x0; x <= x1; x++) {
+      if (G.H[x] < BRIDGE_VOID - 20) {
+        G.H[x] = BRIDGE_VOID;
+        any = true;
+      }
+    }
+    if (any) terrainDirty = true;
+  }
+
+  function carveCluster(cx, cy, mul) {
+    const hits = [];
+    for (let i = 0; i < CLUSTER.length; i++) {
+      const pop = CLUSTER[i];
+      const px = clamp(cx + pop.dx, 4, VW - 4);
+      const py = groundAt(cx) + pop.dy;
+      const r = Math.round(pop.r * (mul || 1));
+      carve(px, py, r);
+      hits.push({ x: px, y: py, r: r });
+    }
+    return hits;
+  }
+
   function inGround(x, y) {
     if (x < 0 || x >= VW) return true;
     return y >= groundAt(x);
@@ -371,12 +485,11 @@
     let pierced = false;
     let fuse = 0;
     const dt = 1 / 60;
-    const acc = wind * WIND_K;
     let hitU = null;
     let t = 0;
     for (let i = 0; i < 420; i++) {
-      vx += acc * dt;
-      vy += GRAV * dt;
+      vx += wind * WIND_K * dt;
+      vy += (GRAV + gustAy(x)) * dt;
       x += vx * dt;
       y += vy * dt;
       t += dt;
@@ -638,7 +751,7 @@
       G.winStreak = Math.max(0, parseInt(o.winStreak, 10) || 0);
       G.bestTurns = Math.max(0, parseInt(o.bestTurns, 10) || 0);
       if (o.mode === 'core' || o.mode === 'hall') { G.kind = o.mode; G.lastKind = o.mode; }
-      if (o.map === 'plain' || o.map === 'canyon' || o.map === 'twin') G.mapId = o.map;
+      if (MAP_IDS.indexOf(o.map) >= 0) G.mapId = o.map;
       if (o.ruler === false) G.ruler = false;
       else G.ruler = true;
       if (o.drillWind === '0' || o.drillWind === '4l' || o.drillWind === '4r' || o.drillWind === 'rand') {
@@ -735,6 +848,18 @@
         comboEl.hidden = false;
         comboEl.textContent = '连堂 ×' + G.combo;
       } else comboEl.hidden = true;
+    }
+    if (aimHintEl) {
+      const aiming = G.mode === 'play' && (G.phase === 'aim' || G.phase === 'charge') && G.p && G.f;
+      if (aiming) {
+        const from = curUnit() || G.p;
+        const to = otherUnit(from) || G.f;
+        const tip = schoolTips(from, to);
+        aimHintEl.textContent = '建议 ' + Math.round(tip.ang65) + '° 力 ' + tip.pow65;
+        aimHintEl.classList.remove('gone');
+      } else {
+        aimHintEl.classList.add('gone');
+      }
     }
     if (G.p) {
       if (hpPN) hpPN.textContent = String(Math.max(0, Math.ceil(G.p.hp)));
@@ -846,7 +971,7 @@
   function kick(mag) {
     if (REDUCE) return;
     G.shake = Math.max(G.shake, mag);
-    G.punch = Math.max(G.punch, 1 + Math.min(0.05, mag * 0.006));
+    G.punch = Math.max(G.punch, 1 + Math.min(0.08, mag * 0.01));
     if (!stageEl || G.mode !== 'play') return;
     kickTok += 1;
     const cls = mag >= 5.5 ? 'die' : 'hit';
@@ -1100,9 +1225,7 @@
     setHint(G.kind === 'drill' ? OPS_DRILL : (who === 'p' ? OPS_PLAY : '烬丸拉炮…'), who === 'p' ? '' : 'warn');
     if (who === 'f' && G.kind !== 'drill') startAI();
     syncHud();
-    cam.tx = VW * 0.5;
-    cam.ty = VH * 0.5;
-    cam.tz = 1;
+    setCamFighters();
   }
 
   function startCharge() {
@@ -1153,8 +1276,13 @@
     G.phase = 'fly';
     G.charging = false;
     G.busy = null;
+    G.camHold = false;
     audio.fire(wep);
     if (wep.id === 3) audio.beep(520, 0.1, 'triangle', 0.04, 180);
+    if (wep.id === 4) {
+      audio.beep(300, 0.07, 'square', 0.03, 520);
+      audio.beep(480, 0.08, 'triangle', 0.028, 880);
+    }
     if (u.ult) audio.beep(90, 0.28, 'sine', 0.06, 36);
     burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (u.side === 'p' ? CYN : MAG)), 8, 80, 0.25);
     u.walkT = 0;
@@ -1163,29 +1291,45 @@
   function explode(x, y, wep, owner, fromHit) {
     let crater = wep.crater;
     const wasUlt = !!(owner && owner.ult);
+    const ultMul = wasUlt ? 1.35 : 1;
     if (wasUlt) crater = Math.round(crater * 1.35);
-    carve(x, y, crater);
-    if (wep.id === 2 && G.shot && G.shot.pierced) {
-      const s = hypot(G.shot.vx, G.shot.vy) || 1;
-      const ux = G.shot.vx / s;
-      const uy = G.shot.vy / s;
-      for (let s2 = 0; s2 <= 46; s2 += 4) carve(x - ux * s2, y - uy * s2, 12);
+    let hit = !!fromHit;
+    if (wep.id === 4) {
+      const pops = carveCluster(x, y, ultMul);
+      for (let i = 0; i < pops.length; i++) {
+        const pop = pops[i];
+        snapBridge(pop.x, pop.r, wep);
+        if (applyBlast(pop.x, pop.y, wep, owner)) hit = true;
+        burst(pop.x, pop.y, hit ? HOT : DIRT, hit ? 12 : 8, 160, 0.4);
+        ringAt(pop.x, pop.y, HOT, pop.r * 1.5);
+      }
+      burst(x, y, GOLD, hit ? 8 : 3, 120, 0.32);
+    } else {
+      carve(x, y, crater);
+      snapBridge(x, crater, wep);
+      if (wep.id === 2 && G.shot && G.shot.pierced) {
+        const s = hypot(G.shot.vx, G.shot.vy) || 1;
+        const ux = G.shot.vx / s;
+        const uy = G.shot.vy / s;
+        for (let s2 = 0; s2 <= 46; s2 += 4) carve(x - ux * s2, y - uy * s2, 12);
+      }
+      hit = applyBlast(x, y, wep, owner) || hit;
+      burst(x, y, hit ? (owner && owner.side === 'p' ? CYN : MAG) : DIRT, hit ? 28 : 16, hit ? 260 : 180, 0.55);
+      burst(x, y, GOLD, hit ? 10 : 4, 140, 0.35);
+      ringAt(x, y, hit ? GOLD : HOT, crater * 1.6);
     }
-    const hit = applyBlast(x, y, wep, owner) || fromHit;
-    burst(x, y, hit ? (owner && owner.side === 'p' ? CYN : MAG) : DIRT, hit ? 28 : 16, hit ? 260 : 180, 0.55);
-    burst(x, y, GOLD, hit ? 10 : 4, 140, 0.35);
-    ringAt(x, y, hit ? GOLD : HOT, crater * 1.6);
     audio.boom(hit, wep);
+    setCamImpact(x, y);
     if (wasUlt) {
       floatText(x, y - 48, '殿破', GOLD, true);
       screenFlash(GOLD, 0.45);
-      hitStop(0.08);
+      hitStop(0.12);
       kick(6.5);
     }
     if (hit) {
       audio.hit();
-      hitStop(fromHit ? 0.066 : 0.048);
-      kick(fromHit ? 6.2 : 4.4);
+      hitStop(fromHit ? 0.12 : 0.09);
+      kick(fromHit ? 7.4 : 5.6);
       screenFlash(wasUlt ? GOLD : (owner && owner.side === 'p' ? CYN : MAG), wasUlt ? 0.45 : 0.28);
       G.combo += 1;
       if (G.combo >= 2) {
@@ -1200,7 +1344,7 @@
     } else {
       G.combo = 0;
       audio.dirt();
-      kick(2.1);
+      kick(2.8);
     }
     if (owner && owner.ult) owner.ult = false;
     if (G.ghostPend) {
@@ -1218,10 +1362,9 @@
     ungroundIfAir(G.f);
     G.shot = null;
     G.phase = 'settle';
-    G.settleT = 0.18;
-    cam.tz = 1;
-    cam.tx = VW * 0.5;
-    cam.ty = VH * 0.5;
+    G.settleT = 0.22;
+    refreshBury(G.p);
+    refreshBury(G.f);
     syncHud();
   }
 
@@ -1230,15 +1373,13 @@
     if (!s) return;
     s.life += dt;
     s.vx += G.wind * WIND_K * dt;
-    s.vy += GRAV * dt;
+    s.vy += (GRAV + gustAy(s.x)) * dt;
     s.x += s.vx * dt;
     s.y += s.vy * dt;
     trail.push({ x: s.x, y: s.y, a: 1 });
     if (trail.length > 28) trail.shift();
     if (G.ghostPend) G.ghostPend.points = trail.slice();
-    cam.tx = clamp(s.x, 180, VW - 180);
-    cam.ty = clamp(s.y, 140, VH - 80);
-    cam.tz = 1.12;
+    setCamShot(s);
     if (s.x < 2 || s.x > VW - 2 || s.y > VH + 20) {
       explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false);
       return;
@@ -1453,6 +1594,23 @@
     return g - (gl + gr) * 0.5;
   }
 
+  function walkBlocked(u) {
+    return !!(u && u.hp > 0 && pitDepth(u) >= BURY_PX);
+  }
+
+  function refreshBury(u) {
+    if (!u) return;
+    if (u.hp <= 0) { u.buried = false; return; }
+    const now = pitDepth(u) >= BURY_PX;
+    if (now && !u.buried) {
+      toast('埋了', true, false);
+      floatText(u.x, u.y - 28, '埋了', DIRT, true);
+      burst(u.x, u.y + (u.r || 14), DIRT, REDUCE ? 8 : 20, 110, 0.55);
+      audio.dirt();
+    }
+    u.buried = now;
+  }
+
   function thinLedge(u) {
     if (!u) return false;
     const g0 = groundAt(u.x);
@@ -1463,6 +1621,10 @@
 
   function pickAIWeapon() {
     const foe = G.p;
+    if (foe) {
+      if (thinLedge(foe) || pitDepth(foe) > 16) return 3;
+      if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
+    }
     if (G.mapId === 'canyon') return 2;
     if (foe) {
       const x = foe.x | 0;
@@ -1487,8 +1649,11 @@
     else if (feet < 40) score = 1800 - feet * 16;
     let bury = 0;
     const feetX = Math.abs(imp.x - t.x);
-    if (feetX < 34 && wep.crater >= 30) bury += 900 + wep.crater * 0.7 * 8;
+    const craterEff = wep.id === 4 ? 54 : wep.crater;
+    if (feetX < 34 && craterEff >= 30) bury += 900 + craterEff * 0.7 * 8;
+    if (pitDepth(t) > 16 && feetX < 50 && wep.id === 4) bury += 1600;
     if (pitDepth(t) > 28 && feetX < 50) bury += 1400;
+    if (G.mapId === 'bridge' && liveBridge(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
     score += bury;
     const selfD = hypot(imp.x - from.x, imp.y - from.y);
     if (selfD < wep.splash * 0.45) {
@@ -1500,7 +1665,7 @@
   }
 
   function solveAI(from) {
-    const wep = WEPS[from && from.side === 'f' ? (G.wep || 0) : (G.wep || 0)] || WEPS[0];
+    const wep = G.neonOn ? NEON : (WEPS[G.wep] || WEPS[0]);
     let best = { score: -1e9, ang: from.ang, pow: 70 };
     function muzzle(ang) {
       const th = ang * Math.PI / 180;
@@ -1702,6 +1867,11 @@
       AI.stage = 1;
     }
     if (AI.stage === 1) {
+      if (walkBlocked(u)) {
+        AI.stage = 2;
+        AI.wait = 0.08;
+        return;
+      }
       const dx = AI.walkTo - u.x;
       if (Math.abs(dx) > 2 && G.walk > 0 && u.stam > 0) {
         const dir = dx > 0 ? 1 : -1;
@@ -1748,6 +1918,10 @@
     if (keys.l || padHold.l) dir -= 1;
     if (keys.r || padHold.r) dir += 1;
     if (!dir || G.walk <= 0 || G.p.stam <= 0) return;
+    if (walkBlocked(G.p)) {
+      if (G.toastT <= 0.2) toast('埋了 · 飞步或影挪', true, false);
+      return;
+    }
     const step = Math.min(G.walk, G.p.stam, 90 * dt);
     G.p.x = clamp(G.p.x + dir * step, 22, VW - 22);
     G.walk -= step;
@@ -1789,6 +1963,7 @@
     cam.x = cam.tx = VW * 0.5;
     cam.y = cam.ty = VH * 0.5;
     cam.z = cam.tz = 1;
+    G.camHold = false;
   }
 
   function startGame(kind) {
@@ -1828,7 +2003,7 @@
   }
 
   function setMap(id) {
-    if (id !== 'plain' && id !== 'canyon' && id !== 'twin') return;
+    if (MAP_IDS.indexOf(id) < 0) return;
     G.mapId = id;
     if (G.mode === 'title') {
       resetWorld();
@@ -1841,7 +2016,7 @@
 
   function setWep(n) {
     n = n | 0;
-    if (n < 0 || n > 2) return;
+    if (n < 0 || n >= WEPS.length) return;
     if (G.mode === 'play' && G.phase !== 'aim' && G.phase !== 'charge') return;
     G.wep = n;
     syncWeps();
@@ -1858,9 +2033,12 @@
       G.toastT -= dt;
       if (G.toastT <= 0 && toastEl) toastEl.classList.add('hidden');
     }
-    cam.x += (cam.tx - cam.x) * Math.min(1, dt * 4.2);
-    cam.y += (cam.ty - cam.y) * Math.min(1, dt * 4.2);
-    cam.z += (cam.tz - cam.z) * Math.min(1, dt * 3.4);
+    let ck = 5.6;
+    if (G.phase === 'fly') ck = 8.4;
+    else if (G.phase === 'settle' && G.camHold) ck = 6.2;
+    cam.x += (cam.tx - cam.x) * Math.min(1, dt * ck);
+    cam.y += (cam.ty - cam.y) * Math.min(1, dt * ck);
+    cam.z += (cam.tz - cam.z) * Math.min(1, dt * (G.phase === 'fly' ? 5.2 : 3.2));
     for (let i = particles.length - 1; i >= 0; i--) {
       const q = particles[i];
       q.vy += q.g * dt;
@@ -1955,7 +2133,10 @@
     } else if (G.phase === 'fly') {
       stepShot(dt);
     } else if (G.phase === 'settle') {
+      refreshBury(G.p);
+      refreshBury(G.f);
       G.settleT -= dt;
+      if (G.settleT < 0.12) setCamFighters();
       if (G.settleT <= 0 && unitsSettled()) {
         if (checkEnd()) return;
         if (G.kind === 'drill') beginTurn('p');
@@ -2040,8 +2221,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -2071,6 +2252,34 @@
     for (let x = 1; x < VW; x++) g.lineTo(x, H[x] + 5);
     g.stroke();
     g.globalAlpha = 1;
+    if (G.mapId === 'bridge') {
+      g.save();
+      g.globalCompositeOperation = 'destination-out';
+      for (let x = BRIDGE_X0; x <= BRIDGE_X1; x++) {
+        if (H[x] >= BRIDGE_VOID - 20) continue;
+        const slab = BRIDGE_THICK;
+        const holeY = H[x] + slab;
+        const holeH = Math.max(0, BRIDGE_VOID - holeY);
+        if (holeH > 4) g.fillRect(x, holeY, 1, holeH);
+      }
+      g.restore();
+      g.fillStyle = '#0a0614';
+      g.fillRect(BRIDGE_X0, BRIDGE_VOID, BRIDGE_X1 - BRIDGE_X0 + 1, VH - BRIDGE_VOID);
+      g.strokeStyle = 'rgba(232,192,144,0.55)';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      let drawing = false;
+      for (let x = BRIDGE_X0; x <= BRIDGE_X1; x++) {
+        if (H[x] >= BRIDGE_VOID - 20) {
+          if (drawing) { g.stroke(); drawing = false; }
+          continue;
+        }
+        const yb = H[x] + BRIDGE_THICK;
+        if (!drawing) { g.beginPath(); g.moveTo(x, yb); drawing = true; }
+        else g.lineTo(x, yb);
+      }
+      if (drawing) g.stroke();
+    }
     terrainDirty = false;
   }
 
@@ -2131,6 +2340,26 @@
       g.moveTo(x, y);
       g.lineTo(x + dir * (18 + Math.abs(G.wind)), y);
       g.stroke();
+    }
+    g.restore();
+  }
+
+  function drawGust(g) {
+    if (G.mapId !== 'spire') return;
+    g.save();
+    const veil = g.createLinearGradient(GUST_MID - GUST_HW, 0, GUST_MID + GUST_HW, 0);
+    veil.addColorStop(0, 'rgba(154,240,255,0)');
+    veil.addColorStop(0.5, 'rgba(154,240,255,0.10)');
+    veil.addColorStop(1, 'rgba(154,240,255,0)');
+    g.fillStyle = veil;
+    g.fillRect(GUST_MID - GUST_HW, 0, GUST_HW * 2, VH);
+    for (let i = 0; i < 18; i++) {
+      const span = GUST_HW * 2;
+      const x = GUST_MID - GUST_HW + ((i * 41 + G.t * 28) % span);
+      const y = VH - 40 - ((G.t * 78 + i * 31) % (VH - 60));
+      const a = 0.16 + 0.14 * Math.sin(G.t * 3.2 + i);
+      g.fillStyle = 'rgba(180,244,255,' + a + ')';
+      g.fillRect(x, y, 2.2, 11 + (i % 4) * 3);
     }
     g.restore();
   }
@@ -2259,7 +2488,7 @@
   function drawShot(g) {
     const s = G.shot;
     if (!s) return;
-    const rgb = s.ult ? GOLD : (s.wep && s.wep.id === 3 ? ICE : (s.owner && s.owner.side === 'p' ? CYN : MAG));
+    const rgb = s.ult ? GOLD : (s.wep && s.wep.id === 3 ? ICE : (s.wep && s.wep.id === 4 ? HOT : (s.owner && s.owner.side === 'p' ? CYN : MAG)));
     g.save();
     g.lineCap = 'round';
     for (let i = 1; i < trail.length; i++) {
@@ -2275,7 +2504,7 @@
     g.shadowColor = rgba(rgb, 0.9);
     g.shadowBlur = 12;
     g.beginPath();
-    g.arc(s.x, s.y, s.wep.id === 1 ? 5.2 : 3.6, 0, TAU);
+    g.arc(s.x, s.y, s.wep.id === 1 ? 5.2 : (s.wep.id === 4 ? 4.4 : 3.6), 0, TAU);
     g.fill();
     g.restore();
   }
@@ -2377,7 +2606,6 @@
     const spd = muzzleSpeed(G.power, u.ang, wep);
     let vx = Math.cos(th) * spd;
     let vy = -Math.sin(th) * spd;
-    const acc = G.wind * WIND_K;
     const dt = 1 / 60;
     g.save();
     g.strokeStyle = 'rgba(255,227,107,0.35)';
@@ -2385,8 +2613,8 @@
     g.beginPath();
     g.moveTo(x, y);
     for (let i = 0; i < 180; i++) {
-      vx += acc * dt;
-      vy += GRAV * dt;
+      vx += G.wind * WIND_K * dt;
+      vy += (GRAV + gustAy(x)) * dt;
       x += vx * dt;
       y += vy * dt;
       g.lineTo(x, y);
@@ -2418,6 +2646,7 @@
     drawWind(ctx);
     if (terrainDirty) paintTerrain();
     if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
+    drawGust(ctx);
     drawRuler(ctx);
     drawGhostPath(ctx);
     drawPredict(ctx);
@@ -2544,8 +2773,8 @@
       if (k === '1' || k === 'Enter') { startGame('hall'); return; }
       if (k === '2') { startGame('core'); return; }
       if (k === '3') { startGame('drill'); return; }
-      if (k === '[') { setMap(MAP_IDS[(MAP_IDS.indexOf(G.mapId) + 2) % 3]); return; }
-      if (k === ']') { setMap(MAP_IDS[(MAP_IDS.indexOf(G.mapId) + 1) % 3]); return; }
+      if (k === '[') { setMap(MAP_IDS[(MAP_IDS.indexOf(G.mapId) + MAP_IDS.length - 1) % MAP_IDS.length]); return; }
+      if (k === ']') { setMap(MAP_IDS[(MAP_IDS.indexOf(G.mapId) + 1) % MAP_IDS.length]); return; }
       return;
     }
     if (k === 'Escape' || k === 'Esc') { cancelWarp(); return; }
@@ -2567,6 +2796,7 @@
     if (k === '1') setWep(0);
     if (k === '2') setWep(1);
     if (k === '3') setWep(2);
+    if (k === '4') setWep(3);
   }
 
   function bindPad() {
@@ -2692,6 +2922,40 @@
     const ultMul = 32 * 1 * 1.6;
     ok('hallbreak x1.6', Math.round(ultMul) === 51);
 
+    G.H = buildHeight('spire');
+    G.mapId = 'spire';
+    ok('spire height', G.H[140] > 300 && G.H[140] < 480, Math.round(G.H[140]));
+    ok('gust center up', gustAy(GUST_MID) < -80, Math.round(gustAy(GUST_MID)));
+    ok('gust outside 0', gustAy(120) === 0);
+    G.mapId = 'bridge';
+    G.H = buildHeight('bridge');
+    ok('bridge slab', G.H[480] > 280 && G.H[480] < 340, Math.round(G.H[480]));
+    ok('bridge pads', G.H[150] < 360 && G.H[810] < 360, Math.round(G.H[150]) + '/' + Math.round(G.H[810]));
+    G.mapId = 'plain';
+    G.H = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    carve(500, 400, 48);
+    const heDepth = G.H[500] - 400;
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    carveCluster(500, 400, 1);
+    const clDepth = G.H[500] - 400;
+    ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
+    ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
+    ok('maps five', MAP_IDS.length === 5 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥');
+    G.H = buildHeight('plain');
+    G.wind = 3;
+    G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', ang: 65, face: 1 };
+    G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100, max: 100, side: 'f', ang: 115, face: -1 };
+    const tip = schoolTips(G.p, G.f);
+    ok('aim hint 65+2wind', Math.round(tip.ang65) === 71, Math.round(tip.ang65) + ' / ' + tip.pow65);
+    ok('bury threshold', BURY_PX === 40);
+    const pitH = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) pitH[i] = 400;
+    G.H = pitH;
+    carveCluster(200, 400, 1);
+    const buriedU = { x: 200, y: G.H[200] - 14, r: 14, hp: 100 };
+    ok('pit bury', pitDepth(buriedU) >= BURY_PX && walkBlocked(buriedU), Math.round(pitDepth(buriedU)));
+
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
     return out.every(function (l) { return l.indexOf('OK') === 0; });
@@ -2774,6 +3038,12 @@
   }
   if (padEl) {
     padEl.addEventListener('click', function (e) {
+      const wepBtn = e.target.closest('[data-wep]');
+      if (wepBtn) {
+        audio.ensure();
+        setWep(wepBtn.getAttribute('data-wep') | 0);
+        return;
+      }
       const b = e.target.closest('[data-item]');
       if (!b) return;
       audio.ensure();
