@@ -25,14 +25,16 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · R 重开 · M 静音 · H 辅助';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · H辅';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · H辅';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · H辅';
   const ASSIST_NAME = ['关', '弱', '中', '强'];
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
-  const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1 };
-  const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0 };
+  const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1, nixi: 1 };
+  const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0, nixi: 15 };
   const ITEM_KEYS = ['leap', 'warp', 'neon', 'drum'];
-  const ITEM_NAME = { leap: '飞步', warp: '影挪', neon: '霓弹', drum: '鼓息' };
+  const ITEM_NAME = { leap: '飞步', warp: '影挪', neon: '霓弹', drum: '鼓息', nixi: '逆息' };
+  const NIXI_WIND = 5;
+  const NIXI_MISS = 4000;
   const FRUIT_R = 12;
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
@@ -149,6 +151,8 @@
   const stageLabel = el('stage-label');
   const mapLabel = el('map-label');
   const windLabel = el('wind-label');
+  const windArr = el('wind-arr');
+  const windNum = el('wind-num');
   const angLabel = el('ang-label');
   const powLabel = el('pow-label');
   const walkLabel = el('walk-label');
@@ -254,7 +258,9 @@
     slowMo: 0,
     fires: [],
     walls: [],
-    fruits: []
+    fruits: [],
+    lastHit: null,
+    windSpinT: 0
   };
 
   const particles = [];
@@ -422,9 +428,22 @@
       toast('怒满 · F 殿破', false, true);
     }
   }
+  function freshItems() {
+    return { leap: ITEM_MAX.leap, warp: ITEM_MAX.warp, neon: ITEM_MAX.neon, drum: ITEM_MAX.drum, nixi: ITEM_MAX.nixi };
+  }
   function resetItems(u) {
     if (!u) return;
-    u.items = { leap: ITEM_MAX.leap, warp: ITEM_MAX.warp, neon: ITEM_MAX.neon, drum: ITEM_MAX.drum };
+    u.items = freshItems();
+  }
+  function noteLastHit(shooter, victim) {
+    if (!shooter || !victim || shooter === victim) return;
+    if (victim.side && shooter.side && victim.side === shooter.side) return;
+    G.lastHit = shooter;
+  }
+  function duoFinisherName() {
+    if (G.lastHit && G.lastHit.name) return G.lastHit.name;
+    const u = curUnit();
+    return (u && u.name) || '';
   }
   function facingOf(u) {
     if (!u) return 1;
@@ -817,7 +836,7 @@
       buried: false,
       wep: 0,
       ghost: null,
-      items: { leap: ITEM_MAX.leap, warp: ITEM_MAX.warp, neon: ITEM_MAX.neon, drum: ITEM_MAX.drum }
+      items: freshItems()
     };
     u.y = groundAt(u.x) - u.r;
     return u;
@@ -1333,7 +1352,9 @@
       }
     }
     if (mapLabel) mapLabel.textContent = MAP_NAME[G.mapId] || '平原';
-    if (windLabel) windLabel.textContent = '风 ' + windText();
+    if (windArr) windArr.textContent = G.wind > 0 ? '→' : G.wind < 0 ? '←' : '·';
+    if (windNum) windNum.textContent = String(Math.abs(G.wind | 0));
+    else if (windLabel) windLabel.textContent = '风 ' + windText();
     const u = curUnit() || G.p;
     if (angLabel) angLabel.textContent = '角 ' + Math.round((u && u.ang) || 65) + '°';
     if (powLabel) powLabel.textContent = '力 ' + Math.round(G.power);
@@ -1403,11 +1424,12 @@
   function syncItems() {
     const actor = curUnit() || G.p;
     const bag = actor && actor.items ? actor.items : ITEM_MAX;
-    const map = { leap: 'n-leap', warp: 'n-warp', neon: 'n-neon', drum: 'n-drum' };
+    const map = { leap: 'n-leap', warp: 'n-warp', neon: 'n-neon', drum: 'n-drum', nixi: 'n-nixi' };
+    const btnId = { leap: 'btn-leap', warp: 'btn-warp', neon: 'btn-neon', drum: 'btn-drum', nixi: 'btn-nixi' };
     Object.keys(map).forEach(function (k) {
       const n = el(map[k]);
       if (n) n.textContent = String(bag[k] != null ? bag[k] : 0);
-      const btn = el(k === 'leap' ? 'btn-leap' : k === 'warp' ? 'btn-warp' : k === 'neon' ? 'btn-neon' : 'btn-drum');
+      const btn = el(btnId[k]);
       if (btn) {
         const left = bag[k] || 0;
         const cost = ITEM_COST[k];
@@ -1623,6 +1645,7 @@
         const dealt = hurt(u, dmg, 'blast');
         if (dealt > 0 && u !== shooter) {
           any = true;
+          noteLastHit(shooter, u);
           if (shooter && !shooter.stake) addRage(shooter, Math.floor(dealt * 0.45));
           if (wep && wep.id === 3 && u !== shooter) u.frozen = 1;
         }
@@ -1753,7 +1776,11 @@
         popStreak(1);
         screenFlash(GOLD, 0.55);
         toast('堂破了', false, true);
-        showOverlay('win', '堂破了', '烬丸与霆丸倒了。' + turns + ' 回合 · 连胜 ' + G.winStreak + (G.bestTurns ? ' · 最快 ' + G.bestTurns + ' 回' : ''));
+        {
+          const who = duoFinisherName();
+          const hit = who ? who + '收击。' : '';
+          showOverlay('win', '堂破了', '烬丸与霆丸倒了。' + hit + turns + ' 回合 · 连胜 ' + G.winStreak + (G.bestTurns ? ' · 最快 ' + G.bestTurns + ' 回' : ''));
+        }
         setHint('堂破了 · R 再来', 'hot');
       } else {
         G.winStreak += 1;
@@ -2074,7 +2101,7 @@
 
   function grantFruit(owner, gold) {
     if (!owner || owner.stake) return null;
-    if (!owner.items) owner.items = { leap: 0, warp: 0, neon: 0, drum: 0 };
+    if (!owner.items) owner.items = { leap: 0, warp: 0, neon: 0, drum: 0, nixi: 0 };
     if (gold) {
       addRage(owner, FRUIT_RAGE);
       return { gold: true, name: '怒' };
@@ -2170,7 +2197,7 @@
       burst(x, y, wep.id === 6 ? FIRE : GOLD, hit ? 10 : 4, 140, 0.35);
       ringAt(x, y, wep.id === 6 ? FIRE : (hit ? GOLD : HOT), crater * 1.6);
     }
-    if (wep.id === 6) plantFire(x, y, wasUlt);
+    if (wep.id === 6) plantFire(x, y, wasUlt, owner);
     dirtBurst(x, y, hit ? 14 : 20);
     audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y);
@@ -2224,7 +2251,7 @@
     syncHud();
   }
 
-  function plantFire(x, y, ult) {
+  function plantFire(x, y, ult, owner) {
     const gx = clamp(x, 4, VW - 4);
     const gy = groundAt(gx);
     G.fires.push({
@@ -2232,7 +2259,8 @@
       y: Math.min(y, gy),
       r: FIRE_R,
       life: FIRE_LIFE,
-      ult: !!ult
+      ult: !!ult,
+      owner: owner || null
     });
     burst(gx, gy, FIRE, REDUCE ? 8 : 16, 90, 0.4);
     ringAt(gx, gy, FIRE, FIRE_R * 1.2);
@@ -2252,6 +2280,7 @@
           let dmg = FIRE_DMG * mul;
           if (f.ult) dmg *= 1.6;
           hurt(u, dmg, 'fire');
+          if (f.owner) noteLastHit(f.owner, u);
           burst(u.x, u.y, FIRE, 8, 70, 0.28);
           floatText(u.x, u.y - 26, '烧', FIRE, false);
           audio.beep(210, 0.08, 'sawtooth', 0.03, 80);
@@ -2428,6 +2457,50 @@
     return true;
   }
 
+  function spinWindArrow() {
+    G.windSpinT = 0.55;
+    if (REDUCE || !windArr) return;
+    windArr.classList.remove('spin');
+    void windArr.offsetWidth;
+    windArr.classList.add('spin');
+  }
+
+  function reverseWind() {
+    G.wind = -(G.wind || 0);
+    spinWindArrow();
+  }
+
+  function useNixi(u) {
+    if (!u || G.phase !== 'aim' || G.busy) return false;
+    if (u.frozen) return false;
+    if (!u.items || (u.items.nixi | 0) <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
+    if (u.stam < ITEM_COST.nixi) { if (isHuman(u)) toastDeny('体力不足'); return false; }
+    if (!G.wind) { if (isHuman(u)) toastDeny('无风'); return false; }
+    u.items.nixi -= 1;
+    u.stam -= ITEM_COST.nixi;
+    reverseWind();
+    toast('逆息', false, true);
+    audio.ensure();
+    audio.beep(240, 0.1, 'sine', 0.04, 620);
+    audio.beep(520, 0.14, 'triangle', 0.03, 180);
+    burst(u.x, u.y, GOLD, 8, 80, 0.22);
+    kick(2.4);
+    syncHud();
+    return true;
+  }
+
+  function aiWantNixi(from, score) {
+    if (!from || !from.items || (from.items.nixi | 0) <= 0) return false;
+    if ((from.stam || 0) < ITEM_COST.nixi) return false;
+    if (Math.abs(G.wind) < NIXI_WIND) return false;
+    if (score >= NIXI_MISS) return false;
+    const old = G.wind;
+    G.wind = -old;
+    const rev = solveAI(from).score;
+    G.wind = old;
+    return rev > score + 400;
+  }
+
   function useDrum(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
     if (!u.items || u.items.drum <= 0) { if (isHuman(u)) toastDeny('本局已用完'); return false; }
@@ -2485,6 +2558,7 @@
       else beginWarp(u);
     } else if (id === 'neon') toggleNeon(u);
     else if (id === 'drum') useDrum(u);
+    else if (id === 'nixi') useNixi(u);
     else if (id === 'ult') useUlt(u);
     else if (id === 'skip') skipTurn();
   }
@@ -2698,7 +2772,7 @@
     G.wep = pickAIWeapon(from);
     G.neonOn = false;
     syncWeps();
-    const plan = { drum: false, warp: 0, leap: 0, neon: false, ult: false };
+    const plan = { drum: false, warp: 0, leap: 0, neon: false, ult: false, nixi: false };
     const score0 = solveAI(from).score;
     if (from.items && from.items.drum > 0) {
       if (from.rage <= 50) plan.drum = true;
@@ -2749,6 +2823,7 @@
     }
     const moved = planAIMove(from);
     let best = moved.best;
+    if (aiWantNixi(from, best.score)) plan.nixi = true;
     const mark = otherUnit(from) || G.p;
     if (from.items && from.items.neon > 0 && G.turns - G.aiLastNeonTurn >= 2 && mark && mark.hp > 12 && best.score >= 4000) {
       const lead = from.hp - mark.hp >= 15;
@@ -2810,6 +2885,17 @@
         AI.stage = 'leap';
         return;
       }
+      if (plan.nixi) {
+        useNixi(u);
+        plan.nixi = false;
+        const moved = planAIMove(u);
+        AI.walkTo = moved.walkTo;
+        AI.ang = moved.best.ang;
+        AI.pow = moved.best.pow;
+        AI.score = moved.best.score;
+        AI.wait = 0.16;
+        return;
+      }
       if (plan.neon) { G.neonOn = true; G.aiLastNeonTurn = G.turns; }
       if (plan.ult && u.rage >= 100) useUlt(u);
       AI.stage = 0;
@@ -2818,10 +2904,16 @@
     }
     if (AI.stage === 'leap') {
       if (G.busy === 'leap') return;
+      const plan = AI.plan || {};
+      if (plan.nixi) {
+        useNixi(u);
+        plan.nixi = false;
+      }
       const moved = planAIMove(u);
       AI.walkTo = moved.walkTo;
       AI.ang = moved.best.ang;
       AI.pow = moved.best.pow;
+      AI.score = moved.best.score;
       AI.stage = 0;
       AI.wait = 0.12;
       return;
@@ -2988,6 +3080,9 @@
     G.safeR = VW - 1;
     G.slowMo = 0;
     G.fruits = [];
+    G.lastHit = null;
+    G.windSpinT = 0;
+    if (windArr) windArr.classList.remove('spin');
   }
 
   function startGame(kind) {
@@ -3041,6 +3136,20 @@
     syncMaps();
     syncHud();
     saveBest();
+  }
+
+  function pickRandomMap() {
+    if (!MAP_IDS.length) return;
+    let id = MAP_IDS[irand(0, MAP_IDS.length - 1)];
+    if (id === G.mapId && MAP_IDS.length > 1) {
+      id = MAP_IDS[irand(0, MAP_IDS.length - 1)];
+      if (id === G.mapId) {
+        const i = MAP_IDS.indexOf(G.mapId);
+        id = MAP_IDS[(i + 1 + irand(0, MAP_IDS.length - 2)) % MAP_IDS.length];
+      }
+    }
+    setMap(id);
+    toast(MAP_NAME[id] || '随图', false, true);
   }
 
   function setWep(n) {
@@ -3131,6 +3240,13 @@
   function update(dt) {
     G.clock += dt;
     G.t += dt;
+    if (G.windSpinT > 0) {
+      G.windSpinT -= dt;
+      if (G.windSpinT <= 0) {
+        G.windSpinT = 0;
+        if (windArr) windArr.classList.remove('spin');
+      }
+    }
     updateFx(dt);
     if (G.stop > 0) {
       G.stop -= dt;
@@ -3459,20 +3575,27 @@
   }
 
   function drawWind(g) {
-    if (!G.wind) return;
+    if (!G.wind && !(G.windSpinT > 0)) return;
     g.save();
     g.globalAlpha = 0.35;
-    const dir = G.wind > 0 ? 1 : -1;
-    const n = Math.min(10, 3 + Math.abs(G.wind));
+    const mag = Math.abs(G.wind) || 1;
+    const dir = G.wind >= 0 ? 1 : -1;
+    const n = Math.min(10, 3 + mag);
+    const spin = (!REDUCE && G.windSpinT > 0) ? (1 - G.windSpinT / 0.55) * TAU : 0;
     for (let i = 0; i < n; i++) {
       const y = 70 + i * 28 + (G.t * 30 * dir + i * 13) % 20;
-      const x = ((G.t * (40 + Math.abs(G.wind) * 8) * dir) + i * 90) % (VW + 80) - 40;
+      const x = ((G.t * (40 + mag * 8) * dir) + i * 90) % (VW + 80) - 40;
+      const len = 18 + mag;
       g.strokeStyle = rgba(GOLD, 0.45);
       g.lineWidth = 1.2;
+      g.save();
+      g.translate(x + dir * len * 0.5, y);
+      if (spin) g.rotate(spin);
       g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x + dir * (18 + Math.abs(G.wind)), y);
+      g.moveTo(-dir * len * 0.5, 0);
+      g.lineTo(dir * len * 0.5, 0);
       g.stroke();
+      g.restore();
     }
     g.restore();
   }
@@ -4190,6 +4313,7 @@
     if (k === 'e' || k === 'E') { onItem('warp'); return; }
     if (k === 'c' || k === 'C') { onItem('neon'); return; }
     if (k === 'v' || k === 'V') { onItem('drum'); return; }
+    if (k === 'b' || k === 'B') { onItem('nixi'); return; }
     if (k === 'f' || k === 'F') { onItem('ult'); return; }
     if (k === 'x' || k === 'X') { onItem('skip'); return; }
     if (k === '1') setWep(0);
@@ -4597,6 +4721,37 @@
     G.p2 = null;
     G.f2 = null;
 
+    ok('nixi 逆息', ITEM_NAME.nixi === '逆息' && ITEM_MAX.nixi === 1 && ITEM_COST.nixi === 15);
+    ok('nixi not fruit', ITEM_KEYS.indexOf('nixi') < 0 && ITEM_KEYS.length === 4);
+    ok('nixi bag', freshItems().nixi === 1 && freshItems().leap === 2);
+    G.phase = 'aim';
+    G.busy = null;
+    G.wind = 6;
+    const nu = { items: freshItems(), stam: 100, frozen: 0, x: 120, y: 200 };
+    const used = useNixi(nu);
+    ok('nixi use flip', used === true && G.wind === -6 && nu.items.nixi === 0 && nu.stam === 85);
+    ok('nixi once', useNixi(nu) === false && G.wind === -6);
+    G.wind = 0;
+    const nu2 = { items: freshItems(), stam: 100, frozen: 0, x: 120, y: 200 };
+    ok('nixi no wind', useNixi(nu2) === false && nu2.items.nixi === 1);
+    const nu3 = { items: freshItems(), stam: 10, frozen: 0, x: 120, y: 200 };
+    G.wind = 5;
+    ok('nixi stam gate', useNixi(nu3) === false && nu3.items.nixi === 1);
+    ok('nixi ai gate', NIXI_WIND === 5 && NIXI_MISS === 4000);
+    G.lastHit = { id: 'p2', name: '霜丸', side: 'p' };
+    ok('duo 收击', duoFinisherName() === '霜丸');
+    const sh = { id: 'p', name: '岚丸', side: 'p' };
+    noteLastHit(sh, { id: 'f', name: '烬丸', side: 'f' });
+    ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
+    noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
+    ok('last hit skip mate', G.lastHit === sh);
+    ok('随图 pool 9', MAP_IDS.length === 9 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }));
+    ok('g vk v1', GRAV === 260 && VK === 420);
+    G.wind = 0;
+    G.windSpinT = 0;
+    G.lastHit = null;
+    G.phase = 'aim';
+
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
     return out.every(function (l) { return l.indexOf('OK') === 0; });
@@ -4713,6 +4868,10 @@
       const b = e.target.closest('button');
       if (!b) return;
       audio.ensure();
+      if (b.id === 'btn-rand-map') {
+        pickRandomMap();
+        return;
+      }
       setMap(b.getAttribute('data-map'));
     });
   }

@@ -179,6 +179,22 @@ body {
   text-shadow: 0 0 10px rgba(255, 227, 107, 0.35);
 }
 
+.wind-arr {
+  display: inline-block;
+  min-width: 1.1em;
+  text-align: center;
+  transform-origin: 50% 55%;
+}
+
+.wind-arr.spin {
+  animation: windSpin 0.55s ease-out;
+}
+
+@keyframes windSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 #combo-label.combo {
   color: var(--gold);
   text-shadow: 0 0 10px rgba(255, 227, 107, 0.45);
@@ -260,7 +276,12 @@ body {
   justify-content: flex-end;
 }
 
-.weps { display: flex; gap: 4px; }
+.weps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
 
 .tools button,
 .panel button,
@@ -523,6 +544,12 @@ canvas {
   background: rgba(255, 227, 107, 0.1);
 }
 
+#btn-rand-map {
+  border-color: rgba(0, 232, 255, 0.6);
+  color: var(--cyan);
+  background: linear-gradient(180deg, rgba(0, 232, 255, 0.16), rgba(139, 92, 255, 0.08));
+}
+
 .ov-actions {
   display: flex;
   gap: 10px;
@@ -605,7 +632,13 @@ canvas {
   .pad { display: flex; }
   .tools button,
   .panel button,
-  .pad button { min-height: 42px; }
+  .weps button,
+  .items button,
+  .maps button,
+  .pad button {
+    min-height: 40px;
+    min-width: 40px;
+  }
 }
 
 @media (max-width: 860px) {
@@ -629,7 +662,6 @@ canvas {
 @media (max-width: 380px) {
   .brand b { font-size: 15px; letter-spacing: 0.08em; }
   .score { min-width: 52px; padding: 3px 6px 4px; }
-  .weps { display: none; }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
@@ -648,6 +680,7 @@ canvas {
   .stage.hit,
   .hp.flash .hp-bar,
   .time-lab.pulse { animation: none; }
+  .wind-arr.spin { animation: none; }
   .overlay { transition: none; }
 }
 
@@ -750,7 +783,7 @@ canvas {
 .hp-f .rg-bar em { background: linear-gradient(90deg, #6b4a00, var(--gold)); }
 
 .tools {
-  max-width: 340px;
+  max-width: min(460px, 52vw);
 }
 
 .items {
@@ -764,7 +797,7 @@ canvas {
   padding: 5px 8px;
   font-size: 11px;
   letter-spacing: 0.04em;
-  min-height: 30px;
+  min-height: 32px;
 }
 
 .items button b {
@@ -927,9 +960,14 @@ canvas {
 
 .pad-row button { pointer-events: auto; }
 
+.pad-items {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
 .pad-items button {
-  min-width: 44px;
-  min-height: 36px;
+  min-width: 40px;
+  min-height: 40px;
   font-size: 11px;
   padding: 5px 8px;
 }
@@ -945,18 +983,35 @@ canvas {
 }
 
 @media (max-width: 720px) {
-  .items button { padding: 4px 6px; font-size: 10px; min-height: 28px; }
-  .tools { max-width: 220px; }
+  .bar { flex-wrap: wrap; }
+  .tools {
+    max-width: 100%;
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .weps,
+  .items { max-width: 100%; }
+  .weps button,
+  .items button,
+  .tools > button,
+  .pad button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+  .items button { padding: 6px 8px; font-size: 11px; }
   .aim-meters { display: none; }
 }
 
 @media (max-width: 380px) {
-  .items { display: none; }
+  .brand b { font-size: 15px; letter-spacing: 0.08em; }
+  .score { min-width: 52px; padding: 3px 6px 4px; }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
   .aim-meters { display: none; }
-  .items { display: none; }
+  .tools { max-width: 100%; }
+  .weps,
+  .items { flex-wrap: wrap; }
 }
 
 #rage-label {
