@@ -48,8 +48,8 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -121,6 +121,21 @@
   const MOON_F2X = 750;
   const MOON_WALK = 0.45;
   const MOON_DMG = 3;
+  const CLIFF_TOP_Y = 250;
+  const CLIFF_DROP = 180;
+  const CLIFF_BEACH_Y = CLIFF_TOP_Y + CLIFF_DROP;
+  const CLIFF_EDGE = 508;
+  const CLIFF_FACE = 8;
+  const CLIFF_POOL0 = 520;
+  const CLIFF_POOL1 = 632;
+  const CLIFF_POOL_Y = 452;
+  const CLIFF_WATER_Y = 438;
+  const CLIFF_PX = 168;
+  const CLIFF_FX = 772;
+  const CLIFF_P2X = 204;
+  const CLIFF_F2X = 736;
+  const CLIFF_WALK = 0.45;
+  const CLIFF_DMG = 2;
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
@@ -643,9 +658,31 @@
     return groundAt(u.x) >= MOON_WATER_Y;
   }
 
+  function inCliffWater(u) {
+    if (G.mapId !== 'cliff' || !u) return false;
+    if ((u.x | 0) <= CLIFF_EDGE) return false;
+    return groundAt(u.x) >= CLIFF_WATER_Y;
+  }
+
+  function isCliffPlateau(x) {
+    if (G.mapId !== 'cliff' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    return i <= CLIFF_EDGE + 2 && G.H[i] < CLIFF_TOP_Y + 36;
+  }
+
+  function isCliffBeach(x) {
+    if (G.mapId !== 'cliff' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    return i > CLIFF_EDGE + CLIFF_FACE && G.H[i] < CLIFF_WATER_Y && G.H[i] > CLIFF_TOP_Y + 80;
+  }
+
   function walkSpd(u) {
     const base = isHuman(u) ? 90 : 78;
-    return inMoonWater(u) ? base * MOON_WALK : base;
+    if (inMoonWater(u)) return base * MOON_WALK;
+    if (inCliffWater(u)) return base * CLIFF_WALK;
+    return base;
   }
 
   function tickMoonWater(u) {
@@ -655,6 +692,16 @@
     burst(u.x, u.y + (u.r || 14), ICE, 8, 50, 0.28);
     floatText(u.x, u.y - 26, '浸', ICE, false);
     audio.beep(240, 0.09, 'sine', 0.03, 90);
+    return dmg;
+  }
+
+  function tickCliffWater(u) {
+    if (!u || u.hp <= 0 || !inCliffWater(u)) return 0;
+    const dmg = Math.max(1, Math.round(CLIFF_DMG));
+    hurt(u, dmg, 'water');
+    burst(u.x, u.y + (u.r || 14), ICE, 8, 50, 0.28);
+    floatText(u.x, u.y - 26, '浸', ICE, false);
+    audio.beep(220, 0.08, 'sine', 0.03, 80);
     return dmg;
   }
 
@@ -837,6 +884,28 @@
         yy = lerp(yy, 318, outer * outer);
         h[x] = yy;
       }
+    } else if (id === 'cliff') {
+      for (let x = 0; x < VW; x++) {
+        let yy;
+        if (x <= CLIFF_EDGE) {
+          yy = CLIFF_TOP_Y + Math.sin(x * 0.07) * 1.4 + Math.sin(x * 0.19) * 0.5;
+        } else if (x <= CLIFF_EDGE + CLIFF_FACE) {
+          const k = (x - CLIFF_EDGE) / CLIFF_FACE;
+          const sm = k * k * (3 - 2 * k);
+          yy = CLIFF_TOP_Y + sm * CLIFF_DROP;
+        } else {
+          yy = CLIFF_BEACH_Y + Math.sin(x * 0.08) * 1.6 + Math.sin(x * 0.21) * 0.6;
+        }
+        if (x >= CLIFF_POOL0 && x <= CLIFF_POOL1) {
+          const e = Math.min(x - CLIFF_POOL0, CLIFF_POOL1 - x);
+          const r = clamp(e / 18, 0, 1);
+          const sm = r * r * (3 - 2 * r);
+          yy = lerp(yy, CLIFF_POOL_Y, sm);
+        }
+        h[x] = yy;
+      }
+      padFlat(h, 48, 240, CLIFF_TOP_Y);
+      padFlat(h, 700, 910, CLIFF_BEACH_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -859,12 +928,14 @@
     if (id === 'arcade') return side === 'p' ? 140 : 820;
     if (id === 'towers') return side === 'p' ? TOWERS_PX : TOWERS_FX;
     if (id === 'moon') return side === 'p' ? MOON_PX : MOON_FX;
+    if (id === 'cliff') return side === 'p' ? CLIFF_PX : CLIFF_FX;
     return side === 'p' ? 152 : 768;
   }
 
   function spawnAt(side, slot) {
     if (G.mapId === 'towers' && slot) return side === 'p' ? TOWERS_P2X : TOWERS_F2X;
     if (G.mapId === 'moon' && slot) return side === 'p' ? MOON_P2X : MOON_F2X;
+    if (G.mapId === 'cliff' && slot) return side === 'p' ? CLIFF_P2X : CLIFF_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -2331,7 +2402,10 @@
     if (u && u.id === 'p') G.turns += 1;
     maybeSudden();
     audio.chargeStop();
-    if (u && u.hp > 0) tickMoonWater(u);
+    if (u && u.hp > 0) {
+      tickMoonWater(u);
+      tickCliffWater(u);
+    }
     if (u && u.hp <= 0) {
       if (checkEnd()) return;
       if (isSquad()) {
@@ -3199,6 +3273,8 @@
       if (G.mapId === 'arcade' && liveArcade(foe.x)) return 3;
       if (G.mapId === 'towers' && isTowersLedge(foe.x)) return 3;
       if (G.mapId === 'moon' && isMoonRim(foe.x)) return 1;
+      if (G.mapId === 'cliff' && isCliffPlateau(foe.x)) return 1;
+      if (G.mapId === 'cliff' && isCliffBeach(foe.x)) return 3;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -3234,6 +3310,8 @@
     if (G.mapId === 'forge' && isForgeCrust(imp.x) && G.H && G.H[imp.x | 0] < FORGE_VOID - 20) bury += 900;
     if (G.mapId === 'arcade' && liveArcade(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
     if (G.mapId === 'moon' && isMoonRim(imp.x) && wep.id === 1) bury += 800;
+    if (G.mapId === 'cliff' && isCliffPlateau(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
+    if (G.mapId === 'cliff' && isCliffBeach(imp.x) && wep.id === 4) bury += 600;
     if (G.mapId === 'towers' && inWall(imp.x, imp.y) && (wep.id === 1 || wep.id === 4)) bury += 600;
     if (G.mapId === 'towers' && inWall(imp.x, imp.y) && wep.id === 2) bury += 500;
     score += bury;
@@ -4086,8 +4164,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -4261,6 +4339,32 @@
       g.ellipse(MOON_CX, MOON_WATER_Y + 8, 168, 14, 0, 0, TAU);
       g.fill();
     }
+    if (G.mapId === 'cliff') {
+      const water = g.createLinearGradient(0, CLIFF_WATER_Y - 18, 0, VH);
+      water.addColorStop(0, 'rgba(160,220,230,0.20)');
+      water.addColorStop(0.16, 'rgba(70,150,170,0.40)');
+      water.addColorStop(0.48, 'rgba(24,70,88,0.62)');
+      water.addColorStop(1, '#0a161c');
+      g.fillStyle = water;
+      for (let x = CLIFF_EDGE; x < VW; x++) {
+        if (H[x] > CLIFF_WATER_Y + 1) g.fillRect(x, CLIFF_WATER_Y, 1, H[x] - CLIFF_WATER_Y);
+      }
+      g.strokeStyle = 'rgba(190,236,240,0.50)';
+      g.lineWidth = 1.3;
+      g.beginPath();
+      let drawing = false;
+      for (let x = CLIFF_EDGE; x < VW; x++) {
+        if (H[x] <= CLIFF_WATER_Y + 1) {
+          if (drawing) { g.stroke(); drawing = false; }
+          continue;
+        }
+        if (!drawing) { g.beginPath(); g.moveTo(x, CLIFF_WATER_Y); drawing = true; }
+        else g.lineTo(x, CLIFF_WATER_Y);
+      }
+      if (drawing) g.stroke();
+      g.fillStyle = 'rgba(24,12,8,0.22)';
+      g.fillRect(CLIFF_EDGE - 2, CLIFF_TOP_Y, 6, CLIFF_DROP + 24);
+    }
     terrainDirty = false;
   }
 
@@ -4328,6 +4432,18 @@
       pool.addColorStop(0, 'rgba(80,180,230,0.16)');
       pool.addColorStop(1, 'rgba(80,180,230,0)');
       g.fillStyle = pool;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'cliff') {
+      const heat = g.createRadialGradient(780, 80, 10, 820, 120, 280);
+      heat.addColorStop(0, 'rgba(255,180,80,0.16)');
+      heat.addColorStop(1, 'rgba(255,180,80,0)');
+      g.fillStyle = heat;
+      g.fillRect(0, 0, VW, VH);
+      const mist = g.createRadialGradient(CLIFF_EDGE + 40, CLIFF_BEACH_Y, 12, CLIFF_EDGE + 80, CLIFF_BEACH_Y + 40, 220);
+      mist.addColorStop(0, 'rgba(80,180,190,0.14)');
+      mist.addColorStop(1, 'rgba(80,180,190,0)');
+      g.fillStyle = mist;
       g.fillRect(0, 0, VW, VH);
     }
     for (let i = 0; i < stars.length; i++) {
@@ -4613,6 +4729,28 @@
       g.beginPath();
       g.ellipse(x, y, 26 + (i % 3) * 8, 5, 0, 0, TAU);
       g.fill();
+    }
+    g.restore();
+  }
+
+  function drawCliff(g) {
+    if (G.mapId !== 'cliff') return;
+    g.save();
+    const t = G.t;
+    const wy = CLIFF_WATER_Y + 4 + Math.sin(t * 1.2) * 1.2;
+    for (let i = 0; i < 8; i++) {
+      const x = CLIFF_POOL0 + 12 + i * 14 + Math.sin(t * 0.7 + i) * 6;
+      const y = wy + 6 + Math.sin(t * 1.4 + i * 0.5) * 3;
+      g.fillStyle = 'rgba(170,230,235,' + (0.06 + 0.08 * Math.sin(t * 1.7 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 18 + (i % 3) * 6, 4, 0, 0, TAU);
+      g.fill();
+    }
+    for (let k = 0; k < 5; k++) {
+      const px = CLIFF_EDGE + 6 + k * 9;
+      const glow = 0.08 + 0.07 * (0.5 + 0.5 * Math.sin(t * 2.4 + k));
+      g.fillStyle = 'rgba(255,200,120,' + glow + ')';
+      g.fillRect(px, CLIFF_TOP_Y + 8 + k * 22, 3, 10);
     }
     g.restore();
   }
@@ -5095,6 +5233,7 @@
     drawArcade(ctx);
     drawTowers(ctx);
     drawMoon(ctx);
+    drawCliff(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -5446,7 +5585,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps twelve', MAP_IDS.length === 12 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池');
+    ok('maps thirteen', MAP_IDS.length === 13 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -5708,6 +5847,52 @@
     ok('moon duo extras along', Math.abs(mdx1 - mdx0) >= 20 && Math.abs(mdx1 - mdx0) <= 50, Math.round(Math.abs(mdx1 - mdx0)));
     ok('moon duo extras dry', G.H[mdx1 | 0] < MOON_WATER_Y && G.H[mdr1 | 0] < MOON_WATER_Y);
     ok('moon duo not void', !isDeathVoid(mdx0) && !isDeathVoid(mdx1) && !isDeathVoid(mdr0) && !isDeathVoid(mdr1));
+    G.H = buildHeight('cliff');
+    G.mapId = 'cliff';
+    G.kind = 'hall';
+    ok('cliff spawn', spawnX('cliff', 'p') === CLIFF_PX && spawnX('cliff', 'f') === CLIFF_FX);
+    ok('cliff spawn plateau/beach', isCliffPlateau(CLIFF_PX) && isCliffBeach(CLIFF_FX), Math.round(G.H[CLIFF_PX]) + '/' + Math.round(G.H[CLIFF_FX]));
+    ok('cliff drop ~180', Math.abs((G.H[CLIFF_FX] - G.H[CLIFF_PX]) - CLIFF_DROP) < 16, Math.round(G.H[CLIFF_FX] - G.H[CLIFF_PX]));
+    ok('cliff sheer', G.H[CLIFF_EDGE + CLIFF_FACE + 2] > G.H[CLIFF_EDGE] + 140, Math.round(G.H[CLIFF_EDGE + CLIFF_FACE + 2] - G.H[CLIFF_EDGE]));
+    ok('cliff no void', !isDeathVoid(CLIFF_PX) && !isDeathVoid(CLIFF_FX) && !isDeathVoid(CLIFF_EDGE + 6));
+    ok('cliff spawn dry', G.H[CLIFF_PX] < CLIFF_WATER_Y && G.H[CLIFF_FX] < CLIFF_WATER_Y);
+    ok('cliff pool wet', G.H[(CLIFF_POOL0 + CLIFF_POOL1) >> 1] >= CLIFF_WATER_Y);
+    ok('cliff water 2', CLIFF_DMG === 2 && CLIFF_WALK === 0.45);
+    const cEdge = CLIFF_EDGE - 14;
+    const cey = G.H[cEdge | 0] - UNIT_R;
+    const cgrids = Math.round((CLIFF_FX - cEdge) / GRID);
+    const c90 = 90 - cgrids;
+    const cth90 = c90 * Math.PI / 180;
+    const cs90 = traceShot(cEdge + Math.cos(cth90) * 18, cey - 4 - Math.sin(cth90) * 18, c90, 95, 0, WEPS[0], G.H, null);
+    ok('cliff 90 dunk', cs90.x > CLIFF_EDGE + CLIFF_FACE && Math.abs(cs90.x - CLIFF_FX) < 90, Math.round(cs90.x) + ' a' + c90);
+    const cfx = spawnX('cliff', 'f');
+    const cfy = G.H[cfx | 0] - UNIT_R;
+    const cth30 = 150 * Math.PI / 180;
+    const cs30 = traceShot(cfx + Math.cos(cth30) * 18, cfy - 4 - Math.sin(cth30) * 18, 150, 70, 0, WEPS[0], G.H, null);
+    ok('cliff 30 undercut', cs30.x > CLIFF_EDGE - 48 && cs30.x < CLIFF_EDGE + 48 && !cs30.air, Math.round(cs30.x));
+    const cpoolX = (CLIFF_POOL0 + CLIFF_POOL1) >> 1;
+    const cwet = { x: cpoolX, y: G.H[cpoolX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    const cdry = { x: CLIFF_FX, y: G.H[CLIFF_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    ok('cliff in water', inCliffWater(cwet) === true && inCliffWater(cdry) === false);
+    ok('cliff walk slow', Math.abs(walkSpd(cwet) - 90 * CLIFF_WALK) < 0.01, walkSpd(cwet));
+    ok('cliff walk dry full', Math.abs(walkSpd(cdry) - 78) < 0.01, walkSpd(cdry));
+    tickCliffWater(cwet);
+    ok('cliff turn dmg 2', cwet.hp === 98, cwet.hp);
+    tickCliffWater(cdry);
+    ok('cliff dry no dmg', cdry.hp === 100);
+    const cfall = { x: CLIFF_EDGE + 6, y: G.H[CLIFF_PX] - 14, r: 14, hp: 100, max: 100, grounded: false, vy: 0, fall: 0, side: 'p', id: 'p', rage: 0 };
+    for (let ci = 0; ci < 360 && !cfall.grounded && cfall.hp > 0; ci++) stepUnitPhys(cfall, 1 / 60);
+    ok('cliff fall dmg not death', cfall.hp < 100 && cfall.hp > 0 && cfall.grounded, cfall.hp);
+    G.kind = 'duo';
+    const cdx0 = spawnAt('p', 0);
+    const cdx1 = spawnAt('p', 1);
+    const cdr0 = spawnAt('f', 0);
+    const cdr1 = spawnAt('f', 1);
+    ok('cliff duo extras same', isCliffPlateau(cdx0) && isCliffPlateau(cdx1) && isCliffBeach(cdr0) && isCliffBeach(cdr1), cdx1 + '/' + cdr1);
+    ok('cliff duo tops', cdx0 === CLIFF_PX && cdr0 === CLIFF_FX);
+    ok('cliff duo extras along', Math.abs(cdx1 - cdx0) >= 20 && Math.abs(cdr1 - cdr0) >= 20, Math.round(Math.abs(cdx1 - cdx0)));
+    ok('cliff duo extras dry', G.H[cdx1 | 0] < CLIFF_WATER_Y && G.H[cdr1 | 0] < CLIFF_WATER_Y);
+    ok('cliff duo not void', !isDeathVoid(cdx0) && !isDeathVoid(cdx1) && !isDeathVoid(cdr0) && !isDeathVoid(cdr1));
     G.kind = 'hall';
     G.mapId = 'plain';
     G.walls = [];
@@ -5935,7 +6120,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 12', MAP_IDS.length === 12 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11);
+    ok('随图 pool 13', MAP_IDS.length === 13 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -6179,8 +6364,12 @@
     G.ghostOn = true;
     ok('ghost match only', G.ghost == null);
     ok('g vk v20', GRAV === 260 && VK === 420);
-    ok('maps still 12 after ghost', MAP_IDS.length === 12 && MAP_NAME.moon === '月池');
+    ok('maps still 13 after ghost', MAP_IDS.length === 13 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖');
     ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
+    ok('断崖 name locked', MAP_NAME.cliff === '断崖' && MAP_IDS[12] === 'cliff');
+    ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
+    ok('g vk v21', GRAV === 260 && VK === 420);
+    ok('ghost K still', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
