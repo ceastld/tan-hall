@@ -1112,6 +1112,18 @@ canvas {
   letter-spacing: 0.08em;
 }
 
+.storm-lab {
+  color: #c8eeff;
+  letter-spacing: 0.16em;
+  font-weight: 800;
+  padding: 1px 8px 2px;
+  border-radius: 999px;
+  border: 1px solid rgba(150, 220, 255, 0.5);
+  background: rgba(18, 36, 72, 0.5);
+  text-shadow: 0 0 10px rgba(120, 200, 255, 0.55);
+  pointer-events: none;
+}
+
 .aim-hint {
   color: var(--gold);
   text-shadow: 0 0 10px rgba(255, 227, 107, 0.4);

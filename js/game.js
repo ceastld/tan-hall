@@ -146,6 +146,13 @@
   const DUNE_WALK = 0.55;
   const DUNE_CRATER = 1.25;
   const DUNE_WIND_EXTRA = 1;
+  const STORM_NAME = '雷泽';
+  const STORM_P = 0.35;
+  const STORM_MIN = 8;
+  const STORM_MAX = 14;
+  const STORM_WALK = 0.88;
+  const STORM_BOLT_MIN = 0.08;
+  const STORM_BOLT_MAX = 0.16;
   const DUAL_WAIT = 0.38;
   const DUAL_POW = 0.72;
   const DUAL_JIT = 1.2;
@@ -273,6 +280,7 @@
   const itemsEl = el('items');
   const rageLabel = el('rage-label');
   const ghostLabel = el('ghost-label');
+  const stormLabel = el('storm-label');
   const foeNameEl = el('foe-name');
   const stP = el('st-p');
   const stF = el('st-f');
@@ -367,6 +375,10 @@
     veils: [],
     lastHit: null,
     windSpinT: 0,
+    storm: false,
+    stormT: 0,
+    stormNext: 8,
+    boltT: 0,
     coached: false,
     coachN: 0,
     killName: '',
@@ -799,17 +811,61 @@
     return !isDeathVoid(u.x);
   }
 
+  function onGrass(u) {
+    if (!u) return false;
+    if (isDeathVoid(u.x)) return false;
+    if (G.mapId === 'forge' || G.mapId === 'dune') return false;
+    if (inMoonWater(u) || inCliffWater(u)) return false;
+    return true;
+  }
+
   function sandR(r) {
     if (G.mapId !== 'dune' || r <= 0) return r;
     return r * DUNE_CRATER;
   }
 
+  function stormForced(id) {
+    id = id || G.mapId;
+    return id === 'vale' || id === 'cliff' || id === 'dune';
+  }
+
+  function stormBanned(id) {
+    return (id || G.mapId) === 'forge';
+  }
+
+  function pickStorm(id) {
+    id = id || G.mapId;
+    if (stormBanned(id)) return false;
+    if (stormForced(id)) return true;
+    return Math.random() < STORM_P;
+  }
+
+  function nudgeStormWind(dir) {
+    const cap = windMax();
+    const d = dir < 0 ? -1 : 1;
+    G.wind = clamp((G.wind | 0) + d, -cap, cap);
+    return G.wind;
+  }
+
+  function strikeStorm() {
+    if (!G.storm) return false;
+    if (overlayOpen()) return false;
+    nudgeStormWind(Math.random() < 0.5 ? -1 : 1);
+    G.boltT = REDUCE ? 0 : rand(STORM_BOLT_MIN, STORM_BOLT_MAX);
+    G.stormNext = G.stormT + rand(STORM_MIN, STORM_MAX);
+    syncHud();
+    return true;
+  }
+
   function walkSpd(u) {
     const base = isHuman(u) ? 90 : 78;
-    if (inMoonWater(u)) return base * MOON_WALK;
-    if (inCliffWater(u)) return base * CLIFF_WALK;
-    if (onSand(u)) return base * DUNE_WALK;
-    return base;
+    let spd;
+    if (inMoonWater(u)) spd = base * MOON_WALK;
+    else if (inCliffWater(u)) spd = base * CLIFF_WALK;
+    else if (onSand(u)) spd = base * DUNE_WALK;
+    else spd = base;
+    if (G.storm && (onSand(u) || onGrass(u))) spd *= STORM_WALK;
+    return spd;
   }
 
   function tickMoonWater(u) {
@@ -1905,6 +1961,11 @@
       }
     }
     if (mapLabel) mapLabel.textContent = MAP_NAME[G.mapId] || '平原';
+    if (stormLabel) {
+      const on = (G.mode === 'play' || G.mode === 'end') && !!G.storm;
+      stormLabel.classList.toggle('gone', !on);
+      stormLabel.textContent = STORM_NAME;
+    }
     if (aiLabel) {
       const noAi = G.mode === 'play' && (G.kind === 'drill' || G.kind === 'seat' || isQuad());
       aiLabel.textContent = aiHud();
@@ -4073,6 +4134,10 @@
     G.windSpinT = 0;
     G.nextWind = null;
     G.teaseWind = false;
+    G.storm = false;
+    G.stormT = 0;
+    G.stormNext = STORM_MIN;
+    G.boltT = 0;
     if (windArr) windArr.classList.remove('spin');
   }
 
@@ -4085,6 +4150,10 @@
     else { G.kind = 'hall'; G.lastKind = 'hall'; }
     G.mode = 'play';
     resetWorld();
+    G.storm = pickStorm(G.mapId);
+    G.stormT = 0;
+    G.stormNext = rand(STORM_MIN, STORM_MAX);
+    G.boltT = 0;
     hideOverlay();
     audio.start();
     beginTurn(isSquad() ? pickNextId() : 'p');
@@ -4094,7 +4163,8 @@
       : isDuo() ? '对堂 · 岚霜出手'
       : isQuad() ? '堂座 · 把键盘给岚丸'
       : '弹堂 · 看风拉角';
-    if (!isSquad()) toast(msg + ' · ' + MAP_NAME[G.mapId], G.kind === 'core', G.kind !== 'core');
+    const stormBit = G.storm ? ' · ' + STORM_NAME : '';
+    if (!isSquad()) toast(msg + ' · ' + MAP_NAME[G.mapId] + stormBit, G.kind === 'core', G.kind !== 'core');
     saveBest();
     syncHud();
     syncDrillWind();
@@ -4243,6 +4313,7 @@
         if (windArr) windArr.classList.remove('spin');
       }
     }
+    if (G.boltT > 0) G.boltT = Math.max(0, G.boltT - dt);
     if (G.killHold > 0) {
       G.killHold -= dt;
       if (G.stop > 0) G.stop -= dt;
@@ -4283,6 +4354,11 @@
       return;
     }
     if (G.mode !== 'play') return;
+
+    if (G.storm && !overlayOpen()) {
+      G.stormT += dt;
+      if (G.stormT >= G.stormNext) strikeStorm();
+    }
 
     if (G.phase === 'frozenWait') {
       G.frozenT -= dt;
@@ -4725,6 +4801,31 @@
     g.fillStyle = 'rgba(255,244,200,0.85)';
     g.arc(480, 92, 16, 0, TAU);
     g.fill();
+    if (G.storm) {
+      g.fillStyle = 'rgba(6, 8, 22, 0.32)';
+      g.fillRect(0, 0, VW, VH);
+    }
+  }
+
+  function drawStormRain(g) {
+    if (!G.storm || REDUCE) return;
+    const n = 64;
+    const dir = windDirOf() || 1;
+    g.save();
+    g.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const fall = wrapSpan(G.t * 380 + i * 71, VH + 50) - 20;
+      const x = wrapSpan(i * 53 + dir * G.t * 46, VW + 24) - 12;
+      const len = 11 + (i % 5) * 2;
+      const a = 0.10 + 0.10 * ((i % 4) / 3);
+      g.strokeStyle = 'rgba(186,214,255,' + a + ')';
+      g.lineWidth = i % 7 === 0 ? 1.4 : 0.9;
+      g.beginPath();
+      g.moveTo(x, fall);
+      g.lineTo(x + dir * 5, fall + len);
+      g.stroke();
+    }
+    g.restore();
   }
 
   function drawMini() {
@@ -5561,6 +5662,7 @@
     ctx.translate(-cam.x, -cam.y);
 
     drawSky(ctx);
+    drawStormRain(ctx);
     drawWind(ctx);
     if (terrainDirty) paintTerrain();
     if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
@@ -5626,6 +5728,11 @@
     }
 
     ctx.restore();
+    if (G.storm && !REDUCE && G.boltT > 0) {
+      const k = clamp(G.boltT / STORM_BOLT_MIN, 0, 1);
+      ctx.fillStyle = 'rgba(220,236,255,' + (0.18 + k * 0.38) + ')';
+      ctx.fillRect(view.ox, view.oy, VW * view.scale, VH * view.scale);
+    }
     if (G.flash > 0) {
       ctx.fillStyle = rgba(G.flashRgb, G.flash * 0.35);
       ctx.fillRect(view.ox, view.oy, VW * view.scale, VH * view.scale);
@@ -5824,6 +5931,7 @@
     }
     G.mapId = 'plain';
     G.kind = 'hall';
+    G.storm = false;
     G.H = buildHeight('plain');
     ok('plain cols', G.H.length === 960);
     ok('plain height', G.H[160] > 300 && G.H[160] < 480, Math.round(G.H[160]));
@@ -6823,6 +6931,51 @@
     ok('maps still 14 after 叠珠', MAP_IDS.length === 14 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after 叠珠', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('g vk v24', GRAV === 260 && VK === 420);
+
+    ok('雷泽 name', STORM_NAME === '雷泽');
+    ok('storm odds', STORM_P === 0.35 && STORM_MIN === 8 && STORM_MAX === 14 && STORM_WALK === 0.88);
+    ok('storm bolt ms', STORM_BOLT_MIN === 0.08 && STORM_BOLT_MAX === 0.16);
+    ok('storm always vale/cliff/dune', stormForced('vale') && stormForced('cliff') && stormForced('dune') && !stormForced('plain') && !stormForced('forge'));
+    ok('storm never 熔台', stormBanned('forge') && !stormBanned('vale') && pickStorm('forge') === false);
+    ok('storm forced maps', pickStorm('vale') === true && pickStorm('cliff') === true && pickStorm('dune') === true);
+    ok('maps not renamed by 雷泽', MAP_NAME.vale === '风谷' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.forge === '熔台' && MAP_NAME.plain === '平原');
+    G.kind = 'hall';
+    G.storm = false;
+    G.H = buildHeight('plain');
+    G.mapId = 'plain';
+    const grassU = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    ok('grass dry full', onGrass(grassU) === true && Math.abs(walkSpd(grassU) - 90) < 0.01, walkSpd(grassU));
+    G.storm = true;
+    ok('wet grass 0.88', Math.abs(walkSpd(grassU) - 90 * STORM_WALK) < 0.01, walkSpd(grassU));
+    G.H = buildHeight('dune');
+    G.mapId = 'dune';
+    const wetSand = { x: DUNE_PX, y: G.H[DUNE_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    ok('wet sand 0.88', onSand(wetSand) === true && !onGrass(wetSand) && Math.abs(walkSpd(wetSand) - 90 * DUNE_WALK * STORM_WALK) < 0.01, walkSpd(wetSand));
+    G.H = buildHeight('moon');
+    G.mapId = 'moon';
+    const stormWet = { x: MOON_CX, y: G.H[MOON_CX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    ok('storm water no extra', inMoonWater(stormWet) === true && !onGrass(stormWet) && Math.abs(walkSpd(stormWet) - 90 * MOON_WALK) < 0.01, walkSpd(stormWet));
+    ok('leap unchanged in 雷泽', LEAP_DX === 80 && LEAP_H === 56 && LEAP_T === 0.34);
+    G.kind = 'hall';
+    G.wind = 8;
+    ok('storm wind clamp high', nudgeStormWind(1) === 8);
+    ok('storm wind minus', nudgeStormWind(-1) === 7);
+    G.wind = -8;
+    ok('storm wind clamp low', nudgeStormWind(-1) === -8);
+    ok('storm wind plus', nudgeStormWind(1) === -7);
+    G.kind = 'core';
+    G.wind = 14;
+    ok('storm core clamp', nudgeStormWind(1) === 14 && windMax() === 14);
+    G.kind = 'hall';
+    G.storm = true;
+    G.mode = 'play';
+    ok('storm hud name stays', STORM_NAME === '雷泽' && MAP_NAME.vale === '风谷');
+    G.storm = false;
+    ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 7);
+    ok('maps still 14 after 雷泽', MAP_IDS.length === 14 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
+    ok('ghost K still after 雷泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('no banned 雷泽', STORM_NAME.indexOf('传送') < 0 && STORM_NAME.indexOf('飞行') < 0 && STORM_NAME.indexOf('三叉戟') < 0 && STORM_NAME.indexOf('激怒') < 0);
+    ok('g vk v25', GRAV === 260 && VK === 420 && WIND_K === 2.05);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
