@@ -583,6 +583,10 @@ canvas {
   background: rgba(255, 227, 107, 0.1);
 }
 
+#map-frost {
+  border-color: rgba(154, 216, 255, 0.42);
+}
+
 #btn-rand-map {
   border-color: rgba(0, 232, 255, 0.6);
   color: var(--cyan);

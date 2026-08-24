@@ -48,8 +48,8 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -161,6 +161,23 @@
   const GATE_CROWN_Y = 258;
   const GATE_PIT_Y = 476;
   const GATE_CRATER = 0.72;
+  const FROST_PX = 168;
+  const FROST_FX = 772;
+  const FROST_P2X = 204;
+  const FROST_F2X = 736;
+  const FROST_BANK_Y = 304;
+  const FROST_ICE_Y = 408;
+  const FROST_ICE0 = 268;
+  const FROST_ICE1 = 692;
+  const FROST_SLOPE = 72;
+  const FROST_WALK = 1.15;
+  const FROST_CRATER = 0.55;
+  const FROST_SKIP = 28;
+  const FROST_SKIP_VY = 0.55;
+  const FROST_SKIP_VX = 0.92;
+  const FROST_SLIDE_ACC = 210;
+  const FROST_SLIDE_DECAY = 1.15;
+  const FROST_SLIDE_FRIC = 36;
   const STORM_NAME = '雷泽';
   const STORM_P = 0.35;
   const STORM_MIN = 8;
@@ -645,6 +662,7 @@
       ult: !!opts.ult,
       lead: !!opts.lead,
       follow: !!opts.follow,
+      iceSkip: false,
       trail: [{ x: sx, y: sy, a: 1 }]
     };
   }
@@ -857,6 +875,7 @@
     if (isDeathVoid(u.x)) return false;
     if (G.mapId === 'forge' || G.mapId === 'dune') return false;
     if (G.mapId === 'gate' && isGateStoneX(u.x)) return false;
+    if (G.mapId === 'frost' && isFrostIce(u.x)) return false;
     if (inMoonWater(u) || inCliffWater(u)) return false;
     return true;
   }
@@ -899,6 +918,102 @@
     return r * GATE_CRATER;
   }
 
+  function isFrostIce(x) {
+    if (G.mapId !== 'frost') return false;
+    const i = x | 0;
+    return i >= FROST_ICE0 && i <= FROST_ICE1;
+  }
+
+  function isFrostBank(x) {
+    if (G.mapId !== 'frost') return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    return !isFrostIce(i) && !isDeathVoid(i);
+  }
+
+  function onIce(u) {
+    if (G.mapId !== 'frost' || !u) return false;
+    return isFrostIce(u.x) && !isDeathVoid(u.x);
+  }
+
+  function iceR(r, x) {
+    if (!isFrostIce(x) || r <= 0) return r;
+    return r * FROST_CRATER;
+  }
+
+  function iceImpactDeg(vx, vy) {
+    return Math.atan2(Math.abs(vy), Math.abs(vx) + 1e-9) * 180 / Math.PI;
+  }
+
+  function wantIceSkip(s, x) {
+    if (!s || s.iceSkip) return false;
+    if (!isFrostIce(x)) return false;
+    return iceImpactDeg(s.vx, s.vy) < FROST_SKIP;
+  }
+
+  function applyIceSkip(s) {
+    if (!s) return s;
+    s.iceSkip = true;
+    s.vy = -Math.abs(s.vy) * FROST_SKIP_VY;
+    s.vx *= FROST_SKIP_VX;
+    const gy = groundAt(s.x);
+    if (s.y >= gy - 1) s.y = gy - 4;
+    let g = 0;
+    while (inGround(s.x, s.y) && g < 8) {
+      s.y -= 2;
+      g += 1;
+    }
+    burst(s.x, s.y, ICE, REDUCE ? 4 : 10, 90, 0.22);
+    burst(s.x, s.y, WHT, REDUCE ? 2 : 5, 50, 0.16);
+    if (audio && audio.beep) audio.beep(920, 0.05, 'triangle', 0.018, 1680);
+    return s;
+  }
+
+  function iceMove(u, dir, dt, canWalk) {
+    if (!u || !u.grounded || walkBlocked(u) || !onIce(u)) {
+      if (u) u.slideVx = 0;
+      return 0;
+    }
+    const max = walkSpd(u);
+    let input = 0;
+    if (dir && canWalk && G.walk > 0 && u.stam > 0) input = dir > 0 ? 1 : -1;
+    if (input) {
+      const target = input * max;
+      if ((u.slideVx || 0) * input < 0) {
+        u.slideVx = approach(u.slideVx || 0, target, FROST_SLIDE_ACC * dt);
+      } else {
+        u.slideVx = target;
+      }
+      u.face = input;
+    } else {
+      u.slideVx = (u.slideVx || 0) * Math.exp(-FROST_SLIDE_DECAY * dt);
+      if (u.slideVx > 0) u.slideVx = Math.max(0, u.slideVx - FROST_SLIDE_FRIC * dt);
+      else u.slideVx = Math.min(0, u.slideVx + FROST_SLIDE_FRIC * dt);
+      if (Math.abs(u.slideVx) < 5) {
+        u.slideVx = 0;
+        return 0;
+      }
+    }
+    const dx = u.slideVx * dt;
+    const lo = G.sudden ? G.safeL + 18 : 22;
+    const hi = G.sudden ? G.safeR - 18 : VW - 22;
+    const nx = clamp(u.x + dx, lo, hi);
+    if (wallBlocksWalk(nx, u.y, u.r)) {
+      u.slideVx = 0;
+      return 0;
+    }
+    if (input) {
+      const used = Math.min(Math.abs(nx - u.x), G.walk, u.stam);
+      G.walk -= used;
+      u.stam -= used;
+    }
+    u.x = nx;
+    u.walkT = 0.12;
+    ungroundIfAir(u);
+    if (!onIce(u)) u.slideVx = 0;
+    return dx;
+  }
+
   function stormForced(id) {
     id = id || G.mapId;
     return id === 'vale' || id === 'cliff' || id === 'dune';
@@ -938,6 +1053,7 @@
     if (inMoonWater(u)) spd = base * MOON_WALK;
     else if (inCliffWater(u)) spd = base * CLIFF_WALK;
     else if (onSand(u)) spd = base * DUNE_WALK;
+    else if (onIce(u)) spd = base * FROST_WALK;
     else spd = base;
     if (G.storm && (onSand(u) || onGrass(u))) spd *= STORM_WALK;
     return spd;
@@ -1207,6 +1323,26 @@
       padFlat(h, 744, 872, GATE_LEDGE_Y);
       padFlat(h, GATE_L_CX - 26, GATE_L_CX + 26, GATE_CROWN_Y);
       padFlat(h, GATE_R_CX - 26, GATE_R_CX + 26, GATE_CROWN_Y);
+    } else if (id === 'frost') {
+      for (let x = 0; x < VW; x++) {
+        let yy;
+        if (x < FROST_ICE0) {
+          const k = clamp((FROST_ICE0 - x) / FROST_SLOPE, 0, 1);
+          const sm = k * k * (3 - 2 * k);
+          yy = lerp(FROST_ICE_Y, FROST_BANK_Y, sm);
+          yy += Math.sin(x * 0.07) * 1.2 + Math.sin(x * 0.19) * 0.5;
+        } else if (x > FROST_ICE1) {
+          const k = clamp((x - FROST_ICE1) / FROST_SLOPE, 0, 1);
+          const sm = k * k * (3 - 2 * k);
+          yy = lerp(FROST_ICE_Y, FROST_BANK_Y, sm);
+          yy += Math.sin(x * 0.07) * 1.2 + Math.sin(x * 0.19) * 0.5;
+        } else {
+          yy = FROST_ICE_Y + Math.sin(x * 0.11) * 0.45 + Math.sin(x * 0.23) * 0.18;
+        }
+        h[x] = yy;
+      }
+      padFlat(h, 72, 200, FROST_BANK_Y);
+      padFlat(h, 760, 888, FROST_BANK_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -1232,6 +1368,7 @@
     if (id === 'cliff') return side === 'p' ? CLIFF_PX : CLIFF_FX;
     if (id === 'dune') return side === 'p' ? DUNE_PX : DUNE_FX;
     if (id === 'gate') return side === 'p' ? GATE_PX : GATE_FX;
+    if (id === 'frost') return side === 'p' ? FROST_PX : FROST_FX;
     return side === 'p' ? 152 : 768;
   }
 
@@ -1241,6 +1378,7 @@
     if (G.mapId === 'cliff' && slot) return side === 'p' ? CLIFF_P2X : CLIFF_F2X;
     if (G.mapId === 'dune' && slot) return side === 'p' ? DUNE_P2X : DUNE_F2X;
     if (G.mapId === 'gate' && slot) return side === 'p' ? GATE_P2X : GATE_F2X;
+    if (G.mapId === 'frost' && slot) return side === 'p' ? FROST_P2X : FROST_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -1432,6 +1570,7 @@
       bob: rand(0, TAU),
       hitT: 0,
       walkT: 0,
+      slideVx: 0,
       face: side === 'p' ? 1 : -1,
       flash: 0,
       stam: STAM_MAX,
@@ -1602,6 +1741,7 @@
     let y = y0;
     let pierced = false;
     let fuse = 0;
+    let iceSkip = false;
     const dt = 1 / 60;
     let hitU = null;
     let t = 0;
@@ -1613,12 +1753,12 @@
       t += dt;
       if (x < 4 || x > VW - 4 || y > VH + 30) {
         if (Hsave) G.H = old;
-        return { x: clamp(x, 0, VW - 1), y: Math.min(y, VH), t: t, hit: null, air: y < VH };
+        return { x: clamp(x, 0, VW - 1), y: Math.min(y, VH), t: t, hit: null, air: y < VH, iceSkip: iceSkip };
       }
       const u = unitAt(x, y, skip);
       if (u) {
         if (Hsave) G.H = old;
-        return { x: x, y: y, t: t, hit: u, air: false };
+        return { x: x, y: y, t: t, hit: u, air: false, iceSkip: iceSkip };
       }
       if (inGround(x, y) || inWall(x, y)) {
         if (wep && wep.id === 2 && !pierced) {
@@ -1637,8 +1777,21 @@
           }
           continue;
         }
+        if (!iceSkip && isFrostIce(x) && iceImpactDeg(vx, vy) < FROST_SKIP) {
+          iceSkip = true;
+          vy = -Math.abs(vy) * FROST_SKIP_VY;
+          vx *= FROST_SKIP_VX;
+          const gy = groundAt(x);
+          if (y >= gy - 1) y = gy - 4;
+          let g2 = 0;
+          while (inGround(x, y) && g2 < 8) {
+            y -= 2;
+            g2 += 1;
+          }
+          continue;
+        }
         if (Hsave) G.H = old;
-        return { x: x, y: y, t: t, hit: null, air: false, pierced: pierced };
+        return { x: x, y: y, t: t, hit: null, air: false, pierced: pierced, iceSkip: iceSkip };
       }
       if (pierced) {
         fuse -= dt;
@@ -1649,7 +1802,7 @@
       }
     }
     if (Hsave) G.H = old;
-    return { x: x, y: y, t: t, hit: hitU, air: true };
+    return { x: x, y: y, t: t, hit: hitU, air: true, iceSkip: iceSkip };
   }
 
   const audio = {
@@ -2714,6 +2867,7 @@
     trail.length = 0;
     if (u) {
       u.stam = STAM_MAX;
+      u.slideVx = 0;
       if (G.kind === 'drill') resetItems(u);
       if (u.wep != null) G.wep = u.wep;
     }
@@ -3108,9 +3262,10 @@
     if (wasUlt) crater = Math.round(crater * 1.35);
     crater = Math.round(sandR(crater));
     crater = Math.round(stoneR(crater, x));
+    crater = Math.round(iceR(crater, x));
     let hit = !!fromHit;
     if (wep.id === 4) {
-      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : 1);
+      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : 1));
       const pops = carveCluster(x, y, ultMul * terrainMul);
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
@@ -3371,6 +3526,10 @@
       return;
     }
     if (inGround(s.x, s.y) || inWall(s.x, s.y)) {
+      if (wantIceSkip(s, s.x)) {
+        applyIceSkip(s);
+        return;
+      }
       if (isMineWep(s.wep)) {
         if (isDeathVoid(s.x) || s.y > VH) explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false, s);
         else plantMine(s);
@@ -3784,6 +3943,10 @@
       const enter = foe.x < 480 ? 360 : 600;
       return Math.abs(enter - foe.x);
     }
+    if (G.mapId === 'frost') {
+      if (!isFrostIce(foe.x)) return 1e9;
+      return Math.min(Math.abs(foe.x - FROST_ICE0), Math.abs(foe.x - FROST_ICE1));
+    }
     return 1e9;
   }
 
@@ -3791,6 +3954,10 @@
     const sideLeft = foe ? foe.x < 480 : true;
     if (G.mapId === 'gate') return sideLeft ? GATE_L1 + 36 : GATE_R0 - 36;
     if (G.mapId === 'dune') return sideLeft ? 400 : 560;
+    if (G.mapId === 'frost') {
+      const leftLip = foe ? Math.abs(foe.x - FROST_ICE0) <= Math.abs(foe.x - FROST_ICE1) : true;
+      return leftLip ? FROST_ICE0 - 22 : FROST_ICE1 + 22;
+    }
     return 0;
   }
 
@@ -3800,9 +3967,10 @@
     if (!from || !foe || foe.hp <= 0) return false;
     if (foe.hp <= 24) return false;
     if (liveMineOf(from.side)) return false;
-    if (G.mapId !== 'gate' && G.mapId !== 'dune') return false;
+    if (G.mapId !== 'gate' && G.mapId !== 'dune' && G.mapId !== 'frost') return false;
     if (G.mapId === 'gate' && isGateCorridor(foe.x)) return false;
     if (G.mapId === 'dune' && isDuneSaddle(foe.x)) return false;
+    if (G.mapId === 'frost' && !isFrostIce(foe.x)) return false;
     const dist = denyZoneDist(foe);
     if (dist >= 1e8) return false;
     const reach = aiHard() ? WALK_PX * 2.2 : WALK_PX * 1.4;
@@ -3829,6 +3997,7 @@
       if (G.mapId === 'dune' && isDuneSaddle(foe.x)) return 1;
       if (G.mapId === 'gate' && isGateCorridor(foe.x)) return 1;
       if (G.mapId === 'gate' && isGateCrown(foe.x) && Math.abs(foe.x - from.x) > 6 * GRID) return 0;
+      if (G.mapId === 'frost' && isFrostIce(foe.x)) return 1;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -3889,6 +4058,13 @@
       else if (!far && e >= 78) score += 1200;
     }
     if (G.mapId === 'gate' && isGateCorridor(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
+    if (G.mapId === 'frost' && isFrostIce(t.x)) {
+      const e = ang != null ? elev(ang) : 0;
+      if (e >= 78) score += 1600;
+      else if (e >= 58 && e <= 72) score += 1400;
+      else if (e < 32) score -= 900;
+    }
+    if (G.mapId === 'frost' && isFrostIce(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
     if (wep.id === 8) {
       const spot = denySpotX(from, t);
       if (spot) {
@@ -3897,6 +4073,7 @@
         if (imp.hit) score -= 3600;
         else if (G.mapId === 'gate' && isGateCorridor(imp.x)) score += 900;
         else if (G.mapId === 'dune' && isDuneSaddle(imp.x)) score += 900;
+        else if (G.mapId === 'frost' && isFrostBank(imp.x)) score += 900;
       }
     }
     score += bury;
@@ -4254,6 +4431,17 @@
         AI.wait = 0.08;
         return;
       }
+      if (onIce(u) && u.grounded) {
+        const dx = AI.walkTo - u.x;
+        const close = Math.abs(dx) <= 4;
+        const dir = (!close && G.walk > 0 && u.stam > 0) ? (dx > 0 ? 1 : -1) : 0;
+        iceMove(u, dir, dt, true);
+        if (close && Math.abs(u.slideVx || 0) < 14) {
+          AI.stage = 2;
+          AI.wait = 0.12;
+        }
+        return;
+      }
       const dx = AI.walkTo - u.x;
       if (Math.abs(dx) > 2 && G.walk > 0 && u.stam > 0) {
         const dir = dx > 0 ? 1 : -1;
@@ -4303,12 +4491,21 @@
   }
 
   function walkPlayer(dt) {
-    if (!humanTurn() || G.phase !== 'aim' || G.busy) return;
+    if (!humanTurn() || G.busy) return;
+    if (G.phase !== 'aim' && G.phase !== 'charge') return;
     const u = curUnit();
     if (!u) return;
     let dir = 0;
-    if (keys.l || padHold.l) dir -= 1;
-    if (keys.r || padHold.r) dir += 1;
+    if (G.phase === 'aim') {
+      if (keys.l || padHold.l) dir -= 1;
+      if (keys.r || padHold.r) dir += 1;
+    }
+    if (onIce(u) && u.grounded && !walkBlocked(u)) {
+      iceMove(u, dir, dt, G.phase === 'aim');
+      return;
+    }
+    u.slideVx = 0;
+    if (G.phase !== 'aim') return;
     if (!dir || G.walk <= 0 || u.stam <= 0) return;
     if (walkBlocked(u)) {
       if (G.toastT <= 0.2) toast('埋了 · 飞步或影挪', true, false);
@@ -4769,8 +4966,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : G.mapId === 'frost' ? '#d4f2ff' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : G.mapId === 'frost' ? '#143044' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -4997,6 +5194,25 @@
       g.fillRect(GATE_L0, GATE_CROWN_Y - 2, GATE_L1 - GATE_L0, 6);
       g.fillRect(GATE_R0, GATE_CROWN_Y - 2, GATE_R1 - GATE_R0, 6);
     }
+    if (G.mapId === 'frost') {
+      const sheen = g.createLinearGradient(0, FROST_ICE_Y - 18, 0, FROST_ICE_Y + 36);
+      sheen.addColorStop(0, 'rgba(210, 240, 255, 0.28)');
+      sheen.addColorStop(0.45, 'rgba(154, 216, 255, 0.16)');
+      sheen.addColorStop(1, 'rgba(80, 140, 190, 0.10)');
+      g.fillStyle = sheen;
+      for (let x = FROST_ICE0; x <= FROST_ICE1; x++) {
+        g.fillRect(x, H[x], 1, 10);
+      }
+      g.strokeStyle = 'rgba(220, 244, 255, 0.62)';
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(FROST_ICE0, H[FROST_ICE0]);
+      for (let x = FROST_ICE0; x <= FROST_ICE1; x++) g.lineTo(x, H[x]);
+      g.stroke();
+      g.fillStyle = 'rgba(90, 64, 44, 0.18)';
+      g.fillRect(40, FROST_BANK_Y - 4, FROST_ICE0 - 56, 8);
+      g.fillRect(FROST_ICE1 + 16, FROST_BANK_Y - 4, 900 - FROST_ICE1, 8);
+    }
     terrainDirty = false;
   }
 
@@ -5088,6 +5304,18 @@
       bowl.addColorStop(0, 'rgba(210,150,70,0.12)');
       bowl.addColorStop(1, 'rgba(210,150,70,0)');
       g.fillStyle = bowl;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'frost') {
+      const chill = g.createRadialGradient(480, FROST_ICE_Y, 20, 480, FROST_ICE_Y + 40, 320);
+      chill.addColorStop(0, 'rgba(160, 220, 255, 0.16)');
+      chill.addColorStop(1, 'rgba(160, 220, 255, 0)');
+      g.fillStyle = chill;
+      g.fillRect(0, 0, VW, VH);
+      const polar = g.createRadialGradient(480, 70, 8, 480, 110, 260);
+      polar.addColorStop(0, 'rgba(200, 236, 255, 0.14)');
+      polar.addColorStop(1, 'rgba(200, 236, 255, 0)');
+      g.fillStyle = polar;
       g.fillRect(0, 0, VW, VH);
     }
     if (G.mapId === 'gate') {
@@ -5489,6 +5717,27 @@
       g.beginPath();
       g.ellipse(x, y, 16 + (i % 3) * 5, 3.4, 0, 0, TAU);
       g.fill();
+    }
+    g.restore();
+  }
+
+  function drawFrost(g) {
+    if (G.mapId !== 'frost') return;
+    g.save();
+    const t = G.t;
+    for (let i = 0; i < 14; i++) {
+      const x = FROST_ICE0 + 18 + i * 30 + Math.sin(t * 0.45 + i) * 8;
+      const y = groundAt(x) + 5 + Math.sin(t * 1.1 + i * 0.5) * 1.6;
+      g.fillStyle = 'rgba(220,244,255,' + (0.06 + 0.08 * Math.sin(t * 1.6 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 22 + (i % 3) * 6, 3.2, 0, 0, TAU);
+      g.fill();
+    }
+    for (let k = 0; k < 6; k++) {
+      const px = (k < 3 ? 120 + k * 28 : 780 + (k - 3) * 28);
+      const glow = 0.07 + 0.06 * (0.5 + 0.5 * Math.sin(t * 2.0 + k));
+      g.fillStyle = 'rgba(210, 170, 120,' + glow + ')';
+      g.fillRect(px, FROST_BANK_Y + 8 + (k % 3) * 10, 3, 8);
     }
     g.restore();
   }
@@ -6053,6 +6302,7 @@
     drawCliff(ctx);
     drawDune(ctx);
     drawGate(ctx);
+    drawFrost(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -6414,7 +6664,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps fifteen', MAP_IDS.length === 15 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps sixteen', MAP_IDS.length === 16 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -6949,7 +7199,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 15', MAP_IDS.length === 15 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14);
+    ok('随图 pool 16', MAP_IDS.length === 16 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14 && MAP_IDS.indexOf('frost') === 15);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -7193,7 +7443,7 @@
     G.ghostOn = true;
     ok('ghost match only', G.ghost == null);
     ok('g vk v20', GRAV === 260 && VK === 420);
-    ok('maps still 14 after ghost', MAP_IDS.length === 15 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after ghost', MAP_IDS.length === 16 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
     ok('断崖 name locked', MAP_NAME.cliff === '断崖' && MAP_IDS[12] === 'cliff');
     ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
@@ -7212,7 +7462,7 @@
     const silkPhys = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     const silkPhys2 = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     ok('silk no physics drift', Math.abs(silkPhys.x - silkPhys2.x) < 0.01 && Math.abs(silkPhys.y - silkPhys2.y) < 0.01);
-    ok('maps still 14 after silk', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after silk', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after silk', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned silk', '风丝'.indexOf('传送') < 0 && '风丝'.indexOf('飞行') < 0 && '风丝'.indexOf('三叉戟') < 0 && '风丝'.indexOf('激怒') < 0);
     ok('g vk v22', GRAV === 260 && VK === 420);
@@ -7311,7 +7561,7 @@
     for (let i = 0; i < VW; i++) G.H[i] = 400;
     G.p = { x: 200, y: 386, r: 14, hp: 100, side: 'p', id: 'p' };
     ok('AI open not 叠珠', pickAIWeapon(G.f) !== 6);
-    ok('maps still 14 after 叠珠', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after 叠珠', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after 叠珠', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('g vk v24', GRAV === 260 && VK === 420);
 
@@ -7355,7 +7605,7 @@
     ok('storm hud name stays', STORM_NAME === '雷泽' && MAP_NAME.vale === '风谷');
     G.storm = false;
     ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps still 14 after 雷泽', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
+    ok('maps still 14 after 雷泽', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
     ok('ghost K still after 雷泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned 雷泽', STORM_NAME.indexOf('传送') < 0 && STORM_NAME.indexOf('飞行') < 0 && STORM_NAME.indexOf('三叉戟') < 0 && STORM_NAME.indexOf('激怒') < 0);
     ok('g vk v25', GRAV === 260 && VK === 420 && WIND_K === 2.05);
@@ -7447,7 +7697,7 @@
     ok('gate storm roll not forced', !stormForced('gate') && !stormBanned('gate') && STORM_P === 0.35);
     ok('石门 name locked', MAP_NAME.gate === '石门' && MAP_IDS[14] === 'gate');
     ok('no banned gate', MAP_NAME.gate.indexOf('传送') < 0 && MAP_NAME.gate.indexOf('飞行') < 0 && MAP_NAME.gate.indexOf('三叉戟') < 0 && MAP_NAME.gate.indexOf('激怒') < 0);
-    ok('maps 15 with 石门', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 with 石门', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('叠珠 still 7 after 石门', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('ghost K still after 石门', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 石门', typeof silkCount === 'function' && silkCount(0) === 0);
@@ -7533,11 +7783,125 @@
     const mscHit = scoreOne({ x: 210, y: G.p.y, t: 0.6, hit: G.p }, WEPS[7], G.f, G.p, 45);
     ok('迟雷 prefer deny stick', mscDeny > 2000, Math.round(mscDeny) + '/' + Math.round(mscHit));
     ok('叠珠 still 7 after 迟雷', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps 15 after 迟雷', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 after 迟雷', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('ghost K still after 迟雷', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 迟雷', typeof silkCount === 'function' && silkCount(0) === 0);
     ok('雷泽 still after 迟雷', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune'));
     ok('g vk v27', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+
+    G.H = buildHeight('frost');
+    G.mapId = 'frost';
+    G.kind = 'hall';
+    G.storm = false;
+    G.walls = [];
+    G.ai = 1;
+    G.turns = 3;
+    G.mines = [];
+    G.walk = WALK_PX;
+    ok('frost spawn', spawnX('frost', 'p') === FROST_PX && spawnX('frost', 'f') === FROST_FX);
+    ok('frost spawn on banks', isFrostBank(FROST_PX) && isFrostBank(FROST_FX), Math.round(G.H[FROST_PX]) + '/' + Math.round(G.H[FROST_FX]));
+    ok('frost lake low flat', G.H[480] > G.H[FROST_PX] + 60 && G.H[480] < 460 && Math.abs(G.H[480] - FROST_ICE_Y) < 8, Math.round(G.H[480]));
+    ok('frost ice band', isFrostIce(480) && isFrostIce(FROST_ICE0 + 4) && !isFrostIce(FROST_PX) && !isFrostIce(FROST_FX));
+    ok('frost no void', !isDeathVoid(FROST_PX) && !isDeathVoid(FROST_FX) && !isDeathVoid(480));
+    ok('frost nums', FROST_WALK === 1.15 && FROST_CRATER === 0.55 && FROST_SKIP === 28 && FROST_SKIP_VY === 0.55 && FROST_SKIP_VX === 0.92);
+    const fIceU = { x: 480, y: G.H[480] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p', grounded: true, stam: 100, slideVx: 0, face: 1 };
+    const fBankU = { x: FROST_PX, y: G.H[FROST_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p', grounded: true, stam: 100, slideVx: 0, face: 1 };
+    const fBankAI = { x: FROST_FX, y: G.H[FROST_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    ok('frost on ice', onIce(fIceU) === true && onIce(fBankU) === false);
+    ok('frost ice walk 1.15', Math.abs(walkSpd(fIceU) - 90 * FROST_WALK) < 0.01, walkSpd(fIceU));
+    ok('frost bank walk full', Math.abs(walkSpd(fBankU) - 90) < 0.01, walkSpd(fBankU));
+    ok('frost bank ai full', Math.abs(walkSpd(fBankAI) - 78) < 0.01, walkSpd(fBankAI));
+    G.storm = true;
+    ok('frost ice not wet grass', !onGrass(fIceU) && Math.abs(walkSpd(fIceU) - 90 * FROST_WALK) < 0.01, walkSpd(fIceU));
+    ok('frost bank wet grass', onGrass(fBankU) && Math.abs(walkSpd(fBankU) - 90 * STORM_WALK) < 0.01, walkSpd(fBankU));
+    G.storm = false;
+    G.walk = WALK_PX;
+    const fSlide = { x: 480, y: G.H[480] - 14, r: 14, hp: 100, grounded: true, stam: 100, slideVx: 0, face: 1 };
+    const fSlideX0 = fSlide.x;
+    for (let i = 0; i < 30; i++) iceMove(fSlide, 1, 1 / 60, true);
+    ok('frost ice faster walk', fSlide.x > fSlideX0 + 90 * FROST_WALK * 0.5 * 0.85, Math.round(fSlide.x - fSlideX0));
+    const fSlideX1 = fSlide.x;
+    const fSlideV = fSlide.slideVx;
+    G.walk = 0;
+    for (let i = 0; i < 24; i++) iceMove(fSlide, 0, 1 / 60, true);
+    ok('frost slide after release', fSlide.x > fSlideX1 + 10 && fSlideV > 40, Math.round(fSlide.x - fSlideX1) + ' v' + Math.round(fSlideV));
+    const skipS = { x: 480, y: G.H[480] - 2, vx: 360, vy: 80, iceSkip: false };
+    ok('frost skip angle', iceImpactDeg(360, 80) < FROST_SKIP);
+    ok('frost skip want', wantIceSkip(skipS, 480) === true);
+    applyIceSkip(skipS);
+    ok('frost skip once', skipS.iceSkip === true && skipS.vy < 0 && Math.abs(skipS.vx - 360 * FROST_SKIP_VX) < 0.02);
+    ok('frost skip second no', wantIceSkip(skipS, 480) === false);
+    const steepS = { x: 480, y: G.H[480] - 2, vx: 80, vy: 360, iceSkip: false };
+    ok('frost steep no skip', iceImpactDeg(80, 360) > FROST_SKIP && wantIceSkip(steepS, 480) === false);
+    const bankSkip = { x: FROST_PX, y: G.H[FROST_PX] - 2, vx: 360, vy: 80, iceSkip: false };
+    ok('frost bank no skip', wantIceSkip(bankSkip, FROST_PX) === false);
+    const iceMx = 320;
+    const iceMy = G.H[iceMx] - 6;
+    const fts20 = traceShot(iceMx, iceMy, 8, 88, 0, WEPS[0], G.H, null);
+    ok('frost trace skip', fts20.iceSkip === true, Math.round(fts20.x) + ' skip=' + fts20.iceSkip);
+    const fts90 = traceShot(iceMx, iceMy, 90, 95, 0, WEPS[0], G.H, null);
+    ok('frost trace dunk no skip', !fts90.iceSkip && isFrostIce(fts90.x), Math.round(fts90.x));
+    const flatF = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) flatF[i] = 400;
+    G.H = flatF;
+    G.mapId = 'plain';
+    carve(500, 400, 30);
+    const frostDirt = G.H[500] - 400;
+    G.mapId = 'frost';
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    carve(480, 400, iceR(30, 480));
+    const frostIceDepth = G.H[480] - 400;
+    ok('frost ice crater ~0.55', frostIceDepth < frostDirt * 0.7 && Math.abs(frostIceDepth / frostDirt - FROST_CRATER) < 0.08, Math.round(frostIceDepth) + '/' + Math.round(frostDirt));
+    G.H = buildHeight('frost');
+    G.mapId = 'frost';
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    carve(168, 400, iceR(30, 168));
+    const frostBankDepth = G.H[168] - 400;
+    ok('frost bank crater normal', Math.abs(frostBankDepth - frostDirt) < 0.5, Math.round(frostBankDepth));
+    G.H = buildHeight('frost');
+    G.mapId = 'frost';
+    G.kind = 'hall';
+    G.wind = 0;
+    G.ai = 1;
+    G.turns = 3;
+    G.mines = [];
+    G.p = { x: 480, y: G.H[480] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: FROST_FX, y: G.H[FROST_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    ok('frost AI lake 高爆', isFrostIce(G.p.x) && pickAIWeapon(G.f) === 1);
+    const fimp = { x: 480, y: G.H[480], t: 1, hit: null };
+    const fsc90 = scoreOne(fimp, WEPS[1], G.f, G.p, 88);
+    const fsc65 = scoreOne(fimp, WEPS[1], G.f, G.p, 65);
+    const fsc20 = scoreOne(fimp, WEPS[1], G.f, G.p, 20);
+    ok('frost AI prefer dunk', fsc90 > fsc20 + 400 && fsc65 > fsc20 + 400, Math.round(fsc90) + '/' + Math.round(fsc65) + '>' + Math.round(fsc20));
+    const lipX = FROST_ICE0 + 40;
+    G.p = { x: lipX, y: G.H[lipX | 0] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    ok('frost lip on ice', isFrostIce(lipX) && denyZoneDist(G.p) > 8 && denyZoneDist(G.p) <= WALK_PX * 1.4, denyZoneDist(G.p));
+    ok('frost AI 迟雷 lip', wantChiLei(G.f, G.p) === true && pickAIWeapon(G.f) === 7);
+    G.ai = 0;
+    ok('frost easy never 迟雷', wantChiLei(G.f, G.p) === false && pickAIWeapon(G.f) !== 7);
+    G.ai = 1;
+    G.kind = 'duo';
+    const fdx0 = spawnAt('p', 0);
+    const fdx1 = spawnAt('p', 1);
+    const fdr0 = spawnAt('f', 0);
+    const fdr1 = spawnAt('f', 1);
+    ok('frost duo extras bank', isFrostBank(fdx0) && isFrostBank(fdx1) && isFrostBank(fdr0) && isFrostBank(fdr1), fdx1 + '/' + fdr1);
+    ok('frost duo tops', fdx0 === FROST_PX && fdr0 === FROST_FX);
+    ok('frost duo extras along', Math.abs(fdx1 - fdx0) >= 20 && Math.abs(fdr1 - fdr0) >= 20, Math.round(Math.abs(fdx1 - fdx0)));
+    ok('frost duo not ice', !isFrostIce(fdx1) && !isFrostIce(fdr1));
+    ok('frost duo not void', !isDeathVoid(fdx0) && !isDeathVoid(fdx1) && !isDeathVoid(fdr0) && !isDeathVoid(fdr1));
+    G.kind = 'hall';
+    ok('frost storm roll not forced', !stormForced('frost') && !stormBanned('frost') && STORM_P === 0.35);
+    ok('霜泽 name locked', MAP_NAME.frost === '霜泽' && MAP_IDS[15] === 'frost');
+    ok('no banned frost', MAP_NAME.frost.indexOf('传送') < 0 && MAP_NAME.frost.indexOf('飞行') < 0 && MAP_NAME.frost.indexOf('三叉戟') < 0 && MAP_NAME.frost.indexOf('激怒') < 0);
+    ok('maps 16 with 霜泽', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('叠珠 still 7 after 霜泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('迟雷 still 8 after 霜泽', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
+    ok('ghost K still after 霜泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('silk still after 霜泽', typeof silkCount === 'function' && silkCount(0) === 0);
+    ok('雷泽 still after 霜泽', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune'));
+    ok('g vk v28', GRAV === 260 && VK === 420 && WIND_K === 2.05);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
