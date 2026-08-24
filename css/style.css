@@ -677,6 +677,10 @@ canvas {
   border-color: rgba(224, 180, 112, 0.62);
 }
 
+#map-ridge {
+  border-color: rgba(212, 196, 168, 0.64);
+}
+
 #btn-rand-map {
   border-color: rgba(0, 232, 255, 0.6);
   color: var(--cyan);
