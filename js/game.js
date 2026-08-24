@@ -380,6 +380,16 @@
   const DUST_LIFE = 0.5;
   const DUST_R = 1.6;
   const DUST_RGB = [168, 132, 96];
+  const SAND_NAME = '腰沙';
+  const SAND_IDLE_N = 4;
+  const SAND_KICK_MIN = 1;
+  const SAND_KICK_MAX = 2;
+  const SAND_BURST_MIN = 4;
+  const SAND_BURST_MAX = 7;
+  const SAND_LIFE = 0.4;
+  const SAND_R = 1.5;
+  const SAND_RGB = [224, 180, 112];
+  const SAND_KICK_CD = 0.16;
   const FALL_NAME = '落顶';
   const FALL_N_MIN = 2;
   const FALL_N_MAX = 4;
@@ -664,7 +674,8 @@
     quakeR: 0,
     quakeMag: 0,
     fallBlast: 0,
-    fallAte: null
+    fallAte: null,
+    sandKickT: 0
   };
 
   const particles = [];
@@ -675,6 +686,7 @@
   const crumbs = [];
   const falls = [];
   const dusts = [];
+  const sands = [];
 
   let hidden = false;
   let addTok = 0;
@@ -2012,6 +2024,135 @@
       g.fillStyle = rgba(q.rgb || DUST_RGB, a);
       g.beginPath();
       g.arc(q.x, q.y, q.r || DUST_R, 0, TAU);
+      g.fill();
+    }
+  }
+
+  function wantSand() {
+    return !REDUCE && G.mapId === 'hour';
+  }
+
+  function wantSandBurst(x) {
+    return wantSand() && isHourWaistX(x);
+  }
+
+  function sandWaistX(x) {
+    return clamp(x, HOUR_W0 + 6, HOUR_W1 - 6);
+  }
+
+  function sandWaistY(x, y) {
+    const gy = groundAt(x) - 4;
+    const top = HOUR_BANK_Y + 18;
+    return clamp(y, top, Math.max(top, gy));
+  }
+
+  function seedIdleSand() {
+    for (let i = sands.length - 1; i >= 0; i--) {
+      if (sands[i].idle) sands.splice(i, 1);
+    }
+    if (!wantSand() || !G.H) return 0;
+    for (let i = 0; i < SAND_IDLE_N; i++) {
+      const x = sandWaistX(HOUR_CX + rand(-HOUR_WAIST_HW * 0.78, HOUR_WAIST_HW * 0.78));
+      const gy = groundAt(x);
+      const y = sandWaistY(x, lerp(HOUR_BANK_Y + 28, gy - 8, rand(0.22, 0.86)));
+      sands.push({
+        x: x,
+        y: y,
+        vx: rand(-8, 8),
+        vy: rand(-5, 5),
+        g: 0,
+        r: rand(0.9, 1.8),
+        rgb: SAND_RGB,
+        life: 1,
+        max: 1,
+        idle: true,
+        ph: rand(0, TAU)
+      });
+    }
+    return SAND_IDLE_N;
+  }
+
+  function spawnSandBits(cx, cy, n, nMin, nMax) {
+    if (!wantSand() || !isHourWaistX(cx)) return 0;
+    const count = n == null ? irand(nMin, nMax) : clamp(n | 0, nMin, nMax);
+    const y0 = cy == null ? groundAt(cx) : cy;
+    for (let i = 0; i < count; i++) {
+      sands.push({
+        x: sandWaistX(cx + rand(-12, 12)),
+        y: y0 + rand(-8, 4),
+        vx: rand(-50, 50),
+        vy: rand(-80, -10),
+        g: GRAV,
+        r: rand(1.1, 2.4),
+        rgb: SAND_RGB,
+        life: SAND_LIFE,
+        max: SAND_LIFE,
+        idle: false
+      });
+    }
+    return count;
+  }
+
+  function spawnSandBurst(cx, cy, n) {
+    if (!wantSandBurst(cx)) return 0;
+    return spawnSandBits(cx, cy, n, SAND_BURST_MIN, SAND_BURST_MAX);
+  }
+
+  function spawnSandKick(cx, cy, n) {
+    if (!wantSand() || !isHourWaistX(cx)) return 0;
+    return spawnSandBits(cx, cy, n, SAND_KICK_MIN, SAND_KICK_MAX);
+  }
+
+  function kickSandWalk(u) {
+    if (!u || !wantSand() || !isHourWaistX(u.x)) return 0;
+    if ((G.sandKickT || 0) > 0) return 0;
+    G.sandKickT = SAND_KICK_CD;
+    return spawnSandKick(u.x, groundAt(u.x));
+  }
+
+  function tickSands(dt) {
+    if (G.sandKickT > 0) G.sandKickT = Math.max(0, G.sandKickT - dt);
+    if (!sands.length) return;
+    if (!wantSand()) {
+      sands.length = 0;
+      return;
+    }
+    for (let i = sands.length - 1; i >= 0; i--) {
+      const q = sands[i];
+      if (q.idle) {
+        q.ph = (q.ph || 0) + dt * 0.55;
+        q.x += q.vx * dt;
+        q.y += q.vy * dt + Math.sin(q.ph) * 4 * dt;
+        if (q.x < HOUR_W0 + 6) { q.x = HOUR_W0 + 6; q.vx = Math.abs(q.vx); }
+        else if (q.x > HOUR_W1 - 6) { q.x = HOUR_W1 - 6; q.vx = -Math.abs(q.vx); }
+        if (!isHourWaistX(q.x)) {
+          q.x = HOUR_CX;
+          q.vx = -q.vx;
+        }
+        const gy = groundAt(q.x) - 4;
+        const top = HOUR_BANK_Y + 18;
+        if (q.y > gy) { q.y = gy; q.vy = -Math.abs(q.vy || 5); }
+        else if (q.y < top) { q.y = top; q.vy = Math.abs(q.vy || 5); }
+      } else {
+        q.vy += GRAV * dt;
+        q.x += q.vx * dt;
+        q.y += q.vy * dt;
+        q.life -= dt;
+        if (q.life <= 0 || q.y > VH + 12) sands.splice(i, 1);
+      }
+    }
+  }
+
+  function drawSands(g) {
+    if (REDUCE || !sands.length) return;
+    for (let i = 0; i < sands.length; i++) {
+      const q = sands[i];
+      const a = q.idle
+        ? 0.28 + 0.16 * (0.5 + 0.5 * Math.sin(G.t * 0.95 + (q.ph || 0)))
+        : clamp(q.life / (q.max || SAND_LIFE), 0, 0.9);
+      g.fillStyle = rgba(q.rgb || SAND_RGB, a);
+      g.beginPath();
+      g.arc(q.x, q.y, q.r || SAND_R, 0, TAU);
       g.fill();
     }
   }
@@ -5601,6 +5742,7 @@
     if (wep.id === 6) plantFire(x, y, wasUlt, owner);
     dirtBurst(x, y, hit ? 14 : 20);
     if (wantDustBurst(x)) spawnDustBurst(x, y);
+    if (wantSandBurst(x)) spawnSandBurst(x, y);
     audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y, !!fromHit);
     if (wasUlt && (!shot || (shot.lead && !shot.extra) || !G.dual)) {
@@ -7063,6 +7205,7 @@
         u.walkT = 0.1;
         ungroundIfAir(u);
         tryPickCrates(u);
+        kickSandWalk(u);
       } else {
         AI.stage = 2;
         AI.wait = 0.12;
@@ -7141,6 +7284,7 @@
     u.walkT = 0.12;
     ungroundIfAir(u);
     tryPickCrates(u);
+    kickSandWalk(u);
   }
 
   function aimPlayer(dt) {
@@ -7232,6 +7376,8 @@
     crumbs.length = 0;
     falls.length = 0;
     dusts.length = 0;
+    sands.length = 0;
+    G.sandKickT = 0;
     terrainDirty = true;
     G.p = makeUnit('p', { id: 'p', name: '岚丸', delay: 0, ord: 0, slot: 0 });
     G.f = makeUnit('f', { id: 'f', name: G.kind === 'drill' ? '石俑' : '烬丸', delay: isSquad() ? 8 : 0, ord: 1, slot: 0 });
@@ -7289,6 +7435,7 @@
     G.fallAte = null;
     falls.length = 0;
     seedIdleDust();
+    seedIdleSand();
     G.ctrlSide = null;
     G.windSpinT = 0;
     G.nextWind = null;
@@ -7452,6 +7599,7 @@
       }
     }
     tickDusts(dt);
+    tickSands(dt);
   }
 
   function landDust(x, y) {
@@ -9508,6 +9656,7 @@
     drawCrumbs(ctx);
     drawFalls(ctx);
     drawDusts(ctx);
+    drawSands(ctx);
     drawGust(ctx);
     drawWindMotes(ctx);
     if (G.sudden) {
@@ -12779,6 +12928,123 @@
     ok('plus still stack after 砂漏', BAG_P1 === 0.10 && BAG_P2 === 0.20 && BAG_P3 === 0.30 && BAG_P5 === 0.50);
     ok('×2 ×3 exclusive still after 砂漏', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3');
     ok('stack math still after 砂漏', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
+
+    ok('腰沙 name', SAND_NAME === '腰沙' && SAND_IDLE_N === 4 && SAND_KICK_MIN === 1 && SAND_KICK_MAX === 2 && SAND_BURST_MIN === 4 && SAND_BURST_MAX === 7 && SAND_LIFE === 0.4);
+    ok('腰沙 no banned', SAND_NAME.indexOf('传送') < 0 && SAND_NAME.indexOf('飞行') < 0 && SAND_NAME.indexOf('三叉戟') < 0 && SAND_NAME.indexOf('激怒') < 0 && SAND_NAME.indexOf('天使') < 0 && SAND_NAME.indexOf('恶魔') < 0 && SAND_NAME.indexOf('坑尘') < 0 && SAND_NAME.indexOf('月池') < 0 && SAND_NAME.indexOf('落顶') < 0);
+    ok('腰沙 not a gun', WEPS.length === 8 && WEPS.every(function (w) { return w.name !== SAND_NAME; }) && SAND_NAME !== DUST_NAME && SAND_NAME !== FALL_NAME);
+    ok('腰沙 only hour', SAND_NAME === '腰沙' && MAP_NAME.hour === '砂漏' && MAP_IDS[22] === 'hour');
+    G.H = buildHeight('hour');
+    G.mapId = 'hour';
+    G.kind = 'hall';
+    G.mode = 'play';
+    G.p2 = null; G.f2 = null;
+    G.p = { x: HOUR_PX, y: G.H[HOUR_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: HOUR_FX, y: G.H[HOUR_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    G.sandKickT = 0;
+    sands.length = 0;
+    dusts.length = 0;
+    const sIdle = seedIdleSand();
+    ok('腰沙 idle few', REDUCE ? (sIdle === 0 && sands.length === 0) : (sIdle === SAND_IDLE_N && sands.length === SAND_IDLE_N), sands.length);
+    ok('腰沙 idle in waist', REDUCE || sands.every(function (q) { return q.idle && isHourWaistX(q.x); }));
+    ok('腰沙 idle tan', REDUCE || (sands.length && sands[0].rgb === SAND_RGB));
+    for (let si = 0; si < 180; si++) tickSands(STEP);
+    ok('腰沙 idle stay waist', REDUCE || (sands.length === SAND_IDLE_N && sands.every(function (q) { return q.idle && isHourWaistX(q.x); })), sands.length);
+    ok('腰沙 idle no dmg', G.p.hp === 100);
+    sands.length = 0;
+    G.wind = 8;
+    const kickN = spawnSandKick(HOUR_CX, G.H[HOUR_CX]);
+    ok('腰沙 kick 1-2', REDUCE ? kickN === 0 : (kickN >= SAND_KICK_MIN && kickN <= SAND_KICK_MAX && sands.length === kickN), kickN);
+    if (!REDUCE && sands.length) {
+      ok('腰沙 kick GRAV', sands[0].g === GRAV && sands[0].idle === false && sands[0].life === SAND_LIFE && sands[0].rgb === SAND_RGB);
+      const kvx0 = sands[0].vx;
+      const kvy0 = sands[0].vy;
+      tickSands(STEP);
+      ok('腰沙 kick no wind', Math.abs(sands[0].vx - kvx0) < 1e-9, sands[0].vx);
+      ok('腰沙 kick gravity', sands[0].vy > kvy0 + GRAV * STEP * 0.9, Math.round(sands[0].vy - kvy0));
+    } else {
+      ok('腰沙 kick GRAV', REDUCE);
+      ok('腰沙 kick no wind', REDUCE);
+      ok('腰沙 kick gravity', REDUCE);
+    }
+    G.wind = 0;
+    G.p.hp = 100;
+    G.p.x = HOUR_CX;
+    G.p.y = G.H[HOUR_CX] - 14;
+    sands.length = 0;
+    spawnSandKick(HOUR_CX, G.p.y, 2);
+    tickSands(STEP);
+    ok('腰沙 kick no dmg', G.p.hp === 100, G.p.hp);
+    sands.length = 0;
+    G.sandKickT = 0;
+    const wk = kickSandWalk(G.p);
+    ok('腰沙 walk kick', REDUCE ? wk === 0 : (wk >= SAND_KICK_MIN && wk <= SAND_KICK_MAX), wk);
+    const wk2 = kickSandWalk(G.p);
+    ok('腰沙 walk cooldown', wk2 === 0);
+    G.sandKickT = 0;
+    sands.length = 0;
+    ok('腰沙 shore no kick', kickSandWalk({ x: HOUR_PX, y: G.H[HOUR_PX] - 14 }) === 0 && sands.length === 0);
+    ok('腰沙 shoulder no kick', kickSandWalk({ x: HOUR_L_SH, y: G.H[HOUR_L_SH] - 14 }) === 0 && sands.length === 0);
+    sands.length = 0;
+    G.wind = 8;
+    const sBurst = spawnSandBurst(HOUR_CX, G.H[HOUR_CX]);
+    ok('腰沙 burst 4-7', REDUCE ? sBurst === 0 : (sBurst >= SAND_BURST_MIN && sBurst <= SAND_BURST_MAX && sands.length === sBurst), sBurst);
+    if (!REDUCE && sands.length) {
+      ok('腰沙 burst GRAV', sands[0].g === GRAV && sands[0].idle === false && sands[0].life === SAND_LIFE && sands[0].rgb === SAND_RGB);
+      const svx0 = sands[0].vx;
+      const svy0 = sands[0].vy;
+      tickSands(STEP);
+      ok('腰沙 burst no wind', Math.abs(sands[0].vx - svx0) < 1e-9, sands[0].vx);
+      ok('腰沙 burst gravity', sands[0].vy > svy0 + GRAV * STEP * 0.9, Math.round(sands[0].vy - svy0));
+    } else {
+      ok('腰沙 burst GRAV', REDUCE);
+      ok('腰沙 burst no wind', REDUCE);
+      ok('腰沙 burst gravity', REDUCE);
+    }
+    G.wind = 0;
+    G.p.hp = 100;
+    sands.length = 0;
+    spawnSandBurst(HOUR_CX, G.p.y, 6);
+    tickSands(STEP);
+    ok('腰沙 burst no dmg', G.p.hp === 100, G.p.hp);
+    sands.length = 0;
+    const shSand = spawnSandBurst(HOUR_L_SH, HOUR_SHOULDER_Y, 7);
+    ok('腰沙 shoulder skip', shSand === 0 && sands.length === 0, shSand);
+    ok('腰沙 shoulder is stone', isHourShoulderX(HOUR_L_SH) === true && isHourWaistX(HOUR_L_SH) === false);
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+    sands.length = 0;
+    ok('plain skip 腰沙', wantSand() === false && spawnSandBurst(400, G.H[400], 6) === 0 && sands.length === 0);
+    G.mapId = 'moon';
+    G.H = buildHeight('moon');
+    ok('月池 skip 腰沙', wantSand() === false && spawnSandBurst(MOON_CX, G.H[MOON_CX], 6) === 0);
+    G.mapId = 'ring';
+    G.H = buildHeight('ring');
+    sands.length = 0;
+    dusts.length = 0;
+    ok('环坑 skip 腰沙', wantSand() === false && spawnSandBurst(RING_CX, G.H[RING_CX], 6) === 0 && sands.length === 0);
+    ok('坑尘 still ring-only after 腰沙', DUST_NAME === '坑尘' && wantDust() === !REDUCE);
+    G.mapId = 'hour';
+    G.H = buildHeight('hour');
+    sands.length = 0;
+    dusts.length = 0;
+    ok('砂漏 skip 坑尘 after 腰沙', wantDust() === false && spawnDustBurst(HOUR_CX, G.H[HOUR_CX], 8) === 0 && dusts.length === 0);
+    ok('reduce skip 腰沙', wantSand() === (!REDUCE && G.mapId === 'hour'));
+    ok('maps 23 after 腰沙', MAP_IDS.length === 23 && MAP_NAME.hour === '砂漏' && MAP_IDS[22] === 'hour' && MAP_NAME.ring === '环坑');
+    ok('CHARGE_T still 2 after 腰沙', CHARGE_T === 2 && TAP_POW === 12);
+    ok('g vk v415', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('plus still additive after 腰沙', Math.abs(bagPlusMul(plusU) - 2.1) < 1e-9);
+    ok('plus still stack after 腰沙', BAG_P1 === 0.10 && BAG_P2 === 0.20 && BAG_P3 === 0.30 && BAG_P5 === 0.50);
+    fireBagU({ x3: true, ang: 65, power: 70, wep: 0 });
+    ok('×3 3 shells still after 腰沙', G.shots && G.shots.length === 3 && (!G.queue || G.queue.length === 0));
+    ok('×2 ×3 exclusive still after 腰沙', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3');
+    ok('蓄条 still after 腰沙', CHARGE_BAR_NAME === '蓄条' && CHARGE_T === 2);
+    ok('坑尘 still after 腰沙', DUST_NAME === '坑尘' && DUST_BURST_MIN === 6 && DUST_BURST_MAX === 10);
+    ok('落顶 still after 腰沙', FALL_NAME === '落顶' && wantFallChips() === false);
+    ok('袋火 still after 腰沙', BAG_FIRE_NAME === '袋火' && BAG_TINT.x3 === '#dc143c');
+    ok('金匣袋 still after 腰沙', GOLD_BAG_NAME === '金匣袋' && GOLD_BAG_P === 0.40 && maybeBagCrate('gold') === 'gold');
+    ok('堂袋 hud still after 腰沙', bagStackReadout(x2p5) === '2发×1.35' && bagStackReadout(x3u) === '3发×0.60');
+    ok('stack math still after 腰沙', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_KEYS.length === 7);
+    ok('no 9th wep after 腰沙', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     }
 
     }
