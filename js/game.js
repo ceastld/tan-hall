@@ -64,6 +64,8 @@
   const CRATE_GOLD_RAGE = 28;
   const CRATE_WALK = 36;
   const BAG_NAME = { xun: '巽符', chen: '沉符', zhong: '重石', boot: '轻靴', ward: '护符', heal: '回春', keen: '锐角' };
+  const BAG_SHORT = { xun: '巽', chen: '沉', zhong: '重', boot: '轻', ward: '护', heal: '回', keen: '锐' };
+  const BAG_TINT = { xun: '#5ff6ff', chen: '#ff79d0', zhong: '#e2b46a', boot: '#5dffd2', ward: '#ffe36b', heal: '#5dffb2', keen: '#ffd08a' };
   const BAG_KEYS = ['xun', 'chen', 'zhong', 'boot', 'ward', 'heal', 'keen'];
   const BAG_START = 2;
   const BAG_DRILL = 3;
@@ -391,6 +393,7 @@
   const windNum = el('wind-num');
   const angLabel = el('ang-label');
   const powLabel = el('pow-label');
+  const bagAimTag = el('bag-aim-tag');
   const walkLabel = el('walk-label');
   const comboEl = el('combo-label');
   const hpPN = el('hp-p-n');
@@ -874,6 +877,36 @@
   function bagArmed(u, id) {
     return !!(u && u.armed && u.armed[id] && u.bag && (u.bag[id] | 0) > 0);
   }
+  function anyBagArmed(u) {
+    if (!u) return false;
+    for (let i = 0; i < BAG_KEYS.length; i++) {
+      const k = BAG_KEYS[i];
+      if (k !== 'heal' && bagArmed(u, k)) return true;
+    }
+    return false;
+  }
+  function bagChipParts(u) {
+    const parts = [];
+    if (!u) return parts;
+    for (let i = 0; i < BAG_KEYS.length; i++) {
+      const k = BAG_KEYS[i];
+      if (k === 'heal') continue;
+      if (bagArmed(u, k)) parts.push(k);
+    }
+    return parts;
+  }
+  function bagChipText(u) {
+    return bagChipParts(u).map(function (k) { return BAG_SHORT[k]; }).join('+');
+  }
+  function shakeBagSlot(id) {
+    if (!itemDock || !id) return;
+    const btn = itemDock.querySelector('[data-bag="' + id + '"]');
+    if (!btn) return;
+    btn.classList.remove('shake');
+    void btn.offsetWidth;
+    btn.classList.add('shake');
+    setTimeout(function () { btn.classList.remove('shake'); }, 130);
+  }
   function bagIdFromKey(e) {
     if (!e) return null;
     if (e.code && BAG_CODE_MAP[e.code]) return BAG_CODE_MAP[e.code];
@@ -1018,9 +1051,13 @@
     const u = curUnit();
     if (!u || u.hp <= 0) return false;
     ensureBag(u);
-    if (id === 'heal') return useHeal(u);
     if (!BAG_NAME[id]) return false;
-    if ((u.bag[id] | 0) <= 0) return false;
+    if ((u.bag[id] | 0) <= 0) {
+      shakeBagSlot(id);
+      if (id === 'heal' && isHuman(u)) toastDeny('空袋');
+      return false;
+    }
+    if (id === 'heal') return useHeal(u);
     const on = !u.armed[id];
     u.armed[id] = on;
     if (id === 'boot') applyBootWalk(u, on);
@@ -2811,7 +2848,7 @@
   };
 
 
-  function toast(msg, warn, gold) {
+  function toast(msg, warn, gold, tint) {
     const tiny = gold === 'tiny';
     G.toastT = tiny ? 1.15 : 1.4;
     toastTok += 1;
@@ -2819,9 +2856,13 @@
     toastEl.textContent = msg;
     toastEl.classList.toggle('warn', !!warn);
     const ice = gold === 'ice';
+    const bagTint = tint && !warn ? tint : '';
     toastEl.classList.toggle('ice', ice && !warn);
-    toastEl.classList.toggle('gold', !!gold && !ice && !warn && !tiny);
+    toastEl.classList.toggle('gold', !!gold && !ice && !warn && !tiny && !bagTint);
     toastEl.classList.toggle('tiny', tiny);
+    toastEl.classList.toggle('bag-tint', !!bagTint);
+    if (bagTint) toastEl.style.setProperty('--bag-tint', bagTint);
+    else toastEl.style.removeProperty('--bag-tint');
     toastEl.classList.remove('pass');
     toastEl.classList.remove('hidden');
   }
@@ -2836,6 +2877,8 @@
     toastEl.classList.remove('ice');
     toastEl.classList.toggle('gold', !mag);
     toastEl.classList.remove('tiny');
+    toastEl.classList.remove('bag-tint');
+    toastEl.style.removeProperty('--bag-tint');
     toastEl.classList.add('pass');
     toastEl.classList.remove('hidden');
   }
@@ -3093,6 +3136,12 @@
     const u = curUnit() || G.p;
     if (angLabel) angLabel.textContent = '角 ' + Math.round((u && u.ang) || 65) + '°';
     if (powLabel) powLabel.textContent = '力 ' + Math.round(G.power);
+    if (bagAimTag) {
+      const aiming = G.mode === 'play' && (G.phase === 'aim' || G.phase === 'charge');
+      const showBag = aiming && anyBagArmed(u);
+      bagAimTag.classList.toggle('gone', !showBag);
+      bagAimTag.setAttribute('aria-hidden', showBag ? 'false' : 'true');
+    }
     const stam = u && u.stam != null ? u.stam : G.stam;
     if (walkLabel) walkLabel.textContent = '体 ' + Math.max(0, Math.round(stam));
     if (rageLabel) rageLabel.textContent = '怒 ' + Math.max(0, Math.round((u && u.rage) || 0));
@@ -3198,6 +3247,22 @@
       if (badge) badge.textContent = String(n);
       btn.classList.toggle('empty', n <= 0);
       btn.classList.toggle('armed', !!(actor && actor.armed && actor.armed[k] && n > 0 && k !== 'heal'));
+    }
+    const chips = el('bag-chips');
+    if (chips) {
+      const parts = play ? bagChipParts(actor) : [];
+      const sig = parts.join('+');
+      chips.classList.toggle('gone', !parts.length);
+      chips.setAttribute('aria-hidden', parts.length ? 'false' : 'true');
+      if (chips.getAttribute('data-sig') !== sig) {
+        chips.setAttribute('data-sig', sig);
+        let html = '';
+        for (let i = 0; i < parts.length; i++) {
+          if (i) html += '<span class="bag-chip-join">+</span>';
+          html += '<span class="bag-chip bag-chip-' + parts[i] + '">' + BAG_SHORT[parts[i]] + '</span>';
+        }
+        chips.innerHTML = html;
+      }
     }
   }
 
@@ -4267,7 +4332,7 @@
       toast(CRATE_NAME + ' · 术', false, false);
       floatText(c.x, c.y - 14, got.name || '术', HOT, false);
     } else if (got && got.kind === 'bag') {
-      toast(CRATE_NAME + ' · ' + (got.name || '袋'), false, true);
+      toast(got.toast || (CRATE_NAME + ' · ' + (got.name || '袋')), false, false, BAG_TINT[got.id]);
       floatText(c.x, c.y - 14, got.name || '袋', GOLD, false);
     } else {
       toast(CRATE_NAME, false, false);
@@ -10156,6 +10221,7 @@
     const bagC = { items: freshItems(), bag: freshBag(), rage: 10, stake: false };
     const gb = grantCrate(bagC, 'bag');
     ok('crate grant 袋', gb && gb.kind === 'bag' && BAG_NAME[gb.id] && bagC.bag[gb.id] === BAG_START + 1);
+    ok('crate bag toast 堂匣 · 名', gb && gb.toast === CRATE_NAME + ' · ' + BAG_NAME[gb.id]);
     const bagGold2 = grantCrate({ items: freshItems(), bag: freshBag(), rage: 40, stake: false }, 'gold');
     ok('crate gold still 金匣', bagGold2 && bagGold2.kind === 'gold' && bagGold2.toast === '金匣');
     ok('hotkeys map 7', bagIdFromKey({ key: '-', code: 'Minus' }) === 'xun' && bagIdFromKey({ key: '=', code: 'Equal' }) === 'chen' && bagIdFromKey({ key: '[', code: 'BracketLeft' }) === 'zhong' && bagIdFromKey({ key: ']', code: 'BracketRight' }) === 'boot' && bagIdFromKey({ key: '\\', code: 'Backslash' }) === 'ward' && bagIdFromKey({ key: ';', code: 'Semicolon' }) === 'heal' && bagIdFromKey({ key: "'", code: 'Quote' }) === 'keen');
@@ -10176,6 +10242,16 @@
     ok('井口 still after 堂袋', MAP_NAME.well === '井口' && MAP_IDS[18] === 'well');
     ok('no banned bag words', BAG_NAME.xun.indexOf('传送') < 0 && BAG_NAME.boot.indexOf('飞行') < 0 && BAG_NAME.keen.indexOf('三叉戟') < 0 && BAG_NAME.ward.indexOf('激怒') < 0 && BAG_NAME.heal.indexOf('天使') < 0 && BAG_NAME.chen.indexOf('恶魔') < 0);
     ok('g vk v36', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('bag short 巽沉重', BAG_SHORT.xun === '巽' && BAG_SHORT.chen === '沉' && BAG_SHORT.zhong === '重' && BAG_SHORT.boot === '轻' && BAG_SHORT.ward === '护' && BAG_SHORT.heal === '回' && BAG_SHORT.keen === '锐');
+    const chipU = { bag: { xun: 1, chen: 1, zhong: 1, boot: 0, ward: 0, heal: 0, keen: 0 }, armed: { xun: true, chen: true, zhong: true, boot: false, ward: false, heal: false, keen: false } };
+    ok('chip 巽+沉+重', bagChipText(chipU) === '巽+沉+重');
+    ok('any armed true', anyBagArmed(chipU) === true);
+    const idleU = { bag: freshBag(), armed: freshArmed() };
+    ok('any armed false', anyBagArmed(idleU) === false);
+    ok('bag tints 7', !!BAG_TINT.xun && !!BAG_TINT.chen && !!BAG_TINT.zhong && !!BAG_TINT.boot && !!BAG_TINT.ward && !!BAG_TINT.heal && !!BAG_TINT.keen);
+    ok('no extra bag items v37', BAG_KEYS.length === 7 && WEPS.length === 8);
+    ok('maps 19 after polish', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
+    ok('g vk v37', GRAV === 260 && VK === 420 && WIND_K === 2.05);
 
     G.mapId = 'plain';
     G.H = buildHeight('plain');
