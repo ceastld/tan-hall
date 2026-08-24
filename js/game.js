@@ -422,6 +422,11 @@
   const FALL_ARM = 0.55;
   const FALL_DMG = 3;
   const FALL_LIFE = 1.6;
+  const CHIP_NAME = '脊屑';
+  const CHIP_BURST_MIN = 4;
+  const CHIP_BURST_MAX = 8;
+  const CHIP_LIFE = 0.45;
+  const CHIP_R = 1.8;
   const STORM_NAME = '雷泽';
   const STORM_P = 0.35;
   const STORM_MIN = 8;
@@ -712,6 +717,7 @@
   const falls = [];
   const dusts = [];
   const sands = [];
+  const chips = [];
 
   let hidden = false;
   let addTok = 0;
@@ -2251,6 +2257,67 @@
       g.fillStyle = rgba(q.rgb || SAND_RGB, a);
       g.beginPath();
       g.arc(q.x, q.y, q.r || SAND_R, 0, TAU);
+      g.fill();
+    }
+  }
+
+  function wantChips() {
+    return !REDUCE && G.mapId === 'ridge';
+  }
+
+  function wantChipBurst(x) {
+    return wantChips() && isRidgeCrestX(x);
+  }
+
+  function spawnChipBits(cx, cy, n) {
+    if (!wantChips()) return 0;
+    const count = n == null ? irand(CHIP_BURST_MIN, CHIP_BURST_MAX) : clamp(n | 0, CHIP_BURST_MIN, CHIP_BURST_MAX);
+    const y0 = cy == null ? groundAt(cx) : cy;
+    for (let i = 0; i < count; i++) {
+      chips.push({
+        x: cx + rand(-14, 14),
+        y: y0 + rand(-8, 4),
+        vx: rand(-70, 70),
+        vy: rand(-110, -16),
+        g: GRAV,
+        r: rand(1.3, 2.6),
+        rgb: STONE,
+        life: CHIP_LIFE,
+        max: CHIP_LIFE
+      });
+    }
+    return count;
+  }
+
+  function spawnChipBurst(cx, cy, n) {
+    if (!wantChipBurst(cx)) return 0;
+    return spawnChipBits(cx, cy, n);
+  }
+
+  function tickChips(dt) {
+    if (!chips.length) return;
+    if (!wantChips()) {
+      chips.length = 0;
+      return;
+    }
+    for (let i = chips.length - 1; i >= 0; i--) {
+      const q = chips[i];
+      q.vy += GRAV * dt;
+      q.x += q.vx * dt;
+      q.y += q.vy * dt;
+      q.life -= dt;
+      if (q.life <= 0 || q.y > VH + 12) chips.splice(i, 1);
+    }
+  }
+
+  function drawChips(g) {
+    if (REDUCE || !chips.length) return;
+    for (let i = 0; i < chips.length; i++) {
+      const q = chips[i];
+      const a = clamp(q.life / (q.max || CHIP_LIFE), 0, 0.92);
+      g.fillStyle = rgba(q.rgb || STONE, a);
+      g.beginPath();
+      g.arc(q.x, q.y, q.r || CHIP_R, 0, TAU);
       g.fill();
     }
   }
@@ -5810,6 +5877,7 @@
     crater = Math.round(hourR(crater, x));
     crater = Math.round(ridgeR(crater, x));
     crater = (crater || 0) + (wep.craterAdd || 0);
+    const crestChip = wantChipBurst(x);
     let hit = !!fromHit;
     if (wep.id === 4) {
       const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : (isMirrorStoneX(x) ? MIRROR_CRATER : (isWellLipX(x) ? WELL_LIP_CRATER : (isWellMudX(x) ? WELL_MUD_CRATER : ((G.mapId === 'cave' && inCave(x, y)) ? CAVE_CRATER : (isTeethPeakX(x) ? TEETH_CRATER : (isRingRimX(x) ? RING_CRATER : (isHourShoulderX(x) ? HOUR_CRATER : (isRidgeCrestX(x) ? RIDGE_CRATER : 1))))))))));
@@ -5856,6 +5924,7 @@
     dirtBurst(x, y, hit ? 14 : 20);
     if (wantDustBurst(x)) spawnDustBurst(x, y);
     if (wantSandBurst(x)) spawnSandBurst(x, y);
+    if (crestChip) spawnChipBits(x, y);
     audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y, !!fromHit);
     if (wasUlt && (!shot || (shot.lead && !shot.extra) || !G.dual)) {
@@ -7519,6 +7588,7 @@
     falls.length = 0;
     dusts.length = 0;
     sands.length = 0;
+    chips.length = 0;
     G.sandKickT = 0;
     terrainDirty = true;
     G.p = makeUnit('p', { id: 'p', name: '岚丸', delay: 0, ord: 0, slot: 0 });
@@ -7576,6 +7646,7 @@
     G.fallBlast = 0;
     G.fallAte = null;
     falls.length = 0;
+    chips.length = 0;
     seedIdleDust();
     seedIdleSand();
     G.ctrlSide = null;
@@ -7742,6 +7813,7 @@
     }
     tickDusts(dt);
     tickSands(dt);
+    tickChips(dt);
   }
 
   function landDust(x, y) {
@@ -9829,6 +9901,7 @@
     drawFalls(ctx);
     drawDusts(ctx);
     drawSands(ctx);
+    drawChips(ctx);
     drawGust(ctx);
     drawWindMotes(ctx);
     if (G.sudden) {
@@ -13348,6 +13421,7 @@
     falls.length = 0;
     dusts.length = 0;
     sands.length = 0;
+    chips.length = 0;
     ok('折脊 skip 坑尘', wantDust() === false && spawnDustBurst(RIDGE_CX, G.H[RIDGE_CX], 8) === 0 && dusts.length === 0);
     ok('折脊 skip 腰沙', wantSand() === false && spawnSandBurst(RIDGE_CX, G.H[RIDGE_CX], 6) === 0 && sands.length === 0);
     ok('落顶 still after 折脊', FALL_NAME === '落顶' && wantFallChips() === false);
@@ -13381,6 +13455,95 @@
     ok('plus still stack after 折脊', BAG_P1 === 0.10 && BAG_P2 === 0.20 && BAG_P3 === 0.30 && BAG_P5 === 0.50);
     ok('×2 ×3 exclusive still after 折脊', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3');
     ok('stack math still after 折脊', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
+
+    ok('脊屑 name', CHIP_NAME === '脊屑' && CHIP_BURST_MIN === 4 && CHIP_BURST_MAX === 8 && CHIP_LIFE === 0.45);
+    ok('脊屑 no banned', CHIP_NAME.indexOf('传送') < 0 && CHIP_NAME.indexOf('飞行') < 0 && CHIP_NAME.indexOf('三叉戟') < 0 && CHIP_NAME.indexOf('激怒') < 0 && CHIP_NAME.indexOf('天使') < 0 && CHIP_NAME.indexOf('恶魔') < 0 && CHIP_NAME.indexOf('落顶') < 0 && CHIP_NAME.indexOf('坑尘') < 0 && CHIP_NAME.indexOf('腰沙') < 0);
+    ok('脊屑 not a gun', WEPS.length === 8 && WEPS.every(function (w) { return w.name !== CHIP_NAME; }) && CHIP_NAME !== FALL_NAME && CHIP_NAME !== DUST_NAME && CHIP_NAME !== SAND_NAME);
+    ok('脊屑 only ridge', CHIP_NAME === '脊屑' && MAP_NAME.ridge === '折脊' && MAP_IDS[23] === 'ridge');
+    G.H = buildHeight('ridge');
+    G.mapId = 'ridge';
+    G.kind = 'hall';
+    G.mode = 'play';
+    G.p2 = null; G.f2 = null;
+    G.p = { x: RIDGE_PX, y: G.H[RIDGE_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: RIDGE_FX, y: G.H[RIDGE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    chips.length = 0;
+    dusts.length = 0;
+    sands.length = 0;
+    falls.length = 0;
+    G.wind = 8;
+    const chipN = spawnChipBurst(RIDGE_CX, G.H[RIDGE_CX]);
+    ok('脊屑 burst 4-8', REDUCE ? chipN === 0 : (chipN >= CHIP_BURST_MIN && chipN <= CHIP_BURST_MAX && chips.length === chipN), chipN);
+    if (!REDUCE && chips.length) {
+      ok('脊屑 burst GRAV', chips[0].g === GRAV && chips[0].life === CHIP_LIFE && chips[0].rgb === STONE);
+      const cvx0 = chips[0].vx;
+      const cvy0 = chips[0].vy;
+      tickChips(STEP);
+      ok('脊屑 no wind', Math.abs(chips[0].vx - cvx0) < 1e-9, chips[0].vx);
+      ok('脊屑 gravity', chips[0].vy > cvy0 + GRAV * STEP * 0.9, Math.round(chips[0].vy - cvy0));
+    } else {
+      ok('脊屑 burst GRAV', REDUCE);
+      ok('脊屑 no wind', REDUCE);
+      ok('脊屑 gravity', REDUCE);
+    }
+    G.wind = 0;
+    G.p.hp = 100;
+    G.p.x = RIDGE_CX;
+    G.p.y = G.H[RIDGE_CX] - 14;
+    chips.length = 0;
+    spawnChipBurst(RIDGE_CX, G.p.y, 6);
+    tickChips(STEP);
+    ok('脊屑 burst no dmg', G.p.hp === 100, G.p.hp);
+    ok('脊屑 not 落顶', FALL_NAME === '落顶' && CHIP_NAME !== FALL_NAME && wantFallChips() === false);
+    chips.length = 0;
+    const flankChip = spawnChipBurst(RIDGE_CX - 90, G.H[RIDGE_CX - 90], 6);
+    ok('脊屑 flank skip', flankChip === 0 && chips.length === 0, flankChip);
+    ok('脊屑 flank is dirt', isRidgeFlankX(RIDGE_CX - 90) === true && isRidgeCrestX(RIDGE_CX - 90) === false);
+    chips.length = 0;
+    const shoreChip = spawnChipBurst(RIDGE_PX, G.H[RIDGE_PX], 6);
+    ok('脊屑 shore skip', shoreChip === 0 && chips.length === 0, shoreChip);
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+    chips.length = 0;
+    ok('plain skip 脊屑', wantChips() === false && spawnChipBurst(400, G.H[400], 6) === 0 && chips.length === 0);
+    G.mapId = 'cave';
+    G.H = buildHeight('cave');
+    G.cave = makeCaveRoof();
+    ok('洞顶 skip 脊屑', wantChips() === false && spawnChipBurst(480, G.H[480], 6) === 0);
+    ok('落顶 still cave-only after 脊屑', FALL_NAME === '落顶' && wantFallChips() === (!REDUCE && G.mapId === 'cave'));
+    G.mapId = 'ring';
+    G.H = buildHeight('ring');
+    G.cave = null;
+    chips.length = 0;
+    dusts.length = 0;
+    ok('环坑 skip 脊屑', wantChips() === false && spawnChipBurst(RING_CX, G.H[RING_CX], 6) === 0 && chips.length === 0);
+    ok('坑尘 still ring-only after 脊屑', DUST_NAME === '坑尘' && wantDust() === !REDUCE);
+    G.mapId = 'hour';
+    G.H = buildHeight('hour');
+    chips.length = 0;
+    sands.length = 0;
+    ok('砂漏 skip 脊屑', wantChips() === false && spawnChipBurst(HOUR_CX, G.H[HOUR_CX], 6) === 0 && chips.length === 0);
+    ok('腰沙 still hour-only after 脊屑', SAND_NAME === '腰沙' && wantSand() === !REDUCE);
+    G.mapId = 'ridge';
+    G.H = buildHeight('ridge');
+    ok('reduce skip 脊屑', wantChips() === (!REDUCE && G.mapId === 'ridge'));
+    ok('maps 24 after 脊屑', MAP_IDS.length === 24 && MAP_NAME.ridge === '折脊' && MAP_IDS[23] === 'ridge' && MAP_NAME.hour === '砂漏' && MAP_NAME.ring === '环坑');
+    ok('CHARGE_T still 2 after 脊屑', CHARGE_T === 2 && TAP_POW === 12);
+    ok('g vk v417', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('plus still additive after 脊屑', Math.abs(bagPlusMul(plusU) - 2.1) < 1e-9);
+    ok('plus still stack after 脊屑', BAG_P1 === 0.10 && BAG_P2 === 0.20 && BAG_P3 === 0.30 && BAG_P5 === 0.50);
+    fireBagU({ x3: true, ang: 65, power: 70, wep: 0 });
+    ok('×3 3 shells still after 脊屑', G.shots && G.shots.length === 3 && (!G.queue || G.queue.length === 0));
+    ok('×2 ×3 exclusive still after 脊屑', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3');
+    ok('蓄条 still after 脊屑', CHARGE_BAR_NAME === '蓄条' && CHARGE_T === 2);
+    ok('坑尘 still after 脊屑', DUST_NAME === '坑尘' && DUST_BURST_MIN === 6 && DUST_BURST_MAX === 10);
+    ok('腰沙 still after 脊屑', SAND_NAME === '腰沙' && SAND_BURST_MIN === 4 && SAND_BURST_MAX === 7);
+    ok('落顶 still after 脊屑', FALL_NAME === '落顶' && wantFallChips() === false);
+    ok('袋火 still after 脊屑', BAG_FIRE_NAME === '袋火' && BAG_TINT.x3 === '#dc143c');
+    ok('金匣袋 still after 脊屑', GOLD_BAG_NAME === '金匣袋' && GOLD_BAG_P === 0.40 && maybeBagCrate('gold') === 'gold');
+    ok('堂袋 hud still after 脊屑', bagStackReadout(x2p5) === '2发×1.35' && bagStackReadout(x3u) === '3发×0.60');
+    ok('stack math still after 脊屑', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_KEYS.length === 7);
+    ok('no 9th wep after 脊屑', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     }
 
     }
