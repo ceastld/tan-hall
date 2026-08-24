@@ -48,8 +48,8 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -107,6 +107,20 @@
   const TOWERS_FX = 774;
   const TOWERS_P2X = 366;
   const TOWERS_F2X = 594;
+  const MOON_CX = 480;
+  const MOON_RIM_Y = 246;
+  const MOON_DEPTH = 182;
+  const MOON_BOWL_HW = 250;
+  const MOON_RAD = (MOON_BOWL_HW * MOON_BOWL_HW + MOON_DEPTH * MOON_DEPTH) / (2 * MOON_DEPTH);
+  const MOON_CY = MOON_RIM_Y + MOON_DEPTH - MOON_RAD;
+  const MOON_WATER_Y = 368;
+  const MOON_POOL_Y = MOON_RIM_Y + MOON_DEPTH;
+  const MOON_PX = 174;
+  const MOON_FX = 786;
+  const MOON_P2X = 210;
+  const MOON_F2X = 750;
+  const MOON_WALK = 0.45;
+  const MOON_DMG = 3;
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
@@ -580,6 +594,42 @@
     return ARCADE_CY - Math.sqrt(inner);
   }
 
+  function moonBowlY(x) {
+    const d = x - MOON_CX;
+    const inner = MOON_RAD * MOON_RAD - d * d;
+    if (inner <= 0) return MOON_RIM_Y;
+    return MOON_CY + Math.sqrt(inner);
+  }
+
+  function isMoonRim(x) {
+    if (G.mapId !== 'moon' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    if (G.H[i] >= MOON_WATER_Y - 8) return false;
+    const d = Math.abs(i - MOON_CX);
+    return d >= MOON_BOWL_HW - 40 && d <= MOON_BOWL_HW + 90;
+  }
+
+  function inMoonWater(u) {
+    if (G.mapId !== 'moon' || !u) return false;
+    return groundAt(u.x) >= MOON_WATER_Y;
+  }
+
+  function walkSpd(u) {
+    const base = isHuman(u) ? 90 : 78;
+    return inMoonWater(u) ? base * MOON_WALK : base;
+  }
+
+  function tickMoonWater(u) {
+    if (!u || u.hp <= 0 || !inMoonWater(u)) return 0;
+    const dmg = Math.max(1, Math.round(MOON_DMG));
+    hurt(u, dmg, 'water');
+    burst(u.x, u.y + (u.r || 14), ICE, 8, 50, 0.28);
+    floatText(u.x, u.y - 26, '浸', ICE, false);
+    audio.beep(240, 0.09, 'sine', 0.03, 90);
+    return dmg;
+  }
+
   function setCamFighters() {
     cam.tx = VW * 0.5;
     cam.ty = VH * 0.5;
@@ -748,6 +798,17 @@
       towersBand(TOWERS_L_DECK, TOWERS_L_INNER, TOWERS_LEDGE_Y, 6);
       towersBand(TOWERS_R_INNER, TOWERS_R_DECK, TOWERS_LEDGE_Y, 6);
       towersBand(TOWERS_R_DECK, TOWERS_R1, TOWERS_TOP_Y, 8);
+    } else if (id === 'moon') {
+      for (let x = 0; x < VW; x++) {
+        const edge = Math.min(x, VW - 1 - x);
+        const outer = clamp((70 - edge) / 70, 0, 1);
+        let yy = MOON_RIM_Y + Math.sin(x * 0.07) * 1.6 + Math.sin(x * 0.19) * 0.7;
+        if (Math.abs(x - MOON_CX) <= MOON_BOWL_HW) {
+          yy = moonBowlY(x) + Math.sin(x * 0.11) * 1.2;
+        }
+        yy = lerp(yy, 318, outer * outer);
+        h[x] = yy;
+      }
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -769,11 +830,13 @@
     if (id === 'forge') return side === 'p' ? 148 : 812;
     if (id === 'arcade') return side === 'p' ? 140 : 820;
     if (id === 'towers') return side === 'p' ? TOWERS_PX : TOWERS_FX;
+    if (id === 'moon') return side === 'p' ? MOON_PX : MOON_FX;
     return side === 'p' ? 152 : 768;
   }
 
   function spawnAt(side, slot) {
     if (G.mapId === 'towers' && slot) return side === 'p' ? TOWERS_P2X : TOWERS_F2X;
+    if (G.mapId === 'moon' && slot) return side === 'p' ? MOON_P2X : MOON_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -1075,6 +1138,22 @@
         G.H[x] = ARCADE_VOID;
         any = true;
       }
+    }
+    if (any) terrainDirty = true;
+  }
+
+  function snapMoon(cx, r, wep) {
+    if (G.mapId !== 'moon' || !G.H || !wep) return;
+    if (wep.id !== 1) return;
+    const x0 = Math.max(0, Math.floor(cx - r - 10));
+    const x1 = Math.min(VW - 1, Math.ceil(cx + r + 10));
+    let any = false;
+    for (let x = x0; x <= x1; x++) {
+      const d = Math.abs(x - MOON_CX);
+      if (d > MOON_BOWL_HW + 90) continue;
+      if (G.H[x] >= MOON_WATER_Y - 8) continue;
+      G.H[x] = MOON_POOL_Y;
+      any = true;
     }
     if (any) terrainDirty = true;
   }
@@ -2222,6 +2301,7 @@
     if (u && u.id === 'p') G.turns += 1;
     maybeSudden();
     audio.chargeStop();
+    if (u && u.hp > 0) tickMoonWater(u);
     if (u && u.hp <= 0) {
       if (checkEnd()) return;
       if (isSquad()) {
@@ -2559,6 +2639,7 @@
         snapBridge(pop.x, pop.r, wep);
         snapForge(pop.x, pop.r);
         snapArcade(pop.x, pop.r, wep);
+        snapMoon(pop.x, pop.r, wep);
         punchCover(pop.x, pop.y, pop.r, wep);
         if (applyBlast(pop.x, pop.y, wep, owner)) hit = true;
         burst(pop.x, pop.y, hit ? HOT : DIRT, hit ? 12 : 8, 160, 0.4);
@@ -2570,6 +2651,7 @@
       snapBridge(x, crater, wep);
       snapForge(x, crater);
       snapArcade(x, crater, wep);
+      snapMoon(x, crater, wep);
       punchCover(x, y, crater, wep);
       if (wep.id === 2 && G.shot && G.shot.pierced) {
         const s = hypot(G.shot.vx, G.shot.vy) || 1;
@@ -3099,6 +3181,7 @@
       if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
       if (G.mapId === 'arcade' && liveArcade(foe.x)) return 3;
       if (G.mapId === 'towers' && isTowersLedge(foe.x)) return 3;
+      if (G.mapId === 'moon' && isMoonRim(foe.x)) return 1;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -3133,6 +3216,7 @@
     if (G.mapId === 'ruins' && (wep.id === 1 || wep.id === 4) && inWall(imp.x, imp.y)) bury += 600;
     if (G.mapId === 'forge' && isForgeCrust(imp.x) && G.H && G.H[imp.x | 0] < FORGE_VOID - 20) bury += 900;
     if (G.mapId === 'arcade' && liveArcade(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
+    if (G.mapId === 'moon' && isMoonRim(imp.x) && wep.id === 1) bury += 800;
     if (G.mapId === 'towers' && inWall(imp.x, imp.y) && (wep.id === 1 || wep.id === 4)) bury += 600;
     if (G.mapId === 'towers' && inWall(imp.x, imp.y) && wep.id === 2) bury += 500;
     score += bury;
@@ -3493,7 +3577,7 @@
       const dx = AI.walkTo - u.x;
       if (Math.abs(dx) > 2 && G.walk > 0 && u.stam > 0) {
         const dir = dx > 0 ? 1 : -1;
-        const step = Math.min(G.walk, u.stam, 78 * dt, Math.abs(dx));
+        const step = Math.min(G.walk, u.stam, walkSpd(u) * dt, Math.abs(dx));
         const lo = G.sudden ? G.safeL + 18 : 22;
         const hi = G.sudden ? G.safeR - 18 : VW - 22;
         const nx = clamp(u.x + dir * step, lo, hi);
@@ -3550,7 +3634,7 @@
       if (G.toastT <= 0.2) toast('埋了 · 飞步或影挪', true, false);
       return;
     }
-    const step = Math.min(G.walk, u.stam, 90 * dt);
+    const step = Math.min(G.walk, u.stam, walkSpd(u) * dt);
     const nx = clamp(u.x + dir * step, 22, VW - 22);
     if (wallBlocksWalk(nx, u.y, u.r)) return;
     u.x = nx;
@@ -3985,8 +4069,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -4132,6 +4216,34 @@
       for (let x = TOWERS_L_INNER; x <= TOWERS_R_INNER; x++) g.lineTo(x, H[x]);
       g.stroke();
     }
+    if (G.mapId === 'moon') {
+      const water = g.createLinearGradient(0, MOON_WATER_Y - 24, 0, VH);
+      water.addColorStop(0, 'rgba(190,232,255,0.22)');
+      water.addColorStop(0.12, 'rgba(90,170,220,0.42)');
+      water.addColorStop(0.42, 'rgba(28,80,120,0.68)');
+      water.addColorStop(1, '#0a1826');
+      g.fillStyle = water;
+      for (let x = 0; x < VW; x++) {
+        if (H[x] > MOON_WATER_Y + 1) g.fillRect(x, MOON_WATER_Y, 1, H[x] - MOON_WATER_Y);
+      }
+      g.strokeStyle = 'rgba(200,236,255,0.55)';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      let drawing = false;
+      for (let x = 0; x < VW; x++) {
+        if (H[x] <= MOON_WATER_Y + 1) {
+          if (drawing) { g.stroke(); drawing = false; }
+          continue;
+        }
+        if (!drawing) { g.beginPath(); g.moveTo(x, MOON_WATER_Y); drawing = true; }
+        else g.lineTo(x, MOON_WATER_Y);
+      }
+      if (drawing) g.stroke();
+      g.fillStyle = 'rgba(220,244,255,0.16)';
+      g.beginPath();
+      g.ellipse(MOON_CX, MOON_WATER_Y + 8, 168, 14, 0, 0, TAU);
+      g.fill();
+    }
     terrainDirty = false;
   }
 
@@ -4187,6 +4299,18 @@
       shade.addColorStop(0, 'rgba(24,16,28,0.22)');
       shade.addColorStop(1, 'rgba(24,16,28,0)');
       g.fillStyle = shade;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'moon') {
+      const glow = g.createRadialGradient(480, 70, 8, 480, 92, 220);
+      glow.addColorStop(0, 'rgba(255,244,200,0.22)');
+      glow.addColorStop(1, 'rgba(255,244,200,0)');
+      g.fillStyle = glow;
+      g.fillRect(0, 0, VW, VH);
+      const pool = g.createRadialGradient(MOON_CX, MOON_WATER_Y + 40, 20, MOON_CX, MOON_WATER_Y + 80, 280);
+      pool.addColorStop(0, 'rgba(80,180,230,0.16)');
+      pool.addColorStop(1, 'rgba(80,180,230,0)');
+      g.fillStyle = pool;
       g.fillRect(0, 0, VW, VH);
     }
     for (let i = 0; i < stars.length; i++) {
@@ -4447,6 +4571,30 @@
       g.fillStyle = 'rgba(32,22,40,' + (0.08 + 0.08 * Math.sin(t * 1.4 + i)) + ')';
       g.beginPath();
       g.ellipse(x, y, 22 + (i % 3) * 6, 6, 0, 0, TAU);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  function drawMoon(g) {
+    if (G.mapId !== 'moon') return;
+    g.save();
+    const t = G.t;
+    const wy = MOON_WATER_Y + 6 + Math.sin(t * 1.1) * 1.4;
+    g.fillStyle = 'rgba(255,244,200,0.10)';
+    g.beginPath();
+    g.ellipse(MOON_CX, wy + 10, 22, 7, 0, 0, TAU);
+    g.fill();
+    g.fillStyle = 'rgba(255,250,220,0.22)';
+    g.beginPath();
+    g.ellipse(MOON_CX, wy + 10, 11, 3.4, 0, 0, TAU);
+    g.fill();
+    for (let i = 0; i < 12; i++) {
+      const x = MOON_CX - 160 + i * 28 + Math.sin(t * 0.8 + i) * 10;
+      const y = wy + 8 + Math.sin(t * 1.3 + i * 0.6) * 4;
+      g.fillStyle = 'rgba(180,230,255,' + (0.06 + 0.08 * Math.sin(t * 1.8 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 26 + (i % 3) * 8, 5, 0, 0, TAU);
       g.fill();
     }
     g.restore();
@@ -4943,6 +5091,7 @@
     drawLava(ctx);
     drawArcade(ctx);
     drawTowers(ctx);
+    drawMoon(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -5289,7 +5438,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps eleven', MAP_IDS.length === 11 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔');
+    ok('maps twelve', MAP_IDS.length === 12 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -5499,6 +5648,58 @@
     ok('towers duo extras on ledge', isTowersLedge(tdx1) && isTowersLedge(tdr1), tdx1 + '/' + tdr1);
     ok('towers duo tops', tdx0 === TOWERS_PX && tdr0 === TOWERS_FX);
     ok('towers duo not void', !isDeathVoid(tdx0) && !isDeathVoid(tdx1) && !isDeathVoid(tdr0) && !isDeathVoid(tdr1));
+    G.H = buildHeight('moon');
+    G.mapId = 'moon';
+    ok('moon spawn', spawnX('moon', 'p') === MOON_PX && spawnX('moon', 'f') === MOON_FX);
+    ok('moon spawn on rim', G.H[MOON_PX] < MOON_WATER_Y - 40 && G.H[MOON_FX] < MOON_WATER_Y - 40, Math.round(G.H[MOON_PX]) + '/' + Math.round(G.H[MOON_FX]));
+    ok('moon rim high', G.H[MOON_PX] < 280 && G.H[MOON_FX] < 280, Math.round(G.H[MOON_PX]));
+    ok('moon pool deep', G.H[MOON_CX] > G.H[MOON_PX] + 80 && G.H[MOON_CX] >= MOON_WATER_Y, Math.round(G.H[MOON_CX]));
+    ok('moon pool wet', G.H[MOON_CX] >= MOON_WATER_Y);
+    ok('moon spawn dry', G.H[MOON_PX] < MOON_WATER_Y && G.H[MOON_FX] < MOON_WATER_Y);
+    ok('moon no void', !isDeathVoid(MOON_PX) && !isDeathVoid(MOON_FX) && !isDeathVoid(MOON_CX));
+    ok('moon walk 0.45', MOON_WALK === 0.45 && MOON_DMG === 3);
+    ok('moon rim flag', isMoonRim(MOON_PX) && isMoonRim(MOON_FX) && !isMoonRim(MOON_CX));
+    const mpx = spawnX('moon', 'p');
+    const mpy = G.H[mpx | 0] - UNIT_R;
+    const mth65 = 65 * Math.PI / 180;
+    const mth90 = 90 * Math.PI / 180;
+    const ms65 = traceShot(mpx + Math.cos(mth65) * 18, mpy - 4 - Math.sin(mth65) * 18, 65, 70, 0, WEPS[0], G.H, null);
+    const ms90 = traceShot(mpx + Math.cos(mth90) * 18, mpy - 4 - Math.sin(mth90) * 18, 90, 95, 0, WEPS[0], G.H, null);
+    ok('moon 65 rim to rim', ms65.x > MOON_CX && Math.abs(ms65.x - MOON_FX) < 90, Math.round(ms65.x));
+    ok('moon 90 dunk', Math.abs(ms90.x - mpx) < 50, Math.round(ms90.x - mpx));
+    const rimX = MOON_PX;
+    ok('moon rim before', G.H[rimX] < MOON_WATER_Y - 40);
+    snapMoon(rimX, 48, WEPS[1]);
+    ok('moon 高爆 collapse', G.H[rimX] >= MOON_WATER_Y, Math.round(G.H[rimX]));
+    ok('moon collapse is pool', G.H[rimX] >= MOON_POOL_Y - 4);
+    G.H = buildHeight('moon');
+    G.mapId = 'moon';
+    snapMoon(MOON_PX, 30, WEPS[0]);
+    ok('moon 普通 no collapse', G.H[MOON_PX] < MOON_WATER_Y - 40, Math.round(G.H[MOON_PX]));
+    snapMoon(MOON_FX, 22, WEPS[3]);
+    ok('moon 三裂 no collapse', G.H[MOON_FX] < MOON_WATER_Y - 40, Math.round(G.H[MOON_FX]));
+    G.H = buildHeight('moon');
+    G.mapId = 'moon';
+    G.kind = 'hall';
+    const wet = { x: MOON_CX, y: G.H[MOON_CX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    const dry = { x: MOON_PX, y: G.H[MOON_PX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    ok('moon in water', inMoonWater(wet) === true && inMoonWater(dry) === false);
+    ok('moon walk slow', Math.abs(walkSpd(wet) - 90 * MOON_WALK) < 0.01, walkSpd(wet));
+    ok('moon walk dry full', Math.abs(walkSpd(dry) - 78) < 0.01, walkSpd(dry));
+    tickMoonWater(wet);
+    ok('moon turn dmg 3', wet.hp === 97, wet.hp);
+    tickMoonWater(dry);
+    ok('moon dry no dmg', dry.hp === 100);
+    G.kind = 'duo';
+    const mdx0 = spawnAt('p', 0);
+    const mdx1 = spawnAt('p', 1);
+    const mdr0 = spawnAt('f', 0);
+    const mdr1 = spawnAt('f', 1);
+    ok('moon duo extras on rim', isMoonRim(mdx1) && isMoonRim(mdr1), mdx1 + '/' + mdr1);
+    ok('moon duo tops', mdx0 === MOON_PX && mdr0 === MOON_FX);
+    ok('moon duo extras along', Math.abs(mdx1 - mdx0) >= 20 && Math.abs(mdx1 - mdx0) <= 50, Math.round(Math.abs(mdx1 - mdx0)));
+    ok('moon duo extras dry', G.H[mdx1 | 0] < MOON_WATER_Y && G.H[mdr1 | 0] < MOON_WATER_Y);
+    ok('moon duo not void', !isDeathVoid(mdx0) && !isDeathVoid(mdx1) && !isDeathVoid(mdr0) && !isDeathVoid(mdr1));
     G.kind = 'hall';
     G.mapId = 'plain';
     G.walls = [];
@@ -5726,7 +5927,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 11', MAP_IDS.length === 11 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('towers') === 10);
+    ok('随图 pool 12', MAP_IDS.length === 12 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -5921,6 +6122,9 @@
     ok('hud 烬 · 中', aiHud() === '烬 · 中');
     ok('g vk v18', GRAV === 260 && VK === 420);
     ok('assist still 中 after ai', G.assist === 2 && ASSIST_NAME[2] === '中');
+    ok('g vk v19', GRAV === 260 && VK === 420);
+    ok('月池 name locked', MAP_NAME.moon === '月池' && MAP_IDS[11] === 'moon');
+    ok('no banned moon', MAP_NAME.moon.indexOf('传送') < 0 && MAP_NAME.moon.indexOf('飞行') < 0);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
