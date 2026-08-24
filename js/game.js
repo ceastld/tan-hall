@@ -30,6 +30,9 @@
   const MINI_W = 160;
   const MINI_H = 48;
   const ASSIST_NAME = ['关', '弱', '中', '强'];
+  const AI_NAME = ['易', '中', '狠'];
+  const AI_EASY_ITEM_P = 0.18;
+  const AI_EASY_HP_ULT = 30;
   const TABLE65 = [0, 20, 28, 34, 39, 44, 48, 52, 55, 59, 62, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88];
   const ITEM_MAX = { leap: 2, warp: 1, neon: 2, drum: 1, nixi: 1, veil: 1 };
   const ITEM_COST = { leap: 35, warp: 25, neon: 0, drum: 0, nixi: 15, veil: 20 };
@@ -236,6 +239,8 @@
   const dt65 = el('dt-65');
   const dt90 = el('dt-90');
   const drillWindEl = el('drill-wind');
+  const aiTierEl = el('ai-tier');
+  const aiLabel = el('ai-label');
   const aimHintEl = el('aim-hint');
   const timeLabel = el('time-label');
   const nextWindEl = el('next-wind');
@@ -288,6 +293,7 @@
     ruler: true,
     mini: true,
     assist: 2,
+    ai: 1,
     drillWind: 'rand',
     nextWind: null,
     teaseWind: false,
@@ -1389,10 +1395,12 @@
       if (ovStart) ovStart.classList.remove('gone');
       if (ovEnd) ovEnd.classList.add('gone');
       if (ovMaps) ovMaps.style.display = '';
+      if (aiTierEl) aiTierEl.classList.remove('gone');
     } else {
       if (ovStart) ovStart.classList.add('gone');
       if (ovEnd) ovEnd.classList.remove('gone');
       if (ovMaps) ovMaps.style.display = 'none';
+      if (aiTierEl) aiTierEl.classList.add('gone');
     }
   }
 
@@ -1425,6 +1433,9 @@
         G.drillWind = o.drillWind;
       }
       G.coached = !!o.coached;
+      const ai = parseInt(o.ai, 10);
+      if (ai === 0 || ai === 1 || ai === 2) G.ai = ai;
+      else G.ai = 1;
     } catch (err) { /* */ }
   }
 
@@ -1443,7 +1454,8 @@
         mini: G.mini !== false,
         assist: clamp(G.assist | 0, 0, 3),
         drillWind: G.drillWind || 'rand',
-        coached: !!G.coached
+        coached: !!G.coached,
+        ai: clamp(G.ai | 0, 0, 2)
       }));
     } catch (err) { /* */ }
   }
@@ -1571,6 +1583,11 @@
       }
     }
     if (mapLabel) mapLabel.textContent = MAP_NAME[G.mapId] || '平原';
+    if (aiLabel) {
+      const noAi = G.mode === 'play' && (G.kind === 'drill' || G.kind === 'seat' || isQuad());
+      aiLabel.textContent = aiHud();
+      aiLabel.classList.toggle('gone', !!noAi);
+    }
     if (windArr) windArr.textContent = G.wind > 0 ? '→' : G.wind < 0 ? '←' : '·';
     if (windNum) windNum.textContent = String(Math.abs(G.wind | 0));
     else if (windLabel) windLabel.textContent = '风 ' + windText();
@@ -1617,6 +1634,7 @@
     }
     syncItems();
     syncAssist();
+    syncAiTier();
     syncDrillHud();
     if (comboEl) {
       if (G.combo >= 2 && G.mode === 'play') {
@@ -1680,6 +1698,62 @@
     for (let i = 0; i < btns.length; i++) {
       btns[i].classList.toggle('on', btns[i].getAttribute('data-dw') === G.drillWind);
     }
+  }
+
+  function syncAiTier() {
+    if (!aiTierEl) return;
+    const t = String(aiTier());
+    const btns = aiTierEl.querySelectorAll('button');
+    for (let i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('on', btns[i].getAttribute('data-ai') === t);
+    }
+  }
+
+  function setAi(n) {
+    G.ai = clamp(n | 0, 0, 2);
+    saveBest();
+    syncAiTier();
+    syncHud();
+    toast('烬丸 · ' + aiName(), false, G.ai >= 1);
+  }
+
+  function aiTier() { return clamp(G.ai | 0, 0, 2); }
+  function aiEasy() { return aiTier() === 0; }
+  function aiHard() { return aiTier() === 2; }
+  function aiName() { return AI_NAME[aiTier()]; }
+  function aiHud() { return '烬 · ' + aiName(); }
+  function aiJitterBase() {
+    if (aiEasy()) return { ang: 8, pow: 6 };
+    if (aiHard()) return { ang: 2, pow: 2 };
+    return G.kind === 'core' ? { ang: 1.5, pow: 2 } : { ang: 3, pow: 4 };
+  }
+  function aiMayItem(force) {
+    if (force) return true;
+    if (aiEasy()) return Math.random() < AI_EASY_ITEM_P;
+    return true;
+  }
+  function aiWantUlt(from, score, rageReady) {
+    if (!from) return false;
+    const rage = rageReady != null ? rageReady : (from.rage || 0);
+    if (rage < 100) return false;
+    if (aiEasy()) return (from.hp || 0) < AI_EASY_HP_ULT && score >= 5000;
+    if (aiHard()) return score >= 1500;
+    return score >= 5000;
+  }
+  function delayNext(from, wepId, ult) {
+    if (!isDuo() || !from) return null;
+    const extra = delayCost(wepId, !!ult, false);
+    const live = liveActors();
+    if (!live.length) return null;
+    return sortByDelay(live, from, extra)[0] || null;
+  }
+  function delayKeepsTurn(from, wepId, ult) {
+    const n = delayNext(from, wepId, ult);
+    return !!(n && n === from);
+  }
+  function delayKeepsSide(from, wepId, ult) {
+    const n = delayNext(from, wepId, ult);
+    return !!(n && n.side === from.side);
   }
 
   function assistName() {
@@ -2822,13 +2896,15 @@
   function aiWantNixi(from, score) {
     if (!from || !from.items || (from.items.nixi | 0) <= 0) return false;
     if ((from.stam || 0) < ITEM_COST.nixi) return false;
-    if (Math.abs(G.wind) < NIXI_WIND) return false;
-    if (score >= NIXI_MISS) return false;
+    const needWind = aiHard() ? 2 : NIXI_WIND;
+    if (Math.abs(G.wind) < needWind) return false;
+    if (!aiHard() && score >= NIXI_MISS) return false;
     const old = G.wind;
     G.wind = -old;
     const rev = solveAI(from).score;
     G.wind = old;
-    return rev > score + 400;
+    const gain = aiHard() ? 120 : 400;
+    return rev > score + gain;
   }
 
   function veilCovering(x, y) {
@@ -2903,12 +2979,15 @@
   }
 
   function aiWantVeil(from) {
+    if (aiEasy()) return false;
     if (!from || !from.items || (from.items.veil | 0) <= 0) return false;
     if ((from.stam || 0) < ITEM_COST.veil) return false;
-    if ((from.hp || 0) >= VEIL_HP) return false;
     const foe = otherUnit(from);
     if (!foe) return false;
-    return Math.abs(from.x - foe.x) < VEIL_GRIDS * GRID;
+    const dist = Math.abs(from.x - foe.x);
+    if (aiHard()) return (from.hp || 0) < 70 || dist < 12 * GRID;
+    if ((from.hp || 0) >= VEIL_HP) return false;
+    return dist < VEIL_GRIDS * GRID;
   }
 
   function useDrum(u) {
@@ -3014,7 +3093,8 @@
     const foes = foesOf(from);
     const foe = foes[0] || otherUnit(from) || G.p;
     if (foe) {
-      if (thinLedge(foe) || pitDepth(foe) > 16) return 3;
+      const pit = pitDepth(foe);
+      if (thinLedge(foe) || pit > (aiHard() ? 8 : 16)) return 3;
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
       if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
       if (G.mapId === 'arcade' && liveArcade(foe.x)) return 3;
@@ -3186,19 +3266,51 @@
     return bestX;
   }
 
+  function pickDelayWep(from, curIdx, score, ult) {
+    if (!aiHard() || !isDuo() || !from) return curIdx;
+    const curId = (WEPS[curIdx] || WEPS[0]).id;
+    if (score >= 10000) return curIdx;
+    if (delayKeepsTurn(from, curId, ult)) return curIdx;
+    const saved = G.wep;
+    const order = [0, 2, 3];
+    let picked = curIdx;
+    for (let i = 0; i < order.length; i++) {
+      const idx = order[i];
+      const id = WEPS[idx].id;
+      if (delayCost(id, ult) >= delayCost(curId, ult)) continue;
+      if (!delayKeepsTurn(from, id, ult) && !delayKeepsSide(from, id, ult)) continue;
+      G.wep = idx;
+      const sc = solveAI(from).score;
+      if (sc >= score * 0.45 || sc >= 4000) {
+        picked = idx;
+        break;
+      }
+    }
+    G.wep = saved;
+    return picked;
+  }
+
   function startAI() {
     const from = curUnit() || G.f;
     G.wep = pickAIWeapon(from);
     G.neonOn = false;
     syncWeps();
+    if (aiHard()) {
+      const cur = G.wep;
+      const scoreNow = solveAI(from).score;
+      G.wep = 3;
+      const tri = solveAI(from).score;
+      if (tri <= scoreNow + 200) G.wep = cur;
+    }
     const plan = { drum: false, warp: 0, leap: 0, neon: false, ult: false, nixi: false, veil: false };
     const score0 = solveAI(from).score;
-    if (from.items && from.items.drum > 0) {
+    const buried = pitDepth(from) >= 40;
+    if (aiMayItem(false) && from.items && from.items.drum > 0) {
       if (from.rage <= 50) plan.drum = true;
       else if (from.rage < 100 && score0 >= 8000 && from.rage + 50 >= 100) plan.drum = true;
     }
     const warpX = pickAIWarp(from);
-    if (warpX) plan.warp = warpX;
+    if (warpX && aiMayItem(buried)) plan.warp = warpX;
     if (!plan.warp && from.items && from.items.leap > 0 && from.stam >= 35) {
       const ox = from.x, oy = from.y;
       let leapDir = 0;
@@ -3218,7 +3330,7 @@
         if (gL < groundAt(from.x) - 10) leapDir = -1;
         if (gR < groundAt(from.x) - 10) leapDir = 1;
       }
-      if (!leapDir && Math.random() < 0.30) {
+      if (!leapDir && !aiEasy() && Math.random() < 0.30) {
         const opts2 = [1, -1];
         for (let i = 0; i < opts2.length; i++) {
           const nx = clamp(ox + LEAP_DX * opts2[i], 22, VW - 22);
@@ -3238,29 +3350,38 @@
         if (from.x > G.safeR - 28 && !isDeathVoid(from.x - LEAP_DX)) leapDir = -1;
         else if (from.x < G.safeL + 28 && !isDeathVoid(from.x + LEAP_DX)) leapDir = 1;
       }
+      if (leapDir && !aiMayItem(buried)) leapDir = 0;
       plan.leap = leapDir;
     }
-    const moved = planAIMove(from);
+    let moved = planAIMove(from);
     let best = moved.best;
-    if (aiWantNixi(from, best.score)) plan.nixi = true;
+    if (aiMayItem(false) && aiWantNixi(from, best.score)) plan.nixi = true;
     if (aiWantVeil(from)) plan.veil = true;
     const mark = otherUnit(from) || G.p;
-    if (from.items && from.items.neon > 0 && G.turns - G.aiLastNeonTurn >= 2 && mark && mark.hp > 12 && best.score >= 4000) {
+    if (aiMayItem(false) && from.items && from.items.neon > 0 && G.turns - G.aiLastNeonTurn >= 2 && mark && mark.hp > 12 && best.score >= 4000) {
       const lead = from.hp - mark.hp >= 15;
       const breakRage = mark.rage >= 80;
       const ledge = thinLedge(mark);
       if (lead || breakRage || ledge) plan.neon = true;
     }
-    if ((from.rage >= 100 || (plan.drum && from.rage + 50 >= 100)) && best.score >= 5000) plan.ult = true;
-    const loose = G.kind === 'core' ? 0 : 1;
+    const rageReady = (from.rage >= 100) || (plan.drum && from.rage + 50 >= 100) ? 100 : (from.rage || 0);
+    if (aiWantUlt(from, best.score, rageReady)) plan.ult = true;
+    const delayIdx = pickDelayWep(from, G.wep, best.score, plan.ult);
+    if (delayIdx !== G.wep) {
+      G.wep = delayIdx;
+      syncWeps();
+      moved = planAIMove(from);
+      best = moved.best;
+    }
     const fogK = veilAimMul(mark);
-    const aj = (loose ? 3 : 1.5) * fogK;
-    const pj = (loose ? 4 : 2) * fogK;
+    const jit = aiJitterBase();
+    const aj = jit.ang * fogK;
+    const pj = jit.pow * fogK;
     best.ang = clamp(best.ang + rand(-aj, aj), 5, 175);
     let toasted = false;
-    if (Math.abs(elev(best.ang) - 65) <= 8) {
-      const jit = rand(0.05, 0.08) * fogK * (Math.random() < 0.5 ? -1 : 1);
-      best.pow = clamp(best.pow * (1 + jit), 16, 100);
+    if (!aiEasy() && !aiHard() && Math.abs(elev(best.ang) - 65) <= 8) {
+      const j65 = rand(0.05, 0.08) * fogK * (Math.random() < 0.5 ? -1 : 1);
+      best.pow = clamp(best.pow * (1 + j65), 16, 100);
       if (Math.random() < 0.16) {
         toast((from.name || '烬丸') + '补角', false, false);
         toasted = true;
@@ -3556,6 +3677,7 @@
     saveBest();
     syncHud();
     syncDrillWind();
+    syncAiTier();
   }
 
   function goTitle() {
@@ -3568,6 +3690,7 @@
     setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · 点地图换地形 · H 辅助 · N 地条');
     syncMaps();
     syncDrillWind();
+    syncAiTier();
     syncHud();
   }
 
@@ -5742,6 +5865,63 @@
     G.coachN = 0;
     ok('g vk v17', GRAV === 260 && VK === 420);
 
+    ok('ai names 易中狠', AI_NAME[0] === '易' && AI_NAME[1] === '中' && AI_NAME[2] === '狠' && AI_NAME.length === 3);
+    ok('ai default 中', (G.ai | 0) === 1 && aiName() === '中' && aiHud() === '烬 · 中');
+    ok('ai no banned', AI_NAME.join('').indexOf('传送') < 0 && AI_NAME.join('').indexOf('飞行') < 0 && AI_NAME.join('').indexOf('三叉戟') < 0 && AI_NAME.join('').indexOf('激怒') < 0);
+    G.ai = 0; G.kind = 'hall';
+    ok('easy jitter 8/6', aiJitterBase().ang === 8 && aiJitterBase().pow === 6);
+    ok('easy ult hp40 no', aiWantUlt({ rage: 100, hp: 40 }, 8000) === false);
+    ok('easy ult hp20 yes', aiWantUlt({ rage: 100, hp: 20 }, 8000) === true);
+    G.p = { x: 152, hp: 100, side: 'p', id: 'p' };
+    G.f = { x: 152 + 7 * GRID, hp: 20, side: 'f', id: 'f', items: freshItems(), stam: 100 };
+    ok('easy never 障幕', aiWantVeil(G.f) === false);
+    G.ai = 1; G.kind = 'hall';
+    ok('mid hall jitter 3/4', aiJitterBase().ang === 3 && aiJitterBase().pow === 4);
+    G.kind = 'core';
+    ok('mid core jitter keep', aiJitterBase().ang === 1.5 && aiJitterBase().pow === 2);
+    ok('mid ult 5000', aiWantUlt({ rage: 100, hp: 80 }, 5000) === true);
+    ok('mid ult low score no', aiWantUlt({ rage: 100, hp: 80 }, 4000) === false);
+    G.f.hp = 30; G.f.x = 152 + 7 * GRID; G.f.items = freshItems(); G.f.stam = 100;
+    ok('mid veil still', aiWantVeil(G.f) === true);
+    G.ai = 2; G.kind = 'hall';
+    ok('hard jitter 2', aiJitterBase().ang === 2 && aiJitterBase().pow === 2);
+    ok('hard ult greedy', aiWantUlt({ rage: 100, hp: 80 }, 1600) === true);
+    G.f.hp = 65; G.f.x = 152 + 10 * GRID;
+    ok('hard veil greedy', aiWantVeil(G.f) === true);
+    G.kind = 'duo';
+    G.p = { id: 'p', name: '岚丸', side: 'p', hp: 100, delay: 200, ord: 0 };
+    G.p2 = { id: 'p2', name: '霜丸', side: 'p', hp: 100, delay: 180, ord: 2 };
+    G.f = { id: 'f', name: '烬丸', side: 'f', hp: 100, delay: 90, ord: 1 };
+    G.f2 = { id: 'f2', name: '霆丸', side: 'f', hp: 100, delay: 210, ord: 3 };
+    ok('delay 普通 not double', delayKeepsTurn(G.f, 0, false) === false);
+    ok('delay 霓弹 double', delayKeepsTurn(G.f, 3, false) === true);
+    ok('delay 高爆 not double', delayKeepsTurn(G.f, 1, false) === false);
+    ok('cheap wep 普通 < 霓轨', delayCost(0) < delayCost(5) && delayCost(3) < delayCost(0));
+    G.H = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    for (let i = 188; i <= 212; i++) G.H[i] = 412;
+    G.mapId = 'plain';
+    G.wind = 0;
+    G.p = { x: 200, y: G.H[200] - 14, r: 14, hp: 100, side: 'p', id: 'p' };
+    G.f = { x: 620, y: 386, r: 14, hp: 100, side: 'f', id: 'f' };
+    G.p2 = null; G.f2 = null;
+    G.kind = 'hall';
+    G.ai = 1;
+    ok('mid shallow no 三裂', pickAIWeapon(G.f) !== 3);
+    G.ai = 2;
+    ok('hard shallow 三裂 bury', pickAIWeapon(G.f) === 3);
+    G.ai = 1;
+    G.kind = 'quad';
+    ok('堂座 still no AI', isHuman({ id: 'f', side: 'f' }) === true && isQuad() === true);
+    G.kind = 'duo';
+    ok('对堂 right AI uses slider', isHuman({ id: 'f', side: 'f' }) === false && isHuman({ id: 'f2', side: 'f' }) === false);
+    G.kind = 'hall';
+    G.p2 = null;
+    G.f2 = null;
+    ok('hud 烬 · 中', aiHud() === '烬 · 中');
+    ok('g vk v18', GRAV === 260 && VK === 420);
+    ok('assist still 中 after ai', G.assist === 2 && ASSIST_NAME[2] === '中');
+
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
     return out.every(function (l) { return l.indexOf('OK') === 0; });
@@ -5847,6 +6027,14 @@
       G.drillWind = b.getAttribute('data-dw') || 'rand';
       syncDrillWind();
       saveBest();
+    });
+  }
+  if (aiTierEl) {
+    aiTierEl.addEventListener('click', function (e) {
+      const b = e.target.closest('button');
+      if (!b) return;
+      audio.ensure();
+      setAi(b.getAttribute('data-ai') | 0);
     });
   }
   if (ovRetry) ovRetry.addEventListener('click', function () { audio.ensure(); restart(); });

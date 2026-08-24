@@ -1251,6 +1251,50 @@ canvas {
   background: rgba(255, 227, 107, 0.1);
 }
 
+.ai-lab {
+  color: var(--mag);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(255, 61, 184, 0.35);
+}
+
+.ai-tier {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.ai-tier.gone { display: none !important; }
+
+.ai-tier em {
+  font-style: normal;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+
+.ai-tier button.on {
+  border-color: rgba(255, 227, 107, 0.7);
+  color: var(--gold);
+  background: rgba(255, 227, 107, 0.1);
+}
+
+.ai-tier button[data-ai="0"].on {
+  border-color: rgba(0, 232, 255, 0.7);
+  color: var(--cyan);
+  background: rgba(0, 232, 255, 0.12);
+}
+
+.ai-tier button[data-ai="2"].on {
+  border-color: rgba(255, 61, 184, 0.75);
+  color: #ffd0ec;
+  background: rgba(255, 61, 184, 0.16);
+  box-shadow: 0 0 14px rgba(255, 61, 184, 0.22);
+}
+
 @media (max-width: 860px) {
   #rage-label, #ghost-label { display: none; }
 }

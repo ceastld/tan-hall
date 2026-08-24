@@ -34,6 +34,7 @@
           <span id="stage-label">弹堂</span>
           <span id="turn-label" class="turn-lab gone">岚丸的回合</span>
           <span id="map-label">平原</span>
+          <span id="ai-label" class="ai-lab">烬 · 中</span>
           <span id="wind-label" class="wind">风 <span id="wind-arr" class="wind-arr">·</span> <span id="wind-num">0</span></span>
           <span id="next-wind" class="next-wind gone" aria-hidden="true">下 <span id="next-wind-arr">·</span> <span id="next-wind-num">0</span></span>
           <span id="time-label" class="time-lab gone">时 20</span>
@@ -141,6 +142,12 @@
             <button type="button" data-map="arcade" id="map-arcade">廊桥</button>
             <button type="button" data-map="towers" id="map-towers">双塔</button>
             <button type="button" id="btn-rand-map" title="随图">随图</button>
+          </div>
+          <div class="ai-tier" id="ai-tier" aria-label="烬丸难度">
+            <em>烬丸</em>
+            <button type="button" data-ai="0">易</button>
+            <button type="button" data-ai="1" class="on">中</button>
+            <button type="button" data-ai="2">狠</button>
           </div>
           <div class="drill-wind" id="drill-wind" aria-label="演习锁风">
             <em>锁风</em>
