@@ -81,6 +81,9 @@
   const BAG_MULTI_JIT = 1;
   const BAG_CRATE_P = 0.50;
   const BAG_CRATE_W = { x2: 3, x3: 2, p1: 2, p2: 3, p3: 3, p5: 2, heal: 1 };
+  const BAG_FIRE_NAME = '袋火';
+  const BAG_FIRE_LEN = 12;
+  const BAG_FIRE_PLUS_P = 0.32;
   const BAG_AI_STAM_X2 = 60;
   const BAG_AI_STAM_X3 = 80;
   const BAG_AI_CLOSE = 6;
@@ -864,6 +867,7 @@
       wind: opts.wind != null ? opts.wind : G.wind,
       windMul: opts.windMul != null ? opts.windMul : 1,
       iceSkip: false,
+      bagFire: opts.bagFire || null,
       trail: [{ x: sx, y: sy, a: 1 }]
     };
   }
@@ -1023,6 +1027,62 @@
         });
       }
     }
+  }
+  function bagFireSpec(parts, follow) {
+    if (!parts || !parts.length) return null;
+    let xId = null;
+    const plus = [];
+    for (let i = 0; i < parts.length; i++) {
+      const k = parts[i];
+      if (k === 'x3') xId = 'x3';
+      else if (k === 'x2' && xId !== 'x3') xId = 'x2';
+      else if (k === 'p1' || k === 'p2' || k === 'p3' || k === 'p5') plus.push(k);
+    }
+    if (!xId) return null;
+    return { xId: xId, rgb: bagRgb(xId), plus: plus, follow: !!follow };
+  }
+  function wantBagFire(spec) {
+    return !REDUCE && !!(spec && spec.xId);
+  }
+  function bagFireBright(spec) {
+    const rgb = (spec && spec.rgb) ? spec.rgb : GOLD;
+    if (!(spec && spec.follow)) return [rgb[0], rgb[1], rgb[2]];
+    return [
+      Math.min(255, rgb[0] + 24),
+      Math.min(255, rgb[1] + 28),
+      Math.min(255, rgb[2] + 22)
+    ];
+  }
+  function bagFireSpeckRgb(spec, plusIdx) {
+    if (spec && spec.plus && spec.plus.length && plusIdx != null && plusIdx >= 0) {
+      return bagRgb(spec.plus[plusIdx % spec.plus.length]);
+    }
+    return bagFireBright(spec);
+  }
+  function paintBagFireTrail(s) {
+    if (!s || !wantBagFire(s.bagFire)) return 0;
+    const spec = s.bagFire;
+    let plusIdx = null;
+    if (spec.plus && spec.plus.length && Math.random() < BAG_FIRE_PLUS_P) {
+      plusIdx = irand(0, spec.plus.length - 1);
+    }
+    const rgb = bagFireSpeckRgb(spec, plusIdx);
+    const n = spec.follow ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const life = rand(0.08, 0.16);
+      particles.push({
+        x: s.x + rand(-2.6, 2.6),
+        y: s.y + rand(-2.6, 2.6),
+        vx: -(s.vx || 0) * 0.08 + rand(-18, 18),
+        vy: -(s.vy || 0) * 0.08 + rand(-18, 18),
+        g: 40,
+        life: life,
+        max: life,
+        r: spec.follow ? rand(1.8, 3.2) : rand(1.4, 2.6),
+        rgb: rgb
+      });
+    }
+    return n;
   }
   function bagIdFromKey(e) {
     if (!e) return null;
@@ -4518,12 +4578,14 @@
     const sy = u.y - 4 - Math.sin(th) * nose;
     const shotWind = G.wind | 0;
     const windMul = 1;
+    const bagLead = bagFireSpec(parts, false);
+    const bagFollow = bagFireSpec(parts, true);
     if (G.neonOn) {
       if (u.items && u.items.neon > 0) u.items.neon -= 1;
       G.neonOn = false;
     }
     G.actDelay = { skip: false, wepId: wep.id, ult: !!u.ult };
-    const shell = makeShell(sx, sy, ang, G.power, wep, u, { ult: !!u.ult, lead: true, wind: shotWind, windMul: windMul });
+    const shell = makeShell(sx, sy, ang, G.power, wep, u, { ult: !!u.ult, lead: true, wind: shotWind, windMul: windMul, bagFire: bagLead });
     G.shot = shell;
     G.shots = [shell];
     G.queue = [];
@@ -4533,19 +4595,22 @@
     if (dual) {
       G.queue.push({
         at: DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
-        jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul
+        jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
+        bagFire: bagFollow
       });
     }
     for (let i = 1; i <= extra; i++) {
       const at = i * BAG_MULTI_WAIT;
       G.queue.push({
         at: at, lead: true, extra: true, ang: ang, power: G.power, wep: wep,
-        jitter: BAG_MULTI_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul
+        jitter: BAG_MULTI_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
+        bagFire: bagFollow
       });
       if (dual) {
         G.queue.push({
           at: at + DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
-          jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul
+          jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
+          bagFire: bagFollow
         });
       }
     }
@@ -4621,7 +4686,8 @@
       follow: !!next.follow,
       extra: !!next.extra,
       wind: next.wind,
-      windMul: next.windMul != null ? next.windMul : 1
+      windMul: next.windMul != null ? next.windMul : 1,
+      bagFire: next.bagFire || null
     });
     if (!G.shots) G.shots = [];
     G.shots.push(shell);
@@ -5331,6 +5397,7 @@
     if (!s.trail) s.trail = [];
     s.trail.push({ x: s.x, y: s.y, a: 1 });
     if (s.trail.length > 42) s.trail.shift();
+    paintBagFireTrail(s);
     if (s.lead) {
       trail.push({ x: s.x, y: s.y, a: 1 });
       if (trail.length > 42) trail.shift();
@@ -8408,6 +8475,22 @@
       g.moveTo(pts[i - 1].x, pts[i - 1].y);
       g.lineTo(pts[i].x, pts[i].y);
       g.stroke();
+    }
+    if (wantBagFire(s.bagFire) && pts.length > 1) {
+      const tint = bagFireBright(s.bagFire);
+      const n = Math.min(pts.length, BAG_FIRE_LEN);
+      const start = pts.length - n;
+      const a0 = s.bagFire.follow ? 0.78 : 0.52;
+      const w0 = s.bagFire.follow ? 4.6 : 3.2;
+      for (let i = start + 1; i < pts.length; i++) {
+        const a = (i - start) / n;
+        g.strokeStyle = rgba(tint, a * a0);
+        g.lineWidth = w0 + a * 3.4;
+        g.beginPath();
+        g.moveTo(pts[i - 1].x, pts[i - 1].y);
+        g.lineTo(pts[i].x, pts[i].y);
+        g.stroke();
+      }
     }
     g.fillStyle = rgba(WHT, 0.95);
     g.shadowColor = rgba(rgb, 0.9);
@@ -11522,6 +11605,47 @@
     ok('no 9th wep after 齿岸', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('g vk v46', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('stack math still after 齿岸', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
+
+    ok('袋火 name', BAG_FIRE_NAME === '袋火' && BAG_FIRE_LEN === 12 && BAG_FIRE_PLUS_P === 0.32);
+    ok('袋火 not a gun', WEPS.length === 8 && WEPS.every(function (w) { return w.name !== BAG_FIRE_NAME; }));
+    ok('袋火 no banned', BAG_FIRE_NAME.indexOf('传送') < 0 && BAG_FIRE_NAME.indexOf('飞行') < 0 && BAG_FIRE_NAME.indexOf('三叉戟') < 0 && BAG_FIRE_NAME.indexOf('激怒') < 0 && BAG_FIRE_NAME.indexOf('天使') < 0 && BAG_FIRE_NAME.indexOf('恶魔') < 0);
+    const bfX2 = bagFireSpec(['x2'], false);
+    const bfX3 = bagFireSpec(['x3'], false);
+    const bfX2p = bagFireSpec(['x2', 'p3', 'p5'], false);
+    const bfFollow = bagFireSpec(['x2'], true);
+    ok('袋火 spec ×2 gold', !!bfX2 && bfX2.xId === 'x2' && bfX2.rgb[0] === 255 && bfX2.rgb[1] === 227 && bfX2.rgb[2] === 107 && BAG_TINT.x2 === '#ffe36b');
+    ok('袋火 spec ×3 crimson', !!bfX3 && bfX3.xId === 'x3' && bfX3.rgb[0] === 220 && bfX3.rgb[1] === 20 && bfX3.rgb[2] === 60 && BAG_TINT.x3 === '#dc143c');
+    ok('袋火 plus mix', !!bfX2p && bfX2p.xId === 'x2' && bfX2p.plus.indexOf('p3') >= 0 && bfX2p.plus.indexOf('p5') >= 0);
+    ok('袋火 plus only skip', bagFireSpec(['p1', 'p5'], false) == null && bagFireSpec(['heal'], true) == null);
+    ok('袋火 empty skip', bagFireSpec([], false) == null && bagFireSpec(null, true) == null);
+    const b0 = bagFireBright(bfX3);
+    const b1 = bagFireBright(bagFireSpec(['x3'], true));
+    ok('袋火 follow brighter', (b1[0] + b1[1] + b1[2]) > (b0[0] + b0[1] + b0[2]) && bfFollow.follow === true && bfX2.follow === false);
+    ok('袋火 first not lift', b0[0] === 220 && b0[1] === 20 && b0[2] === 60);
+    ok('袋火 speck plus', bagFireSpeckRgb(bfX2p, 0)[0] === bagRgb('p3')[0] && bagFireSpeckRgb(bfX2p, 1)[0] === bagRgb('p5')[0]);
+    ok('袋火 speck gold', bagFireSpeckRgb(bfX2, null)[0] === 255 && bagFireSpeckRgb(bfX2, null)[1] === 227);
+    ok('wantBagFire on', wantBagFire(bfX2) === !REDUCE);
+    ok('wantBagFire no spec', wantBagFire(null) === false && wantBagFire({ xId: '' }) === false);
+    const shLead = makeShell(10, 20, 65, 70, WEPS[0], null, { bagFire: bfX2 });
+    const shFollow = makeShell(10, 20, 65, 70, WEPS[0], null, { bagFire: bfFollow, extra: true });
+    ok('makeShell bagFire', shLead.bagFire === bfX2 && shFollow.bagFire.follow === true && shFollow.extra === true);
+    const nPart = particles.length;
+    const painted = paintBagFireTrail({ x: 120, y: 80, vx: 80, vy: -40, bagFire: bfX2 });
+    ok('袋火 paints specks', wantBagFire(bfX2) ? (painted === 1 && particles.length === nPart + 1) : (painted === 0 && particles.length === nPart));
+    const nPart2 = particles.length;
+    const paintedF = paintBagFireTrail({ x: 130, y: 90, vx: 80, vy: -40, bagFire: bfFollow });
+    ok('袋火 follow more specks', wantBagFire(bfFollow) ? (paintedF === 2 && particles.length === nPart2 + 2) : (paintedF === 0));
+    ok('袋火 skip plus-only trail', paintBagFireTrail({ x: 0, y: 0, bagFire: bagFireSpec(['p5'], true) }) === 0);
+    ok('袋火 hud still', bagStackReadout(x2p5) === '2发×1.35' && bagStackReadout(x3u) === '3发×0.60');
+    ok('袋火 stack math still', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
+    ok('袋火 堂匣 50', BAG_CRATE_P === 0.50);
+    ok('袋火 maps 21', MAP_IDS.length === 21 && MAP_NAME.teeth === '齿岸' && MAP_NAME.cave === '洞顶');
+    ok('落顶 still after 袋火', FALL_NAME === '落顶' && FALL_DMG === 3 && FALL_ARM === 0.55);
+    ok('叠珠 still 7 after 袋火', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('迟雷 still 8 after 袋火', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
+    ok('no 9th wep after 袋火', WEPS.length === 8);
+    ok('g vk v47', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+
     G.mode = 'title';
     G.kind = 'hall';
     G.mapId = 'plain';
