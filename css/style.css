@@ -599,6 +599,10 @@ canvas {
   border-color: rgba(120, 150, 170, 0.55);
 }
 
+#map-cave {
+  border-color: rgba(196, 156, 112, 0.55);
+}
+
 #btn-rand-map {
   border-color: rgba(0, 232, 255, 0.6);
   color: var(--cyan);

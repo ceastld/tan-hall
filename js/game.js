@@ -87,8 +87,8 @@
   const BAG_AI_MID_P = 0.28;
   const BAG_KEY_MAP = { '-': 'x2', '_': 'x2', '=': 'x3', '+': 'x3', '[': 'p1', '{': 'p1', ']': 'p2', '}': 'p2', '\\': 'p3', '|': 'p3', ';': 'p5', ':': 'p5', "'": 'heal', '"': 'heal' };
   const BAG_CODE_MAP = { Minus: 'x2', Equal: 'x3', BracketLeft: 'p1', BracketRight: 'p2', Backslash: 'p3', IntlBackslash: 'p3', Semicolon: 'p5', Quote: 'heal' };
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊', well: '井口' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud', 'mirror', 'well'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊', well: '井口', cave: '洞顶' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud', 'mirror', 'well', 'cave'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -278,6 +278,26 @@
   const WELL_MUD_CRATER = 1.15;
   const WELL_STORM_P = 0.30;
   const WELL_CLIMB = 22;
+  const CAVE_PX = 168;
+  const CAVE_FX = 772;
+  const CAVE_P2X = 204;
+  const CAVE_F2X = 736;
+  const CAVE_FLOOR_Y = 340;
+  const CAVE_PIT_Y = 418;
+  const CAVE_L1 = 400;
+  const CAVE_R0 = 560;
+  const CAVE_CEIL_Y = 118;
+  const CAVE_THICK = 36;
+  const CAVE_FANG_Y = 210;
+  const CAVE_FANG_W = 28;
+  const CAVE_FANG_HW = 14;
+  const CAVE_FANG_L = 360;
+  const CAVE_FANG_R = 600;
+  const CAVE_LIP_L = 380;
+  const CAVE_LIP_R = 580;
+  const CAVE_CRATER = 0.70;
+  const CAVE_STORM_P = 0.20;
+  const CAVE_HOLE = 8;
   const STORM_NAME = '雷泽';
   const STORM_P = 0.35;
   const STORM_MIN = 8;
@@ -538,6 +558,7 @@
     boltT: 0,
     slab: null,
     mirror: null,
+    cave: null,
     coached: false,
     coachN: 0,
     killName: '',
@@ -1355,6 +1376,169 @@
     return r;
   }
 
+  function caveFangHang(x, cx) {
+    const d = Math.abs(x - cx);
+    if (d >= CAVE_FANG_HW) return 0;
+    const t = 1 - d / CAVE_FANG_HW;
+    return (CAVE_FANG_Y - CAVE_CEIL_Y) * Math.pow(t, 0.62);
+  }
+
+  function caveOrigBot(x) {
+    let bot = CAVE_CEIL_Y + Math.sin(x * 0.045) * 1.6 + Math.sin(x * 0.13) * 0.7;
+    bot += Math.max(caveFangHang(x, CAVE_FANG_L), caveFangHang(x, CAVE_FANG_R));
+    return bot;
+  }
+
+  function makeCaveRoof() {
+    const bot = new Float32Array(VW);
+    const top = new Float32Array(VW);
+    for (let x = 0; x < VW; x++) {
+      bot[x] = caveOrigBot(x);
+      top[x] = bot[x] - CAVE_THICK - Math.max(0, bot[x] - CAVE_CEIL_Y) * 0.08;
+      if (top[x] < 4) top[x] = 4;
+    }
+    return { top: top, bot: bot };
+  }
+
+  function caveBotAt(x) {
+    if (G.mapId !== 'cave' || !G.cave || !G.cave.bot) return 0;
+    const i = clamp(x, 0, VW - 1.001);
+    const a = i | 0;
+    const b = a + 1 < VW ? a + 1 : a;
+    const t = i - a;
+    return G.cave.bot[a] * (1 - t) + G.cave.bot[b] * t;
+  }
+
+  function caveTopAt(x) {
+    if (G.mapId !== 'cave' || !G.cave || !G.cave.top) return 0;
+    const i = clamp(x, 0, VW - 1.001);
+    const a = i | 0;
+    const b = a + 1 < VW ? a + 1 : a;
+    const t = i - a;
+    return G.cave.top[a] * (1 - t) + G.cave.top[b] * t;
+  }
+
+  function caveHas(x) {
+    if (G.mapId !== 'cave' || !G.cave || !G.cave.bot) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    return G.cave.bot[i] - G.cave.top[i] > CAVE_HOLE;
+  }
+
+  function inCave(x, y) {
+    if (!caveHas(x)) return false;
+    return y >= 0 && y <= caveBotAt(x) + 0.6;
+  }
+
+  function isCaveFangX(x) {
+    if (G.mapId !== 'cave' || !caveHas(x)) return false;
+    const i = x | 0;
+    return caveOrigBot(i) > CAVE_CEIL_Y + 28 && caveBotAt(i) > CAVE_CEIL_Y + 22;
+  }
+
+  function isCaveCeilX(x) {
+    if (G.mapId !== 'cave' || !caveHas(x)) return false;
+    return !isCaveFangX(x);
+  }
+
+  function isCaveFloor(x) {
+    if (G.mapId !== 'cave' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    if (isDeathVoid(i)) return false;
+    if (isCaveFangX(i)) return true;
+    return G.H[i] < CAVE_FLOOR_Y + 28 && (i <= Math.max(CAVE_L1 + 8, CAVE_FANG_L + CAVE_FANG_HW) || i >= Math.min(CAVE_R0 - 8, CAVE_FANG_R - CAVE_FANG_HW));
+  }
+
+  function isCavePitX(x) {
+    if (G.mapId !== 'cave' || !G.H) return false;
+    const i = x | 0;
+    if (i < CAVE_L1 || i > CAVE_R0) return false;
+    return G.H[i] > CAVE_FLOOR_Y + 36;
+  }
+
+  function isCaveLipX(x) {
+    if (G.mapId !== 'cave' || !G.H) return false;
+    const i = x | 0;
+    if (!isCaveFloor(i)) return false;
+    return Math.abs(i - CAVE_LIP_L) <= 22 || Math.abs(i - CAVE_LIP_R) <= 22;
+  }
+
+  function underFang(u) {
+    if (!u || G.mapId !== 'cave') return false;
+    return isCaveFangX(u.x) && isCaveFloor(u.x);
+  }
+
+  function caveFarFloor(from, foe) {
+    if (!from || !foe) return false;
+    if (underFang(from) || underFang(foe)) return false;
+    if (!isCaveFloor(from.x) || !isCaveFloor(foe.x)) return false;
+    return (from.x < 480) !== (foe.x < 480);
+  }
+
+  function caveLipX(foe) {
+    if (!foe) return CAVE_LIP_R;
+    return foe.x < 480 ? CAVE_LIP_L : CAVE_LIP_R;
+  }
+
+  function caveR(r, x, y) {
+    if (G.mapId !== 'cave' || r <= 0) return r;
+    if (y == null) y = caveBotAt(x);
+    if (inCave(x, y) || (caveHas(x) && y <= caveBotAt(x) + 10)) return r * CAVE_CRATER;
+    return r;
+  }
+
+  function rainCaveCrumbs(cx, cy) {
+    const n = REDUCE ? 3 : irand(6, 11);
+    const y0 = Math.min(cy + 4, caveBotAt(cx) + 2);
+    for (let i = 0; i < n; i++) {
+      crumbs.push({
+        x: cx + rand(-12, 12),
+        y: y0 + rand(-4, 8),
+        vx: rand(-40, 40),
+        vy: rand(40, 160),
+        g: 520,
+        r: rand(1.6, 3.8),
+        rgb: STONE,
+        life: 1.6
+      });
+    }
+  }
+
+  function carveCave(cx, cy, r) {
+    if (G.mapId !== 'cave' || !G.cave || !G.cave.bot || r <= 0) return false;
+    const C = G.cave.bot;
+    const T = G.cave.top;
+    const r2 = r * r;
+    let any = false;
+    const x0 = Math.max(0, Math.floor(cx - r));
+    const x1 = Math.min(VW - 1, Math.ceil(cx + r));
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx;
+      const inn = r2 - dx * dx;
+      if (inn <= 0) continue;
+      const o0 = cy - Math.sqrt(inn);
+      const o1 = cy + Math.sqrt(inn);
+      const top = T[x];
+      const bot = C[x];
+      if (!(bot > top + CAVE_HOLE)) continue;
+      if (o1 < top || o0 > bot) continue;
+      const next = Math.min(bot, Math.max(top, o0));
+      if (next < bot - 0.4) {
+        C[x] = next;
+        if (C[x] - T[x] <= CAVE_HOLE) {
+          C[x] = T[x];
+        }
+        any = true;
+      }
+    }
+    if (any) {
+      terrainDirty = true;
+      rainCaveCrumbs(cx, cy);
+    }
+    return any;
+  }
+
   function inCliffWater(u) {
     if (G.mapId !== 'cliff' || !u) return false;
     if ((u.x | 0) <= CLIFF_EDGE) return false;
@@ -1411,6 +1595,7 @@
     if (G.mapId === 'cloud' && isCloudSlabX(u.x)) return false;
     if (G.mapId === 'mirror' && isMirrorStoneX(u.x)) return false;
     if (G.mapId === 'well' && (isWellLipX(u.x) || inWellWater(u))) return false;
+    if (G.mapId === 'cave' && isCavePitX(u.x)) return false;
     if (inMoonWater(u) || inCliffWater(u)) return false;
     return true;
   }
@@ -1492,6 +1677,7 @@
     if (G.mapId === 'cloud' && (isCloudSlabX(x) || isCloudPitX(x))) return false;
     if (G.mapId === 'mirror' && (isMirrorStoneX(x) || isMirrorTrenchX(x))) return false;
     if (G.mapId === 'well' && (isWellShaft(x) || isWellLipX(x) || isWellMudX(x))) return false;
+    if (G.mapId === 'cave' && (isCavePitX(x) || !isCaveFloor(x))) return false;
     if (cratePitAt(x) >= BURY_PX) return false;
     if (Math.abs(groundAt(clamp(x - 8, 0, VW - 1)) - groundAt(clamp(x + 8, 0, VW - 1))) > 28) return false;
     if (inWall(x, gy - 8) || inWall(x, gy - 18)) return false;
@@ -1899,6 +2085,7 @@
     if (id === 'cloud') return Math.random() < CLOUD_STORM_P;
     if (id === 'mirror') return Math.random() < MIRROR_STORM_P;
     if (id === 'well') return Math.random() < WELL_STORM_P;
+    if (id === 'cave') return Math.random() < CAVE_STORM_P;
     return Math.random() < STORM_P;
   }
 
@@ -2298,6 +2485,26 @@
       }
       padFlat(h, 72, 220, WELL_BANK_Y);
       padFlat(h, 740, 888, WELL_BANK_Y);
+    } else if (id === 'cave') {
+      for (let x = 0; x < VW; x++) {
+        let yy;
+        if (x <= CAVE_L1) {
+          const k = clamp((CAVE_L1 - x) / 22, 0, 1);
+          const sm = k * k * (3 - 2 * k);
+          yy = lerp(CAVE_PIT_Y, CAVE_FLOOR_Y, sm);
+          yy += Math.sin(x * 0.07) * 1.3 + Math.sin(x * 0.19) * 0.5;
+        } else if (x >= CAVE_R0) {
+          const k = clamp((x - CAVE_R0) / 22, 0, 1);
+          const sm = k * k * (3 - 2 * k);
+          yy = lerp(CAVE_PIT_Y, CAVE_FLOOR_Y, sm);
+          yy += Math.sin(x * 0.07) * 1.3 + Math.sin(x * 0.19) * 0.5;
+        } else {
+          yy = CAVE_PIT_Y + Math.sin(x * 0.09) * 2.0 + Math.sin(x * 0.21) * 0.8;
+        }
+        h[x] = yy;
+      }
+      padFlat(h, 72, 370, CAVE_FLOOR_Y);
+      padFlat(h, 590, 888, CAVE_FLOOR_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -2327,6 +2534,7 @@
     if (id === 'cloud') return side === 'p' ? CLOUD_PX : CLOUD_FX;
     if (id === 'mirror') return side === 'p' ? MIRROR_PX : MIRROR_FX;
     if (id === 'well') return side === 'p' ? WELL_PX : WELL_FX;
+    if (id === 'cave') return side === 'p' ? CAVE_PX : CAVE_FX;
     return side === 'p' ? 152 : 768;
   }
 
@@ -2340,6 +2548,7 @@
     if (G.mapId === 'cloud' && slot) return side === 'p' ? CLOUD_P2X : CLOUD_F2X;
     if (G.mapId === 'mirror' && slot) return side === 'p' ? MIRROR_P2X : MIRROR_F2X;
     if (G.mapId === 'well' && slot) return side === 'p' ? WELL_P2X : WELL_F2X;
+    if (G.mapId === 'cave' && slot) return side === 'p' ? CAVE_P2X : CAVE_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -2594,6 +2803,7 @@
     if (!G.H || r <= 0) return;
     carveCloud(cx, cy, r);
     carveMirror(cx, cy, r);
+    carveCave(cx, cy, r);
     const x0 = Math.max(0, Math.floor(cx - r));
     const x1 = Math.min(VW - 1, Math.ceil(cx + r));
     for (let x = x0; x <= x1; x++) {
@@ -2673,7 +2883,7 @@
     for (let i = 0; i < CLUSTER.length; i++) {
       const pop = CLUSTER[i];
       const px = clamp(cx + pop.dx, 4, VW - 4);
-      const py = groundAt(cx) + pop.dy;
+      const py = (G.mapId === 'cave' && inCave(cx, cy)) ? cy + pop.dy : groundAt(cx) + pop.dy;
       const r = Math.round(pop.r * (mul || 1)) + extra;
       carve(px, py, r);
       hits.push({ x: px, y: py, r: r });
@@ -2683,6 +2893,7 @@
 
   function inGround(x, y) {
     if (x < 0 || x >= VW) return true;
+    if (inCave(x, y)) return true;
     const top = slabTopAt(x);
     if (top != null && y >= top && y <= CLOUD_SLAB_BOT + 0.8) return true;
     return y >= dirtAt(x);
@@ -4244,14 +4455,14 @@
 
   function fruitBlocked(x, y) {
     if (x < 90 || x > VW - 90 || y < 52 || y > VH - 80) return true;
-    if (inGround(x, y) || inWall(x, y) || inMirror(x, y)) return true;
+    if (inGround(x, y) || inWall(x, y) || inMirror(x, y) || inCave(x, y)) return true;
     const gy = groundAt(x);
     if (!(gy - y >= 56)) return true;
     for (let a = 0; a < 8; a++) {
       const th = a * TAU / 8;
       const wx = x + Math.cos(th) * FRUIT_WALL;
       const wy = y + Math.sin(th) * FRUIT_WALL;
-      if (inWall(wx, wy) || inMirror(wx, wy)) return true;
+      if (inWall(wx, wy) || inMirror(wx, wy) || inCave(wx, wy)) return true;
     }
     const bodies = allUnits();
     for (let bi = 0; bi < bodies.length; bi++) {
@@ -4271,7 +4482,8 @@
       const x = rand(110, VW - 110);
       const gy = groundAt(x);
       const yHi = Math.min(gy - 56, 340);
-      const yLo = 64;
+      let yLo = 64;
+      if (G.mapId === 'cave' && caveHas(x)) yLo = Math.max(yLo, caveBotAt(x) + 12);
       if (yHi <= yLo + 8) continue;
       const y = rand(yLo, yHi);
       if (!fruitBlocked(x, y)) return { x: x, y: y };
@@ -4630,10 +4842,11 @@
     crater = Math.round(iceR(crater, x));
     crater = Math.round(mirrorR(crater, x));
     crater = Math.round(wellR(crater, x));
+    crater = Math.round(caveR(crater, x, y));
     crater = (crater || 0) + (wep.craterAdd || 0);
     let hit = !!fromHit;
     if (wep.id === 4) {
-      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : (isMirrorStoneX(x) ? MIRROR_CRATER : (isWellLipX(x) ? WELL_LIP_CRATER : (isWellMudX(x) ? WELL_MUD_CRATER : 1)))));
+      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : (isMirrorStoneX(x) ? MIRROR_CRATER : (isWellLipX(x) ? WELL_LIP_CRATER : (isWellMudX(x) ? WELL_MUD_CRATER : ((G.mapId === 'cave' && inCave(x, y)) ? CAVE_CRATER : 1))))));
       const pops = carveCluster(x, y, ultMul * terrainMul * (wep.craterMul || 1), wep.craterAdd || 0);
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
@@ -5411,6 +5624,11 @@
     if (G.mapId === 'well') {
       return wellExitDist(foe);
     }
+    if (G.mapId === 'cave') {
+      if (!isCaveFloor(foe.x)) return 1e9;
+      const d = Math.abs(foe.x - caveLipX(foe));
+      return d < 8 ? 16 : d;
+    }
     return 1e9;
   }
 
@@ -5423,6 +5641,7 @@
       return leftLip ? FROST_ICE0 - 22 : FROST_ICE1 + 22;
     }
     if (G.mapId === 'well') return wellExitX(foe);
+    if (G.mapId === 'cave') return caveLipX(foe);
     return 0;
   }
 
@@ -5432,12 +5651,16 @@
     if (!from || !foe || foe.hp <= 0) return false;
     if (foe.hp <= 24) return false;
     if (liveMineOf(from.side)) return false;
-    if (G.mapId !== 'gate' && G.mapId !== 'dune' && G.mapId !== 'frost' && G.mapId !== 'well') return false;
+    if (G.mapId !== 'gate' && G.mapId !== 'dune' && G.mapId !== 'frost' && G.mapId !== 'well' && G.mapId !== 'cave') return false;
     if (G.mapId === 'gate' && isGateCorridor(foe.x)) return false;
     if (G.mapId === 'dune' && isDuneSaddle(foe.x)) return false;
     if (G.mapId === 'frost' && !isFrostIce(foe.x)) return false;
     if (G.mapId === 'well' && !inWell(foe)) return false;
     if (G.mapId === 'well' && wellExitDist(foe) > 48) return false;
+    if (G.mapId === 'cave') {
+      if (underFang(foe)) return false;
+      if (!caveFarFloor(from, foe)) return false;
+    }
     const dist = denyZoneDist(foe);
     if (dist >= 1e8) return false;
     const reach = aiHard() ? WALK_PX * 2.2 : WALK_PX * 1.4;
@@ -5453,6 +5676,7 @@
       if (foe.buried || walkBlocked(foe)) return 6;
       if (wantChiLei(from, foe)) return 7;
       if (pit > (aiHard() ? 8 : 16)) return 6;
+      if (G.mapId === 'cave' && underFang(foe)) return 1;
       if (thinLedge(foe)) return 3;
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
       if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
@@ -5468,6 +5692,7 @@
       if (G.mapId === 'cloud' && isCloudSlabX(foe.x)) return 0;
       if (G.mapId === 'well' && inWell(foe)) return 1;
       if (G.mapId === 'well' && isWellBank(foe.x) && Math.abs(foe.x - from.x) > 6 * GRID) return 0;
+      if (G.mapId === 'cave' && caveFarFloor(from, foe)) return 0;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -5582,6 +5807,21 @@
     }
     if (G.mapId === 'well' && isWellMudX(imp.x) && (wep.id === 1 || wep.id === 4 || wep.id === 8)) bury += 700;
     if (G.mapId === 'well' && isWellLipX(imp.x) && wep.id === 1) bury += 500;
+    if (G.mapId === 'cave' && underFang(t)) {
+      const e = ang != null ? elev(ang) : 0;
+      if (e >= 78) score += 2000;
+      else if (e >= 70) score += 900;
+      if (wep.id === 1) score += 500;
+      if (e < 40) score -= 800;
+    }
+    if (G.mapId === 'cave' && caveFarFloor(from, t)) {
+      const e = ang != null ? elev(ang) : 0;
+      if (e >= 28 && e <= 36) score += 1800;
+      else if (e >= 22 && e <= 42) score += 700;
+      else if (e >= 58) score -= 500;
+    }
+    if (G.mapId === 'cave' && isCaveFangX(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
+    if (G.mapId === 'cave' && isCaveLipX(imp.x) && wep.id === 8) bury += 500;
     if (wep.id === 8) {
       const spot = denySpotX(from, t);
       if (spot) {
@@ -5592,6 +5832,7 @@
         else if (G.mapId === 'dune' && isDuneSaddle(imp.x)) score += 900;
         else if (G.mapId === 'frost' && isFrostBank(imp.x)) score += 900;
         else if (G.mapId === 'well' && isWellLipX(imp.x)) score += 900;
+        else if (G.mapId === 'cave' && isCaveLipX(imp.x)) score += 900;
       }
     }
     score += bury;
@@ -6143,6 +6384,7 @@
     buildWalls(G.mapId, G.H);
     G.slab = G.mapId === 'cloud' ? makeCloudSlab() : null;
     G.mirror = G.mapId === 'mirror' ? makeMirrorWall() : null;
+    G.cave = G.mapId === 'cave' ? makeCaveRoof() : null;
     G.fires = [];
     crumbs.length = 0;
     terrainDirty = true;
@@ -6565,8 +6807,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : G.mapId === 'frost' ? '#d4f2ff' : G.mapId === 'cloud' ? '#e8d8b8' : G.mapId === 'mirror' ? '#c8e8ff' : G.mapId === 'well' ? '#c8b898' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : G.mapId === 'frost' ? '#143044' : G.mapId === 'cloud' ? '#241c28' : G.mapId === 'mirror' ? '#182030' : G.mapId === 'well' ? '#141018' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : G.mapId === 'frost' ? '#d4f2ff' : G.mapId === 'cloud' ? '#e8d8b8' : G.mapId === 'mirror' ? '#c8e8ff' : G.mapId === 'well' ? '#c8b898' : G.mapId === 'cave' ? '#d8c4a0' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : G.mapId === 'frost' ? '#143044' : G.mapId === 'cloud' ? '#241c28' : G.mapId === 'mirror' ? '#182030' : G.mapId === 'well' ? '#141018' : G.mapId === 'cave' ? '#1a1410' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -6884,6 +7126,51 @@
       g.fillRect(48, WELL_BANK_Y - 4, WELL_LIP0 - 64, 8);
       g.fillRect(WELL_LIP1 + 16, WELL_BANK_Y - 4, 900 - WELL_LIP1, 8);
     }
+    if (G.mapId === 'cave' && G.cave && G.cave.bot) {
+      const pit = g.createLinearGradient(0, CAVE_FLOOR_Y, 0, VH);
+      pit.addColorStop(0, 'rgba(12, 8, 16, 0.10)');
+      pit.addColorStop(0.22, 'rgba(18, 12, 22, 0.40)');
+      pit.addColorStop(0.6, '#100c14');
+      pit.addColorStop(1, '#08060c');
+      g.fillStyle = pit;
+      g.fillRect(CAVE_L1, CAVE_FLOOR_Y + 4, CAVE_R0 - CAVE_L1, VH - CAVE_FLOOR_Y - 4);
+      g.fillStyle = 'rgba(90, 64, 44, 0.22)';
+      g.fillRect(48, CAVE_FLOOR_Y - 4, CAVE_L1 - 64, 8);
+      g.fillRect(CAVE_R0 + 16, CAVE_FLOOR_Y - 4, 900 - CAVE_R0, 8);
+      const C = G.cave.bot;
+      const T = G.cave.top;
+      for (let x = 0; x < VW; x++) {
+        const top = T[x];
+        const bot = C[x];
+        if (!(bot > top + CAVE_HOLE)) continue;
+        const h = bot - top;
+        g.fillStyle = '#2a221c';
+        g.fillRect(x, 0, 1, bot);
+        g.fillStyle = 'rgba(42, 32, 26, 0.92)';
+        g.fillRect(x, top, 1, h);
+        g.fillStyle = 'rgba(196, 156, 112, 0.55)';
+        g.fillRect(x, bot - 2, 1, 2);
+        if (bot > CAVE_CEIL_Y + 20) {
+          g.fillStyle = 'rgba(168, 132, 92, 0.42)';
+          g.fillRect(x, CAVE_CEIL_Y, 1, Math.min(4, bot - CAVE_CEIL_Y));
+        }
+      }
+      g.strokeStyle = 'rgba(216, 184, 140, 0.58)';
+      g.lineWidth = 1.6;
+      g.beginPath();
+      let drawing = false;
+      for (let x = 0; x < VW; x++) {
+        const top = T[x];
+        const bot = C[x];
+        if (!(bot > top + CAVE_HOLE)) {
+          if (drawing) { g.stroke(); drawing = false; }
+          continue;
+        }
+        if (!drawing) { g.beginPath(); g.moveTo(x, bot); drawing = true; }
+        else g.lineTo(x, bot);
+      }
+      if (drawing) g.stroke();
+    }
     terrainDirty = false;
   }
 
@@ -7013,6 +7300,18 @@
       g.fillStyle = ditch;
       g.fillRect(0, 0, VW, VH);
     }
+    if (G.mapId === 'cave') {
+      const gloom = g.createRadialGradient(480, 200, 20, 480, 280, 340);
+      gloom.addColorStop(0, 'rgba(24, 16, 20, 0.22)');
+      gloom.addColorStop(1, 'rgba(24, 16, 20, 0)');
+      g.fillStyle = gloom;
+      g.fillRect(0, 0, VW, VH);
+      const roof = g.createRadialGradient(480, 40, 8, 480, 90, 260);
+      roof.addColorStop(0, 'rgba(196, 156, 112, 0.10)');
+      roof.addColorStop(1, 'rgba(196, 156, 112, 0)');
+      g.fillStyle = roof;
+      g.fillRect(0, 0, VW, VH);
+    }
     if (G.mapId === 'well') {
       const pit = g.createRadialGradient(WELL_CX, WELL_WATER_Y + 20, 16, WELL_CX, WELL_WATER_Y + 70, 220);
       pit.addColorStop(0, 'rgba(8, 16, 28, 0.42)');
@@ -7117,6 +7416,33 @@
       g.strokeStyle = 'rgba(255,227,107,0.42)';
       g.lineWidth = 1;
       g.stroke();
+    }
+    if (G.mapId === 'cave' && G.cave && G.cave.bot) {
+      g.beginPath();
+      g.moveTo(0, 0);
+      let any = false;
+      for (let i = 0; i < MINI_W; i++) {
+        const wx = (i / Math.max(1, MINI_W - 1)) * (VW - 1);
+        const bot = G.cave.bot[wx | 0];
+        const top = G.cave.top[wx | 0];
+        if (!(bot > top + CAVE_HOLE)) {
+          if (any) {
+            g.lineTo(i, 0);
+            any = false;
+          }
+          continue;
+        }
+        const my = clamp((bot / VH) * MINI_H, 0, MINI_H);
+        if (!any) {
+          g.lineTo(i, 0);
+          g.lineTo(i, my);
+          any = true;
+        } else g.lineTo(i + 1, my);
+      }
+      g.lineTo(MINI_W, 0);
+      g.closePath();
+      g.fillStyle = 'rgba(80,64,52,0.55)';
+      g.fill();
     }
     const units = allUnits();
     for (let i = 0; i < units.length; i++) {
@@ -8574,7 +8900,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps eighteen', MAP_IDS.length === 19 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口');
+    ok('maps eighteen', MAP_IDS.length === 20 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口' && MAP_NAME.cave === '洞顶');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -9109,7 +9435,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 19', MAP_IDS.length === 19 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14 && MAP_IDS.indexOf('frost') === 15 && MAP_IDS.indexOf('cloud') === 16 && MAP_IDS.indexOf('mirror') === 17 && MAP_IDS.indexOf('well') === 18);
+    ok('随图 pool 20', MAP_IDS.length === 20 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14 && MAP_IDS.indexOf('frost') === 15 && MAP_IDS.indexOf('cloud') === 16 && MAP_IDS.indexOf('mirror') === 17 && MAP_IDS.indexOf('well') === 18 && MAP_IDS.indexOf('cave') === 19);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -9353,7 +9679,7 @@
     G.ghostOn = true;
     ok('ghost match only', G.ghost == null);
     ok('g vk v20', GRAV === 260 && VK === 420);
-    ok('maps still 14 after ghost', MAP_IDS.length === 19 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after ghost', MAP_IDS.length === 20 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
     ok('断崖 name locked', MAP_NAME.cliff === '断崖' && MAP_IDS[12] === 'cliff');
     ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
@@ -9372,7 +9698,7 @@
     const silkPhys = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     const silkPhys2 = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     ok('silk no physics drift', Math.abs(silkPhys.x - silkPhys2.x) < 0.01 && Math.abs(silkPhys.y - silkPhys2.y) < 0.01);
-    ok('maps still 14 after silk', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after silk', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after silk', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned silk', '风丝'.indexOf('传送') < 0 && '风丝'.indexOf('飞行') < 0 && '风丝'.indexOf('三叉戟') < 0 && '风丝'.indexOf('激怒') < 0);
     ok('g vk v22', GRAV === 260 && VK === 420);
@@ -9471,7 +9797,7 @@
     for (let i = 0; i < VW; i++) G.H[i] = 400;
     G.p = { x: 200, y: 386, r: 14, hp: 100, side: 'p', id: 'p' };
     ok('AI open not 叠珠', pickAIWeapon(G.f) !== 6);
-    ok('maps still 14 after 叠珠', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after 叠珠', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after 叠珠', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('g vk v24', GRAV === 260 && VK === 420);
 
@@ -9515,7 +9841,7 @@
     ok('storm hud name stays', STORM_NAME === '雷泽' && MAP_NAME.vale === '风谷');
     G.storm = false;
     ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps still 14 after 雷泽', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
+    ok('maps still 14 after 雷泽', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
     ok('ghost K still after 雷泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned 雷泽', STORM_NAME.indexOf('传送') < 0 && STORM_NAME.indexOf('飞行') < 0 && STORM_NAME.indexOf('三叉戟') < 0 && STORM_NAME.indexOf('激怒') < 0);
     ok('g vk v25', GRAV === 260 && VK === 420 && WIND_K === 2.05);
@@ -9607,7 +9933,7 @@
     ok('gate storm roll not forced', !stormForced('gate') && !stormBanned('gate') && STORM_P === 0.35);
     ok('石门 name locked', MAP_NAME.gate === '石门' && MAP_IDS[14] === 'gate');
     ok('no banned gate', MAP_NAME.gate.indexOf('传送') < 0 && MAP_NAME.gate.indexOf('飞行') < 0 && MAP_NAME.gate.indexOf('三叉戟') < 0 && MAP_NAME.gate.indexOf('激怒') < 0);
-    ok('maps 15 with 石门', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 with 石门', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('叠珠 still 7 after 石门', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('ghost K still after 石门', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 石门', typeof silkCount === 'function' && silkCount(0) === 0);
@@ -9693,7 +10019,7 @@
     const mscHit = scoreOne({ x: 210, y: G.p.y, t: 0.6, hit: G.p }, WEPS[7], G.f, G.p, 45);
     ok('迟雷 prefer deny stick', mscDeny > 2000, Math.round(mscDeny) + '/' + Math.round(mscHit));
     ok('叠珠 still 7 after 迟雷', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps 15 after 迟雷', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 after 迟雷', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('ghost K still after 迟雷', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 迟雷', typeof silkCount === 'function' && silkCount(0) === 0);
     ok('雷泽 still after 迟雷', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune'));
@@ -9805,7 +10131,7 @@
     ok('frost storm roll not forced', !stormForced('frost') && !stormBanned('frost') && STORM_P === 0.35);
     ok('霜泽 name locked', MAP_NAME.frost === '霜泽' && MAP_IDS[15] === 'frost');
     ok('no banned frost', MAP_NAME.frost.indexOf('传送') < 0 && MAP_NAME.frost.indexOf('飞行') < 0 && MAP_NAME.frost.indexOf('三叉戟') < 0 && MAP_NAME.frost.indexOf('激怒') < 0);
-    ok('maps 16 with 霜泽', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps 16 with 霜泽', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('叠珠 still 7 after 霜泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 霜泽', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 霜泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -9924,7 +10250,7 @@
     ok('crate late is 殿塌', crateLate() === true && CRATE_SUDDEN_P > CRATE_P);
     G.sudden = false;
     ok('no 9th wep', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
-    ok('maps still 16 after 堂匣', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps still 16 after 堂匣', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('locked names after 堂匣', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('ghost K still after 堂匣', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 堂匣', typeof silkCount === 'function' && silkCount(0) === 0);
@@ -9971,7 +10297,7 @@
     ok('clock pause shell', clockPaused() === true);
     G.shots = [];
     ok('clock free after shell', clockPaused() === false);
-    ok('maps still 16 after 时尽', MAP_IDS.length === 19 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps still 16 after 时尽', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('locked names after 时尽', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('no banned 时尽', '时尽'.indexOf('传送') < 0 && '时尽'.indexOf('飞行') < 0 && '时尽'.indexOf('三叉戟') < 0 && '时尽'.indexOf('激怒') < 0);
     ok('g vk v30', GRAV === 260 && VK === 420 && WIND_K === 2.05);
@@ -10073,7 +10399,7 @@
     ok('cloud storm ~30', !stormForced('cloud') && !stormBanned('cloud') && CLOUD_STORM_P === 0.30 && STORM_P === 0.35);
     ok('云台 name locked', MAP_NAME.cloud === '云台' && MAP_IDS[16] === 'cloud');
     ok('no banned cloud', MAP_NAME.cloud.indexOf('传送') < 0 && MAP_NAME.cloud.indexOf('飞行') < 0 && MAP_NAME.cloud.indexOf('三叉戟') < 0 && MAP_NAME.cloud.indexOf('激怒') < 0);
-    ok('maps 17 with 云台', MAP_IDS.length === 19 && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
+    ok('maps 17 with 云台', MAP_IDS.length === 20 && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
     ok('叠珠 still 7 after 云台', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 云台', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 云台', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10186,7 +10512,7 @@
     ok('mirror storm ~30', !stormForced('mirror') && !stormBanned('mirror') && MIRROR_STORM_P === 0.30 && STORM_P === 0.35);
     ok('镜廊 name locked', MAP_NAME.mirror === '镜廊' && MAP_IDS[17] === 'mirror');
     ok('no banned mirror', MAP_NAME.mirror.indexOf('传送') < 0 && MAP_NAME.mirror.indexOf('飞行') < 0 && MAP_NAME.mirror.indexOf('三叉戟') < 0 && MAP_NAME.mirror.indexOf('激怒') < 0);
-    ok('maps 18 with 镜廊', MAP_IDS.length === 19 && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cliff === '断崖');
+    ok('maps 18 with 镜廊', MAP_IDS.length === 20 && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cliff === '断崖');
     ok('叠珠 still 7 after 镜廊', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 镜廊', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 镜廊', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10235,7 +10561,7 @@
     const armed = triggerQuake(qCx, G.H[qCx], WEPS[1], 48);
     ok('quake one at a time refresh', armed === true && Math.abs(G.quakeT - QUAKE_T) < 0.001 && G.quakeMag >= 3 && G.quakeMag <= 5);
     ok('direct stop still 140 after 余震', HIT_STOP_DIRECT === 0.14);
-    ok('maps still 18 after 余震', MAP_IDS.length === 19 && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
+    ok('maps still 18 after 余震', MAP_IDS.length === 20 && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
     ok('叠珠 still 7 after 余震', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 余震', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 余震', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10357,7 +10683,7 @@
     ok('well storm ~30', !stormForced('well') && !stormBanned('well') && WELL_STORM_P === 0.30 && STORM_P === 0.35);
     ok('井口 name locked', MAP_NAME.well === '井口' && MAP_IDS[18] === 'well');
     ok('no banned well', MAP_NAME.well.indexOf('传送') < 0 && MAP_NAME.well.indexOf('飞行') < 0 && MAP_NAME.well.indexOf('三叉戟') < 0 && MAP_NAME.well.indexOf('激怒') < 0);
-    ok('maps 19 with 井口', MAP_IDS.length === 19 && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口' && MAP_NAME.cloud === '云台');
+    ok('maps 19 with 井口', MAP_IDS.length === 20 && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口' && MAP_NAME.cloud === '云台');
     ok('叠珠 still 7 after 井口', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 井口', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 井口', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10432,7 +10758,7 @@
     ok('hotkeys no steal QECVBGFX', bagIdFromKey({ key: 'q', code: 'KeyQ' }) == null && bagIdFromKey({ key: 'e', code: 'KeyE' }) == null && bagIdFromKey({ key: 'c', code: 'KeyC' }) == null && bagIdFromKey({ key: 'v', code: 'KeyV' }) == null && bagIdFromKey({ key: 'b', code: 'KeyB' }) == null && bagIdFromKey({ key: 'g', code: 'KeyG' }) == null && bagIdFromKey({ key: 'f', code: 'KeyF' }) == null && bagIdFromKey({ key: 'x', code: 'KeyX' }) == null);
     ok('no 9th wep after 堂袋', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('叠珠 stays weapon', WEPS[6].id === 7 && BAG_KEYS.indexOf('x2') >= 0 && WEPS[6].name !== BAG_NAME.x2);
-    ok('maps 19 after 堂袋', MAP_IDS.length === 19 && MAP_NAME.well === '井口' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台');
+    ok('maps 19 after 堂袋', MAP_IDS.length === 20 && MAP_NAME.well === '井口' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台');
     ok('skills stay QECVBGFX', ITEM_NAME.leap === '飞步' && ITEM_NAME.warp === '影挪' && ITEM_NAME.neon === '霓弹' && ITEM_NAME.drum === '鼓息' && ITEM_NAME.nixi === '逆息' && ITEM_NAME.veil === '障幕');
     ok('堂匣 still after 堂袋', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣');
     ok('时尽 still after 堂袋', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
@@ -10448,7 +10774,7 @@
     ok('any armed false', anyBagArmed(idleU) === false);
     ok('bag tints 7', !!BAG_TINT.x2 && !!BAG_TINT.x3 && !!BAG_TINT.p1 && !!BAG_TINT.p2 && !!BAG_TINT.p3 && !!BAG_TINT.p5 && !!BAG_TINT.heal);
     ok('bag 7 v40', BAG_KEYS.length === 7 && WEPS.length === 8);
-    ok('maps 19 after v40', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
+    ok('maps 19 after v40', MAP_IDS.length === 20 && MAP_NAME.well === '井口');
     ok('no 9th wep after v40', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('tints gold crimson cream orange scarlet foil leaf', BAG_TINT.x2 === '#ffe36b' && BAG_TINT.x3 === '#dc143c' && BAG_TINT.p1 === '#fff3c2' && BAG_TINT.p2 === '#ff9a3d' && BAG_TINT.p3 === '#ff2d2d' && BAG_TINT.p5 === '#ffd24a' && BAG_TINT.heal === '#5dffb2');
     ok('tints distinct', BAG_TINT.x2 !== BAG_TINT.x3 && BAG_TINT.p1 !== BAG_TINT.p2 && BAG_TINT.p2 !== BAG_TINT.p3 && BAG_TINT.p5 !== BAG_TINT.x3 && BAG_TINT.heal !== BAG_TINT.x2);
@@ -10528,9 +10854,131 @@
     ok('g vk v43', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('stack math still v40 after v43', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_COST.p3 === 25 && BAG_KEYS.length === 7);
     ok('no 9th wep after v43', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
-    ok('maps 19 after v43', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
+    ok('maps 19 after v43', MAP_IDS.length === 20 && MAP_NAME.well === '井口');
     ok('hud readout still', bagStackReadout(x2p5) === '2发×1.35');
 
+    { G.H = buildHeight('cave');
+    G.mapId = 'cave';
+    G.cave = makeCaveRoof();
+    G.kind = 'hall';
+    G.storm = false;
+    G.walls = [];
+    G.mirror = null;
+    G.slab = null;
+    G.ai = 1;
+    G.turns = 3;
+    G.mines = [];
+    G.walk = WALK_PX;
+    ok('cave spawn', spawnX('cave', 'p') === CAVE_PX && spawnX('cave', 'f') === CAVE_FX);
+    ok('cave spawn on floors', isCaveFloor(CAVE_PX) && isCaveFloor(CAVE_FX), Math.round(G.H[CAVE_PX]) + '/' + Math.round(G.H[CAVE_FX]));
+    ok('cave floors y~340', G.H[CAVE_PX] > 320 && G.H[CAVE_PX] < 360 && G.H[CAVE_FX] > 320 && G.H[CAVE_FX] < 360, Math.round(G.H[CAVE_PX]));
+    ok('cave ceiling underside ~118', Math.abs(caveBotAt(CAVE_PX) - CAVE_CEIL_Y) < 8, Math.round(caveBotAt(CAVE_PX)));
+    ok('cave ceiling thick ~36', Math.abs((caveBotAt(CAVE_PX) - caveTopAt(CAVE_PX)) - CAVE_THICK) < 10, Math.round(caveBotAt(CAVE_PX) - caveTopAt(CAVE_PX)));
+    ok('cave fangs hang ~210', caveBotAt(CAVE_FANG_L) > 198 && caveBotAt(CAVE_FANG_L) < 222 && caveBotAt(CAVE_FANG_R) > 198 && caveBotAt(CAVE_FANG_R) < 222, Math.round(caveBotAt(CAVE_FANG_L)) + '/' + Math.round(caveBotAt(CAVE_FANG_R)));
+    ok('cave fang width ~28', isCaveFangX(CAVE_FANG_L) && isCaveFangX(CAVE_FANG_L + 10) && !isCaveFangX(CAVE_FANG_L + 20), CAVE_FANG_W);
+    ok('cave no void', !isDeathVoid(CAVE_PX) && !isDeathVoid(CAVE_FX) && !isDeathVoid(480) && !isDeathVoid(CAVE_FANG_L));
+    ok('cave nums', CAVE_CRATER === 0.70 && CAVE_STORM_P === 0.20 && GRAV === 260 && VK === 420);
+    G.p = { x: CAVE_PX, y: G.H[CAVE_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: CAVE_FX, y: G.H[CAVE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    const cvpx = spawnX('cave', 'p');
+    const cvpy = G.H[cvpx | 0] - UNIT_R;
+    const cvth90 = 90 * Math.PI / 180;
+    const cvs90 = traceShot(cvpx + Math.cos(cvth90) * 18, cvpy - 4 - Math.sin(cvth90) * 18, 90, 95, 0, WEPS[0], G.H, G.p);
+    ok('cave 90 hits ceiling', inCave(cvs90.x, cvs90.y) && cvs90.y < 160 && !cvs90.air, Math.round(cvs90.x) + ',' + Math.round(cvs90.y));
+    const cvth30 = 30 * Math.PI / 180;
+    const cvs30 = traceShot(cvpx + Math.cos(cvth30) * 18, cvpy - 4 - Math.sin(cvth30) * 18, 30, 90, 0, WEPS[0], G.H, G.p);
+    ok('cave 30 skip far floor', isCaveFloor(cvs30.x) && cvs30.x > CAVE_R0 && !cvs30.air && !isCaveFangX(cvs30.x), Math.round(cvs30.x) + ',' + Math.round(cvs30.y));
+    const cvth65 = 65 * Math.PI / 180;
+    const cvs65 = traceShot(cvpx + Math.cos(cvth65) * 18, cvpy - 4 - Math.sin(cvth65) * 18, 65, 50, 0, WEPS[0], G.H, G.p);
+    ok('cave 65 clip near fang', (isCaveFangX(cvs65.x) || (cvs65.x > 300 && cvs65.x < 420 && cvs65.y < 220)) && !cvs65.air, Math.round(cvs65.x) + ',' + Math.round(cvs65.y));
+    ok('cave walk under fang', isCaveFloor(CAVE_FANG_L) && (G.H[CAVE_FANG_L] - UNIT_R) > caveBotAt(CAVE_FANG_L) + 40);
+    ok('cave hole not void', isDeathVoid(CAVE_FANG_L) === false);
+    const caveDirtH = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) caveDirtH[i] = 400;
+    G.H = caveDirtH;
+    G.mapId = 'plain';
+    G.cave = null;
+    carve(500, 400, 30);
+    const caveDirt = G.H[500] - 400;
+    G.mapId = 'cave';
+    G.cave = makeCaveRoof();
+    const ceilX = CAVE_PX;
+    const ceilY = caveBotAt(ceilX);
+    const beforeCeil = ceilY;
+    carve(ceilX, ceilY, caveR(30, ceilX, ceilY));
+    const ceilEat = beforeCeil - caveBotAt(ceilX);
+    ok('cave ceiling crater ~0.70', ceilEat > 4 && ceilEat < caveDirt * 0.92 && Math.abs(ceilEat / caveDirt - CAVE_CRATER) < 0.18, Math.round(ceilEat) + '/' + Math.round(caveDirt));
+    G.H = buildHeight('cave');
+    G.cave = makeCaveRoof();
+    G.mapId = 'cave';
+    const floorY = G.H[CAVE_PX];
+    carve(CAVE_PX, floorY, 30);
+    const floorEat = G.H[CAVE_PX] - floorY;
+    ok('cave floor crater normal', Math.abs(floorEat - caveDirt) < 3, Math.round(floorEat) + '/' + Math.round(caveDirt));
+    const heCeil = Math.round(caveR(WEPS[1].crater, CAVE_FANG_L, caveBotAt(CAVE_FANG_L)));
+    ok('cave fang 余震', wantQuake(WEPS[1], heCeil) === true && heCeil >= QUAKE_R * 0.65, heCeil);
+    ok('cave big crater 余震', wantQuake(WEPS[0], 36) === true);
+    G.kind = 'hall';
+    G.wind = 0;
+    G.ai = 1;
+    G.p = { x: CAVE_FANG_L, y: G.H[CAVE_FANG_L] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: CAVE_FX, y: G.H[CAVE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    ok('cave AI under fang 高爆', underFang(G.p) && pickAIWeapon(G.f) === 1);
+    const cimpF = { x: CAVE_FANG_L, y: caveBotAt(CAVE_FANG_L), t: 1, hit: null };
+    const csc90 = scoreOne(cimpF, WEPS[1], G.f, G.p, 88);
+    const csc30f = scoreOne(cimpF, WEPS[1], G.f, G.p, 30);
+    ok('cave AI prefer 90 chew fang', csc90 > csc30f + 400, Math.round(csc90) + '>' + Math.round(csc30f));
+    G.H = buildHeight('cave');
+    G.cave = makeCaveRoof();
+    G.mapId = 'cave';
+    G.p = { x: CAVE_PX, y: G.H[CAVE_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: CAVE_FX, y: G.H[CAVE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    ok('cave AI far floor 普通', caveFarFloor(G.f, G.p) && pickAIWeapon(G.f) === 0);
+    const cimpFar = { x: CAVE_PX, y: G.H[CAVE_PX], t: 1, hit: null };
+    const cscSkip = scoreOne(cimpFar, WEPS[0], G.f, G.p, 30);
+    const cscHi = scoreOne(cimpFar, WEPS[0], G.f, G.p, 65);
+    ok('cave AI prefer 30 skip', cscSkip > cscHi + 400, Math.round(cscSkip) + '>' + Math.round(cscHi));
+    G.p = { x: CAVE_LIP_L, y: G.H[CAVE_LIP_L] - 14, r: 14, hp: 50, max: 100, side: 'p', id: 'p' };
+    G.turns = 3;
+    ok('cave AI far lip 迟雷', caveFarFloor(G.f, G.p) && isCaveLipX(G.p.x) && wantChiLei(G.f, G.p) === true && pickAIWeapon(G.f) === 7);
+    G.H = buildHeight('cave');
+    G.cave = makeCaveRoof();
+    G.mapId = 'cave';
+    G.kind = 'duo';
+    const cdx0 = spawnAt('p', 0);
+    const cdx1 = spawnAt('p', 1);
+    const cdr0 = spawnAt('f', 0);
+    const cdr1 = spawnAt('f', 1);
+    ok('cave duo extras floor', isCaveFloor(cdx0) && isCaveFloor(cdx1) && isCaveFloor(cdr0) && isCaveFloor(cdr1), cdx1 + '/' + cdr1);
+    ok('cave duo tops', cdx0 === CAVE_PX && cdr0 === CAVE_FX);
+    ok('cave duo extras along', Math.abs(cdx1 - cdx0) >= 20 && Math.abs(cdr1 - cdr0) >= 20, Math.round(Math.abs(cdx1 - cdx0)));
+    ok('cave duo not mid-air', G.H[cdx1] < CAVE_PIT_Y - 20 && G.H[cdr1] < CAVE_PIT_Y - 20);
+    ok('cave duo not void', !isDeathVoid(cdx0) && !isDeathVoid(cdx1) && !isDeathVoid(cdr0) && !isDeathVoid(cdr1));
+    G.kind = 'hall';
+    ok('crate on cave floor', crateGroundOk(CAVE_PX) === true && crateGroundOk(480) === false);
+    ok('cave storm ~20', !stormForced('cave') && !stormBanned('cave') && CAVE_STORM_P === 0.20 && STORM_P === 0.35);
+    ok('洞顶 name locked', MAP_NAME.cave === '洞顶' && MAP_IDS[19] === 'cave');
+    ok('no banned cave', MAP_NAME.cave.indexOf('传送') < 0 && MAP_NAME.cave.indexOf('飞行') < 0 && MAP_NAME.cave.indexOf('三叉戟') < 0 && MAP_NAME.cave.indexOf('激怒') < 0 && MAP_NAME.cave.indexOf('天使') < 0 && MAP_NAME.cave.indexOf('恶魔') < 0);
+    ok('maps 20 with 洞顶', MAP_IDS.length === 20 && MAP_NAME.well === '井口' && MAP_NAME.cave === '洞顶' && MAP_NAME.mirror === '镜廊');
+    ok('叠珠 still 7 after 洞顶', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('迟雷 still 8 after 洞顶', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
+    ok('ghost K still after 洞顶', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('时尽 still after 洞顶', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
+    ok('堂匣 still after 洞顶', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣' && BAG_CRATE_P === 0.50);
+    ok('堂袋 still after 洞顶', BAG_NAME.x2 === '×2' && bagStackReadout(x2p5) === '2发×1.35');
+    ok('井口 still after 洞顶', MAP_NAME.well === '井口' && MAP_IDS[18] === 'well');
+    ok('镜廊 still after 洞顶', MAP_NAME.mirror === '镜廊' && MAP_IDS[17] === 'mirror');
+    ok('云台 still after 洞顶', MAP_NAME.cloud === '云台' && MAP_IDS[16] === 'cloud');
+    ok('余震 still after 洞顶', QUAKE_NAME === '余震' && HIT_STOP_DIRECT === 0.14);
+    ok('雷泽 still after 洞顶', STORM_NAME === '雷泽' && stormForced('vale') && stormBanned('forge'));
+    ok('no 9th wep after 洞顶', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('g vk v44', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('stack math still v40 after 洞顶', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
+    G.cave = null;
+    }
     G.mapId = 'plain';
     G.H = buildHeight('plain');
     G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', ang: 65 };
