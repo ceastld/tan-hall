@@ -10,7 +10,10 @@
   const WALK_PX = 96;
   const CHARGE_T = 0.8;
   const TAP_POW = 12;
-  const TURN_T = 20;
+  const TURN_T = 18;
+  const TURN_T_CORE = 14;
+  const TURN_T_SUDDEN = 11;
+  const CLOCK_WARN = 5;
   const GRAV = 260;
   const VK = 420;
   const LOFT_W = 20;
@@ -370,6 +373,7 @@
     wep: 0,
     walk: WALK_PX,
     timeout: TURN_T,
+    clockN: 0,
     turns: 0,
     combo: 0,
     stop: 0,
@@ -660,6 +664,23 @@
     if (G.dual && !G.dual.spawned) return true;
     return false;
   }
+  function liveMineFuse() {
+    const list = G.mines;
+    if (!list || !list.length) return false;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] && (list[i].fuse || 0) > 0) return true;
+    }
+    return false;
+  }
+  function clockPaused() {
+    if (overlayOpen()) return true;
+    if (flyStillGoing()) return true;
+    if (liveMineFuse()) return true;
+    return false;
+  }
+  function clockOn() {
+    return G.mode === 'play' && humanTurn() && (G.phase === 'aim' || G.phase === 'charge');
+  }
   function makeShell(sx, sy, ang, power, wep, owner, opts) {
     const th = ang * Math.PI / 180;
     const spd = muzzleSpeed(power, ang, wep);
@@ -723,6 +744,11 @@
   }
   function kindName() {
     return G.kind === 'core' ? '堂核' : G.kind === 'drill' ? '演习场' : G.kind === 'seat' ? '对坐' : G.kind === 'duo' ? '对堂' : G.kind === 'quad' ? '堂座' : '弹堂';
+  }
+  function turnTime() {
+    if (G.sudden) return TURN_T_SUDDEN;
+    if (G.kind === 'core') return TURN_T_CORE;
+    return TURN_T;
   }
   function addRage(u, n) {
     if (!u || u.stake) return;
@@ -2334,15 +2360,17 @@
       } else comboEl.hidden = true;
     }
     if (timeLabel) {
-      const ticking = G.mode === 'play' && (G.phase === 'aim' || G.phase === 'charge');
-      if (ticking) {
+      if (clockOn()) {
         const left = Math.max(0, Math.ceil(G.timeout));
+        const warn = left <= CLOCK_WARN && G.timeout > 0;
         timeLabel.textContent = '时 ' + left;
-        timeLabel.classList.toggle('pulse', left <= 5 && G.timeout > 0);
+        timeLabel.classList.toggle('warn', warn);
+        timeLabel.classList.toggle('pulse', warn && !clockPaused());
         timeLabel.classList.remove('gone');
       } else {
         timeLabel.classList.add('gone');
         timeLabel.classList.remove('pulse');
+        timeLabel.classList.remove('warn');
       }
     }
     if (aimHintEl) {
@@ -2899,7 +2927,7 @@
     G.busyT = 0;
     G.power = TAP_POW;
     G.walk = WALK_PX;
-    G.timeout = TURN_T;
+    G.clockN = 0;
     G.shot = null;
     G.shots = [];
     G.dual = null;
@@ -2916,6 +2944,7 @@
     rollWind();
     if (u && u.id === 'p') G.turns += 1;
     maybeSudden();
+    G.timeout = turnTime();
     audio.chargeStop();
     if (u && u.hp > 0) {
       tickMoonWater(u);
@@ -4152,21 +4181,32 @@
     return true;
   }
 
-  function skipTurn() {
-    if (G.mode !== 'play' || G.phase !== 'aim' || G.busy) return;
-    if (!humanTurn()) return;
+  function skipTurn(fromClock) {
+    if (G.mode !== 'play') return false;
+    if (!humanTurn()) return false;
+    if (fromClock) {
+      if (G.phase !== 'aim' && G.phase !== 'charge') return false;
+      if (G.busy === 'leap') return false;
+    } else if (G.phase !== 'aim' || G.busy) return false;
+    if (G.busy === 'warpAim') G.busy = null;
     const u = curUnit();
     if (u && u.ult) u.ult = false;
     G.neonOn = false;
     G.combo = 0;
     G.charging = false;
+    G.busy = null;
     G.actDelay = { skip: true, wepId: 0, ult: false };
     audio.chargeStop();
-    toast('跳过', false, false);
+    if (fromClock) {
+      audio.ensure();
+      audio.beep(240, 0.09, 'square', 0.028, 80);
+      toast('时尽', true, false);
+    } else toast('跳过', false, false);
     G.phase = 'settle';
     G.settleT = 0.10;
     tickFires();
     syncHud();
+    return true;
   }
 
   function onItem(id) {
@@ -5148,12 +5188,19 @@
     }
     if (G.busy === 'leap') stepLeap(dt);
     if (G.phase === 'aim' || G.phase === 'charge') {
-      G.timeout -= dt;
-      if (G.timeout <= 0 && !G.busy) {
-        G.power = 50;
-        fire(curUnit());
-        toast('超时 · 半力打出', true, false);
-        return;
+      if (humanTurn() && !clockPaused()) {
+        G.timeout -= dt;
+        if (G.timeout <= CLOCK_WARN && G.timeout > 0) {
+          const n = Math.max(1, Math.ceil(G.timeout));
+          if (G.clockN !== n) {
+            G.clockN = n;
+            audio.tick();
+          }
+        }
+        if (G.timeout <= 0) {
+          G.timeout = 0;
+          if (skipTurn(true)) return;
+        }
       }
       if (humanTurn()) {
         if (!G.busy) {
@@ -5876,11 +5923,10 @@
   }
 
   function drawClock(g) {
-    if (G.mode !== 'play') return;
-    if (G.phase !== 'aim' && G.phase !== 'charge') return;
-    if (G.timeout > 5) return;
+    if (!clockOn()) return;
+    if (G.timeout > CLOCK_WARN) return;
     const n = Math.max(0, Math.ceil(G.timeout));
-    const pulse = REDUCE ? 1 : 1 + 0.14 * Math.sin(G.t * 11);
+    const pulse = REDUCE || clockPaused() ? 1 : 1 + 0.14 * Math.sin(G.t * 11);
     g.save();
     g.translate(VW * 0.5, 34);
     g.scale(pulse, pulse);
@@ -7079,7 +7125,7 @@
     buildWalls('ruins', G.H);
     punchCover(wr, G.H[wr] - 40, 22, WEPS[3]);
     ok('ruins punch 三裂', !inWall(wr, G.H[wr] - 40));
-    ok('timeout half still', TURN_T === 20);
+    ok('时尽 18 not 20', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
     ok('assist keep 0-3', ASSIST_NAME.length === 4 && G.assist === 2);
     ok('g vk locked', GRAV === 260 && VK === 420);
     G.kind = 'seat';
@@ -8357,6 +8403,52 @@
     ok('silk still after 堂匣', typeof silkCount === 'function' && silkCount(0) === 0);
     ok('no banned crate words', CRATE_NAME.indexOf('传送') < 0 && CRATE_NAME.indexOf('飞行') < 0 && CRATE_GOLD_NAME.indexOf('三叉戟') < 0 && CRATE_GOLD_NAME.indexOf('激怒') < 0);
     ok('g vk v29', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+
+    G.kind = 'hall';
+    G.sudden = false;
+    ok('时尽 hall 18', turnTime() === 18 && TURN_T === 18);
+    G.kind = 'core';
+    ok('时尽 堂核 14', turnTime() === 14);
+    G.sudden = true;
+    ok('时尽 殿塌 11', turnTime() === 11);
+    G.kind = 'hall';
+    ok('时尽 殿塌 covers 弹堂', turnTime() === 11);
+    G.kind = 'core';
+    ok('时尽 殿塌 covers 堂核', turnTime() === 11);
+    G.sudden = false;
+    G.kind = 'seat';
+    ok('时尽 对坐 18', turnTime() === 18);
+    G.kind = 'duo';
+    ok('时尽 对堂 18', turnTime() === 18);
+    G.kind = 'quad';
+    ok('时尽 堂座 18', turnTime() === 18);
+    G.kind = 'drill';
+    ok('时尽 演习 18', turnTime() === 18);
+    G.kind = 'hall';
+    G.mode = 'play';
+    G.phase = 'aim';
+    G.p = { x: 152, y: 400, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: 768, y: 400, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    G.p2 = null;
+    G.f2 = null;
+    G.shots = [];
+    G.dual = null;
+    G.mines = [];
+    ok('clock free empty', clockPaused() === false);
+    G.mines = [{ x: 400, y: 400, fuse: 1.2, side: 'p' }];
+    ok('clock pause 迟雷', clockPaused() === true);
+    G.mines = [{ x: 400, y: 400, fuse: 0, side: 'p' }];
+    ok('clock free dead 迟雷', clockPaused() === false);
+    G.mines = [];
+    G.shots = [{ x: 200, y: 200 }];
+    ok('clock pause shell', clockPaused() === true);
+    G.shots = [];
+    ok('clock free after shell', clockPaused() === false);
+    ok('maps still 16 after 时尽', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('locked names after 时尽', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('no banned 时尽', '时尽'.indexOf('传送') < 0 && '时尽'.indexOf('飞行') < 0 && '时尽'.indexOf('三叉戟') < 0 && '时尽'.indexOf('激怒') < 0);
+    ok('g vk v30', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('no 9th wep after 时尽', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);

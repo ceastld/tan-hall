@@ -1196,9 +1196,13 @@ canvas {
   font-weight: 700;
 }
 
+.time-lab.warn,
 .time-lab.pulse {
-  color: var(--mag);
-  text-shadow: 0 0 12px rgba(255, 61, 184, 0.55);
+  color: #ff4d6a;
+  text-shadow: 0 0 12px rgba(255, 61, 80, 0.62);
+}
+
+.time-lab.pulse {
   animation: timePulse 0.55s ease-in-out infinite;
 }
 
