@@ -25,7 +25,7 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条 · K 残影';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 7叠珠 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅 · K残影';
   const MINI_W = 160;
   const MINI_H = 48;
@@ -146,6 +146,10 @@
   const DUNE_WALK = 0.55;
   const DUNE_CRATER = 1.25;
   const DUNE_WIND_EXTRA = 1;
+  const DUAL_WAIT = 0.38;
+  const DUAL_POW = 0.72;
+  const DUAL_JIT = 1.2;
+  const DUAL_BLAST = 0.72;
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
@@ -173,6 +177,7 @@
   const RAIL = [100, 255, 210];
   const FIRE = [255, 120, 48];
   const STONE = [196, 156, 112];
+  const PEARL = [255, 236, 180];
 
   const WEPS = [
     { id: 0, name: '普通弹', direct: 32, splash: 36, crater: 30, spd: 1.00 },
@@ -180,7 +185,8 @@
     { id: 2, name: '穿透', direct: 30, splash: 32, crater: 26, spd: 1.06 },
     { id: 4, name: '三裂', direct: 14, splash: 22, crater: 16, spd: 0.96 },
     { id: 5, name: '霓轨', direct: 20, splash: 40, crater: 22, spd: 0.70 },
-    { id: 6, name: '霓火', direct: 18, splash: 44, crater: 20, spd: 1.00 }
+    { id: 6, name: '霓火', direct: 18, splash: 44, crater: 20, spd: 1.00 },
+    { id: 7, name: '叠珠', direct: 32, splash: 36, crater: 30, spd: 1.00 }
   ];
   const NEON = { id: 3, name: '霓弹', direct: 8, splash: 28, crater: 18, spd: 1.00 };
 
@@ -324,6 +330,8 @@
     f2: null,
     actDelay: { skip: false, wepId: 0, ult: false },
     shot: null,
+    shots: [],
+    dual: null,
     charging: false,
     stam: STAM_MAX,
     neonOn: false,
@@ -504,6 +512,7 @@
     else if (wepId === 4) d += 20;
     else if (wepId === 5) d += 40;
     else if (wepId === 6) d += 25;
+    else if (wepId === 7) d += 35;
     if (ult) d += 20;
     return d;
   }
@@ -542,6 +551,50 @@
     return sortByDelay(live, curUnit(), pendingDelayAmount())[0];
   }
   function wepOf() { return G.neonOn ? NEON : (WEPS[G.wep] || WEPS[0]); }
+  function isDualWep(wep) { return !!(wep && wep.id === 7); }
+  function dualFollowWep(wep) {
+    wep = wep || WEPS[6] || WEPS[0];
+    return {
+      id: wep.id,
+      name: wep.name,
+      direct: wep.direct,
+      splash: wep.splash * DUAL_BLAST,
+      crater: wep.crater * DUAL_BLAST,
+      spd: wep.spd
+    };
+  }
+  function matchWouldEnd() {
+    if (G.kind === 'drill') return false;
+    if (G.mode === 'end' || G.phase === 'end') return true;
+    return teamDown('p') || teamDown('f');
+  }
+  function flyStillGoing() {
+    if (G.mode !== 'play') return false;
+    if (matchWouldEnd()) return false;
+    if (G.shots && G.shots.length) return true;
+    if (G.dual && !G.dual.spawned) return true;
+    return false;
+  }
+  function makeShell(sx, sy, ang, power, wep, owner, opts) {
+    const th = ang * Math.PI / 180;
+    const spd = muzzleSpeed(power, ang, wep);
+    opts = opts || {};
+    return {
+      x: sx,
+      y: sy,
+      vx: Math.cos(th) * spd,
+      vy: -Math.sin(th) * spd,
+      wep: wep,
+      owner: owner,
+      pierced: false,
+      fuse: 0,
+      life: 0,
+      ult: !!opts.ult,
+      lead: !!opts.lead,
+      follow: !!opts.follow,
+      trail: [{ x: sx, y: sy, a: 1 }]
+    };
+  }
   function isSeat() { return G.kind === 'seat'; }
   function isHuman(u) {
     if (!u || u.stake) return false;
@@ -1545,6 +1598,7 @@
       if (wep && wep.id === 1) this.beep(70, 0.28, 'triangle', 0.05, 32);
       if (wep && wep.id === 5) this.beep(210, 0.16, 'sine', 0.045, 90);
       if (wep && wep.id === 6) this.beep(140, 0.2, 'sawtooth', 0.045, 50);
+      if (wep && wep.id === 7) this.beep(260, 0.16, 'sine', 0.04, 70);
       if (ult) {
         this.noise(0.42, 0.16, 70);
         this.beep(48, 0.5, 'sine', 0.14, 24);
@@ -2480,6 +2534,8 @@
     G.walk = WALK_PX;
     G.timeout = TURN_T;
     G.shot = null;
+    G.shots = [];
+    G.dual = null;
     G.neonOn = false;
     G.actDelay = { skip: false, wepId: 0, ult: false };
     trail.length = 0;
@@ -2625,24 +2681,27 @@
     const nose = 18;
     const sx = u.x + Math.cos(th) * nose;
     const sy = u.y - 4 - Math.sin(th) * nose;
-    const spd = muzzleSpeed(G.power, u.ang, wep);
     if (G.neonOn) {
       if (u.items && u.items.neon > 0) u.items.neon -= 1;
       G.neonOn = false;
     }
     G.actDelay = { skip: false, wepId: wep.id, ult: !!u.ult };
-    G.shot = {
-      x: sx,
-      y: sy,
-      vx: Math.cos(th) * spd,
-      vy: -Math.sin(th) * spd,
-      wep: wep,
+    const shell = makeShell(sx, sy, u.ang, G.power, wep, u, { ult: !!u.ult, lead: true });
+    G.shot = shell;
+    G.shots = [shell];
+    G.dual = isDualWep(wep) ? {
+      wait: DUAL_WAIT,
+      spawned: false,
       owner: u,
-      pierced: false,
-      fuse: 0,
-      life: 0,
-      ult: !!u.ult
-    };
+      ang: u.ang,
+      power: G.power,
+      wep: wep,
+      sx: sx,
+      sy: sy,
+      ult: !!u.ult,
+      hit: false,
+      comboDone: false
+    } : null;
     G.ghostPend = { x: sx, y: sy, ang: u.ang, power: Math.round(G.power), wepId: wep.id, wind: G.wind, points: [{ x: sx, y: sy, a: 1 }] };
     trail.length = 0;
     G.phase = 'fly';
@@ -2663,12 +2722,53 @@
       audio.beep(240, 0.12, 'sawtooth', 0.036, 90);
       audio.beep(420, 0.1, 'sine', 0.03, 180);
     }
+    if (wep.id === 7) {
+      audio.beep(340, 0.08, 'sine', 0.034, 620);
+      audio.beep(510, 0.1, 'triangle', 0.028, 880);
+    }
     if (u.ult) audio.beep(90, 0.28, 'sine', 0.06, 36);
-    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : unitRgb(u)))), 8, 80, 0.25);
+    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : unitRgb(u))))), 8, 80, 0.25);
     u.walkT = 0;
     spawnFruits();
     queueNextWind();
     coachOnFire(u);
+    syncHud();
+  }
+
+  function spawnDualFollow() {
+    const d = G.dual;
+    if (!d || d.spawned) return;
+    d.spawned = true;
+    if (matchWouldEnd() || G.mode !== 'play' || G.phase === 'end') {
+      if (!G.shots || !G.shots.length) finishFly();
+      return;
+    }
+    const jit = rand(-DUAL_JIT, DUAL_JIT);
+    const ang = clamp(d.ang + jit, 0, 180);
+    const pow = d.power * DUAL_POW;
+    const wep2 = dualFollowWep(d.wep);
+    const shell = makeShell(d.sx, d.sy, ang, pow, wep2, d.owner, { ult: !!d.ult, follow: true });
+    if (!G.shots) G.shots = [];
+    G.shots.push(shell);
+    G.shot = shell;
+    G.phase = 'fly';
+    audio.fire(wep2);
+    audio.beep(420, 0.07, 'sine', 0.028, 760);
+    burst(d.sx, d.sy, d.ult ? GOLD : PEARL, 6, 70, 0.22);
+    syncHud();
+  }
+
+  function finishFly() {
+    const owner = (G.dual && G.dual.owner) || (G.shot && G.shot.owner) || curUnit();
+    if (owner && owner.ult) owner.ult = false;
+    G.dual = null;
+    G.shots = [];
+    G.shot = null;
+    trail.length = 0;
+    G.phase = 'settle';
+    G.settleT = 0.22;
+    tickFires();
+    eachUnit(refreshBury);
     syncHud();
   }
 
@@ -2819,10 +2919,11 @@
     }
   }
 
-  function explode(x, y, wep, owner, fromHit) {
+  function explode(x, y, wep, owner, fromHit, shot) {
+    shot = shot || G.shot;
     G.killVictim = null;
     let crater = wep.crater;
-    const wasUlt = !!(owner && owner.ult);
+    const wasUlt = !!(shot ? shot.ult : (owner && owner.ult));
     const ultMul = wasUlt ? 1.35 : 1;
     if (wasUlt) crater = Math.round(crater * 1.35);
     crater = Math.round(sandR(crater));
@@ -2848,10 +2949,10 @@
       snapArcade(x, crater, wep);
       snapMoon(x, crater, wep);
       punchCover(x, y, crater, wep);
-      if (wep.id === 2 && G.shot && G.shot.pierced) {
-        const s = hypot(G.shot.vx, G.shot.vy) || 1;
-        const ux = G.shot.vx / s;
-        const uy = G.shot.vy / s;
+      if (wep.id === 2 && shot && shot.pierced) {
+        const s = hypot(shot.vx, shot.vy) || 1;
+        const ux = shot.vx / s;
+        const uy = shot.vy / s;
         for (let s2 = 0; s2 <= 46; s2 += 4) {
           const px = x - ux * s2;
           const py = y - uy * s2;
@@ -2860,21 +2961,28 @@
         }
       }
       hit = applyBlast(x, y, wep, owner) || hit;
-      const rgb = wep.id === 6 ? FIRE : (hit ? unitRgb(owner) : DIRT);
+      const rgb = wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (hit ? unitRgb(owner) : DIRT));
       burst(x, y, rgb, hit ? 28 : 16, hit ? 260 : 180, 0.55);
-      burst(x, y, wep.id === 6 ? FIRE : GOLD, hit ? 10 : 4, 140, 0.35);
-      ringAt(x, y, wep.id === 6 ? FIRE : (hit ? GOLD : HOT), crater * 1.6);
+      burst(x, y, wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : GOLD), hit ? 10 : 4, 140, 0.35);
+      ringAt(x, y, wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (hit ? GOLD : HOT)), crater * 1.6);
     }
     if (wep.id === 6) plantFire(x, y, wasUlt, owner);
     dirtBurst(x, y, hit ? 14 : 20);
     audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y, !!fromHit);
-    if (wasUlt) {
+    if (wasUlt && (!shot || shot.lead || !G.dual)) {
       floatText(x, y - 48, '殿破', GOLD, true);
       screenFlash(GOLD, 0.45);
       hitStop(0.12);
       kick(6.5);
     }
+    if (G.shots && shot) {
+      const ix = G.shots.indexOf(shot);
+      if (ix >= 0) G.shots.splice(ix, 1);
+    }
+    if (G.shot === shot) G.shot = (G.shots && G.shots[0]) || null;
+    if (G.dual && hit) G.dual.hit = true;
+    const more = flyStillGoing();
     if (hit) {
       audio.hit();
       hitStop(fromHit ? HIT_STOP_DIRECT : 0.09);
@@ -2884,19 +2992,25 @@
         G.punch = Math.max(G.punch, 1.14);
         cam.tz = Math.max(cam.tz, 1.30);
       }
-      screenFlash(wasUlt ? GOLD : unitRgb(owner), wasUlt ? 0.45 : 0.28);
-      G.combo += 1;
-      if (G.combo >= 2) {
-        floatText(x, y - 36, '连堂 ×' + G.combo, GOLD, true);
-        audio.combo(G.combo);
-        if (comboEl) {
-          comboEl.classList.remove('hot');
-          void comboEl.offsetWidth;
-          comboEl.classList.add('hot');
+      screenFlash(wasUlt ? GOLD : (wep.id === 7 ? PEARL : unitRgb(owner)), wasUlt ? 0.45 : 0.28);
+      if (!G.dual || !G.dual.comboDone) {
+        G.combo += 1;
+        if (G.dual) G.dual.comboDone = true;
+        if (G.combo >= 2) {
+          floatText(x, y - 36, '连堂 ×' + G.combo, GOLD, true);
+          audio.combo(G.combo);
+          if (comboEl) {
+            comboEl.classList.remove('hot');
+            void comboEl.offsetWidth;
+            comboEl.classList.add('hot');
+          }
         }
       }
+    } else if (!more) {
+      if (!(G.dual && G.dual.hit)) G.combo = 0;
+      audio.dirt();
+      kick(2.8);
     } else {
-      G.combo = 0;
       audio.dirt();
       kick(2.8);
     }
@@ -2904,15 +3018,15 @@
       armKillCam(G.killVictim);
       G.killVictim = null;
     }
-    if (owner && owner.ult) owner.ult = false;
-    commitLastGhost(x, y);
+    if (!shot || shot.lead) commitLastGhost(x, y);
     eachUnit(ungroundIfAir);
-    G.shot = null;
-    G.phase = 'settle';
-    G.settleT = 0.22;
-    tickFires();
     eachUnit(refreshBury);
-    syncHud();
+    if (more) {
+      G.phase = 'fly';
+      syncHud();
+      return;
+    }
+    finishFly();
   }
 
   function plantFire(x, y, ult, owner) {
@@ -2955,8 +3069,7 @@
     }
   }
 
-  function stepShot(dt) {
-    const s = G.shot;
+  function stepOneShot(s, dt) {
     if (!s) return;
     s.vx += G.wind * windKAt(s.wep, s.life) * dt;
     s.vy += (GRAV + gustAy(s.x)) * dt;
@@ -2965,18 +3078,22 @@
     s.x += s.vx * dt;
     s.y += s.vy * dt;
     s.life += dt;
-    trail.push({ x: s.x, y: s.y, a: 1 });
-    if (trail.length > 42) trail.shift();
-    if (G.ghostPend) G.ghostPend.points.push({ x: s.x, y: s.y, a: 1 });
-    setCamShot(s);
+    if (!s.trail) s.trail = [];
+    s.trail.push({ x: s.x, y: s.y, a: 1 });
+    if (s.trail.length > 42) s.trail.shift();
+    if (s.lead) {
+      trail.push({ x: s.x, y: s.y, a: 1 });
+      if (trail.length > 42) trail.shift();
+      if (G.ghostPend) G.ghostPend.points.push({ x: s.x, y: s.y, a: 1 });
+    }
     sweepFruits(ox, oy, s.x, s.y, s.owner);
     if (s.x < 2 || s.x > VW - 2 || s.y > VH + 20) {
-      explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false);
+      explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false, s);
       return;
     }
     const u = unitAt(s.x, s.y, s.owner);
     if (u) {
-      explode(s.x, s.y, s.wep, s.owner, true);
+      explode(s.x, s.y, s.wep, s.owner, true, s);
       return;
     }
     if (inGround(s.x, s.y) || inWall(s.x, s.y)) {
@@ -3007,12 +3124,33 @@
         audio.tick();
         return;
       }
-      explode(s.x, s.y, s.wep, s.owner, false);
+      explode(s.x, s.y, s.wep, s.owner, false, s);
       return;
     }
     if (s.pierced) {
       s.fuse -= dt;
-      if (s.fuse <= 0) explode(s.x, s.y, s.wep, s.owner, false);
+      if (s.fuse <= 0) explode(s.x, s.y, s.wep, s.owner, false, s);
+    }
+  }
+
+  function stepShot(dt) {
+    if (G.dual && !G.dual.spawned) {
+      G.dual.wait -= dt;
+      if (G.dual.wait <= 0) spawnDualFollow();
+    }
+    if (G.phase !== 'fly') return;
+    const list = G.shots && G.shots.length ? G.shots.slice() : (G.shot ? [G.shot] : []);
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i];
+      if (G.shots && G.shots.indexOf(s) < 0) continue;
+      if (G.phase !== 'fly') return;
+      G.shot = s;
+      stepOneShot(s, dt);
+    }
+    if (G.phase === 'fly') {
+      const live = (G.shots && G.shots[0]) || G.shot;
+      if (live) setCamShot(live);
+      else if (G.dual && !G.dual.spawned && G.dual.owner) setCamShooter(G.dual.owner);
     }
   }
 
@@ -3359,7 +3497,8 @@
     const foe = foes[0] || otherUnit(from) || G.p;
     if (foe) {
       const pit = pitDepth(foe);
-      if (thinLedge(foe) || pit > (aiHard() ? 8 : 16)) return 3;
+      if (foe.buried || walkBlocked(foe) || pit > (aiHard() ? 8 : 16)) return 6;
+      if (thinLedge(foe)) return 3;
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
       if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
       if (G.mapId === 'arcade' && liveArcade(foe.x)) return 3;
@@ -3397,6 +3536,7 @@
     const craterEff = wep.id === 4 ? 54 : wep.crater;
     if (feetX < 34 && craterEff >= 30) bury += 900 + craterEff * 0.7 * 8;
     if (pitDepth(t) > 16 && feetX < 50 && wep.id === 4) bury += 1600;
+    if ((pitDepth(t) > 16 || t.buried) && feetX < 56 && wep.id === 7) bury += 2000;
     if (pitDepth(t) > 28 && feetX < 50) bury += 1400;
     if (G.mapId === 'bridge' && liveBridge(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 800;
     if (G.mapId === 'ruins' && (wep.id === 1 || wep.id === 4) && inWall(imp.x, imp.y)) bury += 600;
@@ -3574,7 +3714,7 @@
     G.wep = pickAIWeapon(from);
     G.neonOn = false;
     syncWeps();
-    if (aiHard()) {
+    if (aiHard() && G.wep !== 6) {
       const cur = G.wep;
       const scoreNow = solveAI(from).score;
       G.wep = 3;
@@ -3897,6 +4037,8 @@
     }
     G.actDelay = { skip: false, wepId: 0, ult: false };
     G.shot = null;
+    G.shots = [];
+    G.dual = null;
     G.combo = 0;
     G.turns = 0;
     G.wep = 0;
@@ -4014,7 +4156,8 @@
     if (actor && G.mode === 'play') actor.wep = n;
     syncWeps();
     syncHud();
-    toast(WEPS[n].name, false, n === 1);
+    const w = WEPS[n];
+    toast(w.id === 7 ? (w.name + ' · 两发') : w.name, false, n === 1 || w.id === 7);
   }
 
 
@@ -4988,7 +5131,7 @@
     if (u.side === 'p' && heroFrames.length >= 24) {
       if (u.hitT > 0) fr = heroFrames[3 * 6 + 3];
       else if (falling) fr = heroFrames[2 * 6 + 1];
-      else if (G.phase === 'fly' && G.shot && G.shot.owner === u) fr = heroFrames[1 * 6 + 3];
+      else if (G.phase === 'fly' && curUnit() === u) fr = heroFrames[1 * 6 + 3];
       else if (G.phase === 'charge' && curUnit() === u) fr = heroFrames[1 * 6 + 2];
       else if (walk) fr = heroFrames[0 * 6 + ((G.t * 10) | 0) % 5];
       else fr = heroFrames[1 * 6 + 0];
@@ -5083,35 +5226,53 @@
     }
   }
 
-  function drawShot(g) {
-    const s = G.shot;
+  function shotRgb(s) {
+    if (!s) return WHT;
+    if (s.ult) return GOLD;
+    const id = s.wep && s.wep.id;
+    if (id === 3) return ICE;
+    if (id === 4) return HOT;
+    if (id === 7) return PEARL;
+    if (id === 6) return FIRE;
+    if (id === 5) return RAIL;
+    return unitRgb(s.owner);
+  }
+
+  function drawOneShot(g, s) {
     if (!s) return;
-    const rgb = s.ult ? GOLD : (s.wep && s.wep.id === 3 ? ICE : (s.wep && s.wep.id === 4 ? HOT : (s.wep && s.wep.id === 6 ? FIRE : (s.wep && s.wep.id === 5 ? RAIL : unitRgb(s.owner)))));
+    const rgb = shotRgb(s);
+    const pts = (s.trail && s.trail.length > 1) ? s.trail : trail;
     g.save();
     g.lineCap = 'round';
     g.lineJoin = 'round';
-    for (let i = 1; i < trail.length; i++) {
-      const a = i / trail.length;
+    for (let i = 1; i < pts.length; i++) {
+      const a = i / pts.length;
       g.strokeStyle = rgba(rgb, a * 0.32);
       g.lineWidth = 6.2 + a * 4.4;
       g.beginPath();
-      g.moveTo(trail[i - 1].x, trail[i - 1].y);
-      g.lineTo(trail[i].x, trail[i].y);
+      g.moveTo(pts[i - 1].x, pts[i - 1].y);
+      g.lineTo(pts[i].x, pts[i].y);
       g.stroke();
       g.strokeStyle = rgba(rgb, a * 0.88);
       g.lineWidth = 2.6 + a * 3.2;
       g.beginPath();
-      g.moveTo(trail[i - 1].x, trail[i - 1].y);
-      g.lineTo(trail[i].x, trail[i].y);
+      g.moveTo(pts[i - 1].x, pts[i - 1].y);
+      g.lineTo(pts[i].x, pts[i].y);
       g.stroke();
     }
     g.fillStyle = rgba(WHT, 0.95);
     g.shadowColor = rgba(rgb, 0.9);
     g.shadowBlur = 12;
+    const id = s.wep && s.wep.id;
     g.beginPath();
-    g.arc(s.x, s.y, s.wep.id === 1 ? 5.2 : (s.wep.id === 4 ? 4.4 : (s.wep.id === 6 ? 4.2 : (s.wep.id === 5 ? 4.0 : 3.6))), 0, TAU);
+    g.arc(s.x, s.y, id === 1 ? 5.2 : (id === 7 ? 3.8 : (id === 4 ? 4.4 : (id === 6 ? 4.2 : (id === 5 ? 4.0 : 3.6)))), 0, TAU);
     g.fill();
     g.restore();
+  }
+
+  function drawShot(g) {
+    const list = G.shots && G.shots.length ? G.shots : (G.shot ? [G.shot] : []);
+    for (let i = 0; i < list.length; i++) drawOneShot(g, list[i]);
   }
 
   function drawFruits(g) {
@@ -5617,6 +5778,7 @@
     if (k === '4') setWep(3);
     if (k === '5') setWep(4);
     if (k === '6') setWep(5);
+    if (k === '7') setWep(6);
   }
 
   function bindPad() {
@@ -6479,7 +6641,7 @@
     G.ai = 1;
     ok('mid shallow no 三裂', pickAIWeapon(G.f) !== 3);
     G.ai = 2;
-    ok('hard shallow 三裂 bury', pickAIWeapon(G.f) === 3);
+    ok('hard shallow 叠珠 finish', pickAIWeapon(G.f) === 6);
     G.ai = 1;
     G.kind = 'quad';
     ok('堂座 still no AI', isHuman({ id: 'f', side: 'f' }) === true && isQuad() === true);
@@ -6632,6 +6794,35 @@
     ok('no banned dune', MAP_NAME.dune.indexOf('传送') < 0 && MAP_NAME.dune.indexOf('飞行') < 0 && MAP_NAME.dune.indexOf('三叉戟') < 0 && MAP_NAME.dune.indexOf('激怒') < 0);
     ok('g vk v23', GRAV === 260 && VK === 420);
     ok('cliff moon silk ghost kept', MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+
+    ok('叠珠 is 7', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 7);
+    ok('叠珠 stats 普通', WEPS[6].direct === 32 && WEPS[6].splash === 36 && WEPS[6].crater === 30 && WEPS[6].spd === 1);
+    ok('1-6 names stay', WEPS[0].name === '普通弹' && WEPS[1].name === '高爆' && WEPS[2].name === '穿透' && WEPS[3].name === '三裂' && WEPS[4].name === '霓轨' && WEPS[5].name === '霓火');
+    ok('1-6 ids stay', WEPS[0].id === 0 && WEPS[1].id === 1 && WEPS[2].id === 2 && WEPS[3].id === 4 && WEPS[4].id === 5 && WEPS[5].id === 6);
+    ok('dual nums', DUAL_WAIT === 0.38 && DUAL_POW === 0.72 && DUAL_JIT === 1.2 && DUAL_BLAST === 0.72);
+    ok('dual follow blast', Math.abs(dualFollowWep(WEPS[6]).splash - 36 * 0.72) < 0.001 && Math.abs(dualFollowWep(WEPS[6]).crater - 30 * 0.72) < 0.001);
+    ok('dual follow same dmg', dualFollowWep(WEPS[6]).direct === 32 && dualFollowWep(WEPS[6]).id === 7);
+    ok('dual delay', delayCost(7) === 135 && delayCost(0) === 100 && delayCost(6) === 125);
+    ok('no banned 叠珠', WEPS[6].name.indexOf('传送') < 0 && WEPS[6].name.indexOf('飞行') < 0 && WEPS[6].name.indexOf('三叉戟') < 0 && WEPS[6].name.indexOf('激怒') < 0);
+    G.H = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    for (let i = 176; i <= 224; i++) G.H[i] = 452;
+    G.mapId = 'plain';
+    G.kind = 'hall';
+    G.wind = 0;
+    G.ai = 1;
+    G.p = { x: 200, y: G.H[200] - 14, r: 14, hp: 100, side: 'p', id: 'p', buried: true };
+    G.f = { x: 620, y: 386, r: 14, hp: 100, side: 'f', id: 'f' };
+    G.p2 = null; G.f2 = null;
+    ok('AI 叠珠 buried', pickAIWeapon(G.f) === 6 && pitDepth(G.p) >= BURY_PX, Math.round(pitDepth(G.p)));
+    G.p.buried = false;
+    ok('AI 叠珠 pit', pickAIWeapon(G.f) === 6);
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    G.p = { x: 200, y: 386, r: 14, hp: 100, side: 'p', id: 'p' };
+    ok('AI open not 叠珠', pickAIWeapon(G.f) !== 6);
+    ok('maps still 14 after 叠珠', MAP_IDS.length === 14 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('ghost K still after 叠珠', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('g vk v24', GRAV === 260 && VK === 420);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
