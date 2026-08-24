@@ -179,11 +179,25 @@ body {
   text-shadow: 0 0 10px rgba(255, 227, 107, 0.35);
 }
 
+.wind.gale {
+  font-weight: 800;
+  text-shadow: 0 0 14px rgba(255, 227, 107, 0.78);
+}
+
+.wind.gale #wind-num {
+  font-size: 1.12em;
+}
+
 .wind-arr {
   display: inline-block;
   min-width: 1.1em;
   text-align: center;
   transform-origin: 50% 55%;
+}
+
+.wind.gale .wind-arr {
+  min-width: 1.8em;
+  letter-spacing: 0.02em;
 }
 
 .wind-arr.spin {

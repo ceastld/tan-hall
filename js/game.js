@@ -387,6 +387,37 @@
     return G.kind === 'core' ? 60 : 100;
   }
   function windMax() { return G.kind === 'core' ? 14 : 8; }
+  function windMagOf(w) { return Math.abs((w == null ? G.wind : w) | 0); }
+  function windDirOf(w) {
+    w = (w == null ? G.wind : w) | 0;
+    return w > 0 ? 1 : w < 0 ? -1 : 0;
+  }
+  function silkGale(mag) { return windMagOf(mag) >= 5; }
+  function silkCount(mag) {
+    mag = windMagOf(mag);
+    if (mag <= 0) return 0;
+    return Math.min(28, 6 + mag * 2);
+  }
+  function silkSpeed(mag) {
+    mag = windMagOf(mag);
+    if (mag <= 0) return 0;
+    const gale = mag >= 5;
+    return (gale ? 110 : 52) + mag * (gale ? 20 : 12);
+  }
+  function silkThick(mag) {
+    mag = windMagOf(mag);
+    if (mag <= 0) return 0;
+    return silkGale(mag) ? 2.2 : 1.15;
+  }
+  function silkMoteCount(mag) {
+    mag = windMagOf(mag);
+    if (mag <= 0) return 0;
+    return Math.min(16, 4 + mag);
+  }
+  function wrapSpan(n, span) {
+    n %= span;
+    return n < 0 ? n + span : n;
+  }
   function overlayOpen() { return !!(overlay && !overlay.classList.contains('hidden')); }
   function isDuo() { return G.kind === 'duo'; }
   function isQuad() { return G.kind === 'quad'; }
@@ -1769,7 +1800,11 @@
       aiLabel.textContent = aiHud();
       aiLabel.classList.toggle('gone', !!noAi);
     }
-    if (windArr) windArr.textContent = G.wind > 0 ? '→' : G.wind < 0 ? '←' : '·';
+    const gale = silkGale();
+    if (windLabel) windLabel.classList.toggle('gale', gale);
+    if (windArr) {
+      windArr.textContent = G.wind > 0 ? (gale ? '→→' : '→') : G.wind < 0 ? (gale ? '←←' : '←') : '·';
+    }
     if (windNum) windNum.textContent = String(Math.abs(G.wind | 0));
     else if (windLabel) windLabel.textContent = '风 ' + windText();
     if (nextWindEl) {
@@ -4537,27 +4572,64 @@
   }
 
   function drawWind(g) {
-    if (!G.wind && !(G.windSpinT > 0)) return;
+    if (REDUCE) return;
+    const mag = windMagOf();
+    const dir = windDirOf();
+    if (!mag || !dir) return;
+    const n = silkCount(mag);
+    const spd = silkSpeed(mag);
+    const gale = silkGale(mag);
+    const thick0 = silkThick(mag);
+    const span = VW + 180;
     g.save();
-    g.globalAlpha = 0.35;
-    const mag = Math.abs(G.wind) || 1;
-    const dir = G.wind >= 0 ? 1 : -1;
-    const n = Math.min(10, 3 + mag);
-    const spin = (!REDUCE && G.windSpinT > 0) ? (1 - G.windSpinT / 0.55) * TAU : 0;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
     for (let i = 0; i < n; i++) {
-      const y = 70 + i * 28 + (G.t * 30 * dir + i * 13) % 20;
-      const x = ((G.t * (40 + mag * 8) * dir) + i * 90) % (VW + 80) - 40;
-      const len = 18 + mag;
-      g.strokeStyle = rgba(GOLD, 0.45);
-      g.lineWidth = 1.2;
-      g.save();
-      g.translate(x + dir * len * 0.5, y);
-      if (spin) g.rotate(spin);
+      const y = 22 + (i / Math.max(1, n - 1)) * 248 + Math.sin(G.t * 0.65 + i * 1.31) * 7;
+      const len = (gale ? 58 : 36) + mag * 4 + (i % 5) * 10;
+      const travel = G.t * spd * (0.70 + (i % 5) * 0.08);
+      const x = wrapSpan(dir * travel + i * 83, span) - 90;
+      const wave = Math.sin(G.t * 2.2 + i * 0.9) * (gale ? 5 : 3);
+      const a = (gale ? 0.34 : 0.18) + 0.14 * (0.5 + 0.5 * Math.sin(G.t * 1.6 + i * 0.7));
+      g.strokeStyle = (i % 3 !== 1) ? rgba(GOLD, a) : 'rgba(210,236,255,' + a + ')';
+      g.lineWidth = thick0 + (i % 4) * (gale ? 0.35 : 0.12);
       g.beginPath();
-      g.moveTo(-dir * len * 0.5, 0);
-      g.lineTo(dir * len * 0.5, 0);
+      g.moveTo(x, y + wave);
+      g.quadraticCurveTo(x + dir * len * 0.46, y - wave - (gale ? 5 : 3), x + dir * len, y - wave * 0.3);
       g.stroke();
-      g.restore();
+    }
+    g.restore();
+  }
+
+  function drawWindMotes(g) {
+    if (REDUCE) return;
+    if (G.mode === 'title') return;
+    const mag = windMagOf();
+    const dir = windDirOf();
+    if (!mag || !dir || !G.H) return;
+    const n = silkMoteCount(mag);
+    const spd = silkSpeed(mag) * 0.48;
+    const gale = silkGale(mag);
+    g.save();
+    for (let i = 0; i < n; i++) {
+      const travel = G.t * spd * (0.75 + (i % 4) * 0.1);
+      const x = wrapSpan(dir * travel + i * 119, VW + 36) - 18;
+      const gy = groundAt(x);
+      if (gy >= VH - 4) continue;
+      const hop = 6 + (i % 6) * 4 + Math.sin(G.t * 3.4 + i) * 3.2;
+      const y = gy - hop;
+      const a = 0.20 + 0.22 * (0.5 + 0.5 * Math.sin(G.t * 2.5 + i * 1.1));
+      if (i % 4 === 0) {
+        g.fillStyle = rgba(GOLD, a);
+        g.beginPath();
+        g.ellipse(x, y, gale ? 2.6 : 1.8, gale ? 1.2 : 0.8, dir * 0.55, 0, TAU);
+        g.fill();
+      } else {
+        g.fillStyle = 'rgba(168,124,72,' + a + ')';
+        g.beginPath();
+        g.arc(x, y, gale ? 1.6 : 1.1, 0, TAU);
+        g.fill();
+      }
     }
     g.restore();
   }
@@ -5238,6 +5310,7 @@
     drawFires(ctx);
     drawCrumbs(ctx);
     drawGust(ctx);
+    drawWindMotes(ctx);
     if (G.sudden) {
       ctx.fillStyle = 'rgba(8, 4, 12, 0.42)';
       if (G.safeL > 0) ctx.fillRect(0, 0, G.safeL, VH);
@@ -6370,6 +6443,23 @@
     ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
     ok('g vk v21', GRAV === 260 && VK === 420);
     ok('ghost K still', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('silk zero', silkCount(0) === 0 && silkSpeed(0) === 0 && silkThick(0) === 0 && silkMoteCount(0) === 0);
+    ok('silk count scales', silkCount(1) >= 6 && silkCount(1) < silkCount(4) && silkCount(8) > silkCount(4) && silkCount(14) <= 28);
+    ok('silk gale 5', silkGale(4) === false && silkGale(5) === true && silkGale(-7) === true);
+    ok('silk gale faster thicker', silkSpeed(5) > silkSpeed(4) && silkThick(5) > silkThick(4));
+    ok('silk dir sign', windDirOf(3) === 1 && windDirOf(-4) === -1 && windDirOf(0) === 0);
+    ok('silk motes scale', silkMoteCount(2) >= 4 && silkMoteCount(2) < silkMoteCount(8) && silkMoteCount(14) <= 16);
+    ok('silk wrap', Math.abs(wrapSpan(-10, 100) - 90) < 0.001 && wrapSpan(110, 100) === 10);
+    ok('silk visual only', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    G.H = buildHeight('plain');
+    G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', ang: 65 };
+    const silkPhys = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
+    const silkPhys2 = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
+    ok('silk no physics drift', Math.abs(silkPhys.x - silkPhys2.x) < 0.01 && Math.abs(silkPhys.y - silkPhys2.y) < 0.01);
+    ok('maps still 13 after silk', MAP_IDS.length === 13 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池');
+    ok('ghost K still after silk', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('no banned silk', '风丝'.indexOf('传送') < 0 && '风丝'.indexOf('飞行') < 0 && '风丝'.indexOf('三叉戟') < 0 && '风丝'.indexOf('激怒') < 0);
+    ok('g vk v22', GRAV === 260 && VK === 420);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
