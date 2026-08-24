@@ -63,8 +63,8 @@
   const CRATE_RAGE = 18;
   const CRATE_GOLD_RAGE = 28;
   const CRATE_WALK = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud', 'mirror'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -213,6 +213,25 @@
   const CLOUD_DEAD_MIN = 6;
   const CLOUD_DEAD_COLS = 48;
   const CLOUD_STORM_P = 0.30;
+  const MIRROR_PX = 168;
+  const MIRROR_FX = 772;
+  const MIRROR_P2X = 204;
+  const MIRROR_F2X = 736;
+  const MIRROR_BANK_Y = 308;
+  const MIRROR_TRENCH_Y = 378;
+  const MIRROR_L1 = 292;
+  const MIRROR_R0 = 668;
+  const MIRROR_CX = 480;
+  const MIRROR_W = 18;
+  const MIRROR_X0 = MIRROR_CX - 9;
+  const MIRROR_X1 = MIRROR_X0 + MIRROR_W - 1;
+  const MIRROR_H = 220;
+  const MIRROR_TOP_Y = MIRROR_TRENCH_Y - MIRROR_H;
+  const MIRROR_CRATER = 0.5;
+  const MIRROR_DEAD_H = 0.40;
+  const MIRROR_DEAD_COLS = 7;
+  const MIRROR_NX = 0.40;
+  const MIRROR_STORM_P = 0.30;
   const STORM_NAME = '雷泽';
   const STORM_P = 0.35;
   const STORM_MIN = 8;
@@ -456,6 +475,7 @@
     stormNext: 8,
     boltT: 0,
     slab: null,
+    mirror: null,
     coached: false,
     coachN: 0,
     killName: '',
@@ -939,6 +959,7 @@
     if (G.mapId === 'gate' && isGateStoneX(u.x)) return false;
     if (G.mapId === 'frost' && isFrostIce(u.x)) return false;
     if (G.mapId === 'cloud' && isCloudSlabX(u.x)) return false;
+    if (G.mapId === 'mirror' && isMirrorStoneX(u.x)) return false;
     if (inMoonWater(u) || inCliffWater(u)) return false;
     return true;
   }
@@ -1018,6 +1039,7 @@
     if (G.mapId === 'cliff' && (x | 0) > CLIFF_EDGE && gy >= CLIFF_WATER_Y) return false;
     if (G.mapId === 'forge' && gy > 400) return false;
     if (G.mapId === 'cloud' && (isCloudSlabX(x) || isCloudPitX(x))) return false;
+    if (G.mapId === 'mirror' && (isMirrorStoneX(x) || isMirrorTrenchX(x))) return false;
     if (cratePitAt(x) >= BURY_PX) return false;
     if (Math.abs(groundAt(clamp(x - 8, 0, VW - 1)) - groundAt(clamp(x + 8, 0, VW - 1))) > 28) return false;
     if (inWall(x, gy - 8) || inWall(x, gy - 18)) return false;
@@ -1189,6 +1211,152 @@
     rideCloud(dx);
   }
 
+  function makeMirrorWall() {
+    const col = new Float32Array(MIRROR_W);
+    for (let i = 0; i < MIRROR_W; i++) col[i] = MIRROR_TOP_Y + Math.sin(i * 0.37) * 0.5;
+    return { live: true, col: col, bot: MIRROR_TRENCH_Y, origH: MIRROR_H };
+  }
+
+  function isMirrorBank(x) {
+    if (G.mapId !== 'mirror') return false;
+    const i = x | 0;
+    return i <= MIRROR_L1 || i >= MIRROR_R0;
+  }
+
+  function isMirrorTrenchX(x) {
+    if (G.mapId !== 'mirror') return false;
+    const i = x | 0;
+    return i > MIRROR_L1 && i < MIRROR_R0;
+  }
+
+  function mirrorTopAt(x) {
+    if (G.mapId !== 'mirror' || !G.mirror || !G.mirror.col) return null;
+    const i = (x - MIRROR_X0) | 0;
+    if (i < 0 || i >= MIRROR_W) return null;
+    const top = G.mirror.col[i];
+    if (!(top < G.mirror.bot - 4)) return null;
+    return top;
+  }
+
+  function isMirrorStoneX(x) {
+    return mirrorTopAt(x) != null;
+  }
+
+  function inMirror(x, y) {
+    const top = mirrorTopAt(x);
+    if (top == null) return false;
+    return y >= top && y < G.mirror.bot;
+  }
+
+  function mirrorNormal(x, y) {
+    const top = mirrorTopAt(x);
+    if (top == null) return { nx: 0, ny: -1 };
+    const distTop = y - top;
+    const distL = x - MIRROR_X0;
+    const distR = MIRROR_X1 - x;
+    if (distTop < 10 && distTop <= distL + 1 && distTop <= distR + 1) return { nx: 0, ny: -1 };
+    if (distL <= distR) return { nx: -1, ny: 0 };
+    return { nx: 1, ny: 0 };
+  }
+
+  function wantMirrorBounce(s, x, y) {
+    if (!s || s.mirrorBounce) return false;
+    if (!G.mirror || !G.mirror.live) return false;
+    if (!inMirror(x, y)) return false;
+    const n = mirrorNormal(x, y);
+    return Math.abs(n.nx) >= MIRROR_NX;
+  }
+
+  function applyMirrorBounce(s) {
+    if (!s) return s;
+    s.mirrorBounce = true;
+    s.vx *= -1;
+    const n = mirrorNormal(s.x, s.y);
+    const push = n.nx !== 0 ? n.nx : (s.vx >= 0 ? 1 : -1);
+    s.x += push * 8;
+    let g = 0;
+    while (inMirror(s.x, s.y) && g < 14) {
+      s.x += push * 2;
+      g += 1;
+    }
+    burst(s.x, s.y, ICE, REDUCE ? 3 : 8, 70, 0.16);
+    burst(s.x, s.y, WHT, REDUCE ? 1 : 4, 40, 0.12);
+    if (audio && audio.beep) audio.beep(1480, 0.04, 'triangle', 0.016, 2100);
+    return s;
+  }
+
+  function mirrorSolidCount() {
+    if (!G.mirror || !G.mirror.col) return 0;
+    let n = 0;
+    for (let i = 0; i < MIRROR_W; i++) {
+      if (G.mirror.col[i] < G.mirror.bot - 4) n += 1;
+    }
+    return n;
+  }
+
+  function mirrorMaxRemain() {
+    if (!G.mirror || !G.mirror.col) return 0;
+    let maxRemain = 0;
+    for (let i = 0; i < MIRROR_W; i++) {
+      const remain = G.mirror.bot - G.mirror.col[i];
+      if (remain > maxRemain) maxRemain = remain;
+    }
+    return maxRemain;
+  }
+
+  function collapseMirror() {
+    if (!G.mirror) return;
+    G.mirror.live = false;
+    for (let i = 0; i < MIRROR_W; i++) {
+      const remain = Math.max(0, G.mirror.bot - G.mirror.col[i]);
+      const rubble = Math.min(26, remain * 0.32);
+      const x = MIRROR_X0 + i;
+      if (G.H) G.H[x] = Math.max(88, G.H[x] - rubble);
+      G.mirror.col[i] = G.mirror.bot;
+    }
+    terrainDirty = true;
+    burst(MIRROR_CX, G.mirror.bot - 18, STONE, REDUCE ? 8 : 18, 120, 0.4);
+    burst(MIRROR_CX, G.mirror.bot - 24, DIRT, REDUCE ? 4 : 10, 90, 0.28);
+    if (audio && audio.dirt) audio.dirt();
+  }
+
+  function refreshMirrorLive() {
+    if (!G.mirror || !G.mirror.live) return;
+    const origH = G.mirror.origH || MIRROR_H;
+    if (mirrorMaxRemain() < origH * MIRROR_DEAD_H || mirrorSolidCount() < MIRROR_DEAD_COLS) {
+      collapseMirror();
+    }
+  }
+
+  function carveMirror(cx, cy, r) {
+    if (G.mapId !== 'mirror' || !G.mirror || !G.mirror.col || r <= 0) return;
+    const r2 = r * r;
+    let any = false;
+    for (let i = 0; i < MIRROR_W; i++) {
+      const x = MIRROR_X0 + i;
+      const dx = x - cx;
+      if (dx * dx >= r2) continue;
+      const top = G.mirror.col[i];
+      const bot = G.mirror.bot;
+      if (!(top < bot - 2)) continue;
+      const half = Math.sqrt(r2 - dx * dx);
+      const y0 = cy - half;
+      const y1 = cy + half;
+      const o0 = Math.max(top, y0);
+      const o1 = Math.min(bot, y1);
+      if (o1 > o0) {
+        G.mirror.col[i] = Math.min(bot, top + (o1 - o0));
+        any = true;
+      }
+    }
+    if (any) refreshMirrorLive();
+  }
+
+  function mirrorR(r, x) {
+    if (!isMirrorStoneX(x) || r <= 0) return r;
+    return r * MIRROR_CRATER;
+  }
+
   function iceImpactDeg(vx, vy) {
     return Math.atan2(Math.abs(vy), Math.abs(vx) + 1e-9) * 180 / Math.PI;
   }
@@ -1277,6 +1445,7 @@
     if (stormBanned(id)) return false;
     if (stormForced(id)) return true;
     if (id === 'cloud') return Math.random() < CLOUD_STORM_P;
+    if (id === 'mirror') return Math.random() < MIRROR_STORM_P;
     return Math.random() < STORM_P;
   }
 
@@ -1374,10 +1543,16 @@
 
   function groundAt(x, yHint) {
     const dirt = dirtAt(x);
+    let best = dirt;
     const top = slabTopAt(x);
-    if (top == null) return dirt;
-    if (yHint != null && yHint > top + CLOUD_THICK + 8) return dirt;
-    return top < dirt ? top : dirt;
+    if (top != null && !(yHint != null && yHint > top + CLOUD_THICK + 8)) {
+      if (top < best) best = top;
+    }
+    const mt = mirrorTopAt(x);
+    if (mt != null && !(yHint != null && yHint > mt + 12)) {
+      if (mt < best) best = mt;
+    }
+    return best;
   }
 
   function padFlat(h, x0, x1, y) {
@@ -1621,6 +1796,26 @@
       }
       padFlat(h, 72, 220, CLOUD_BANK_Y);
       padFlat(h, 740, 888, CLOUD_BANK_Y);
+    } else if (id === 'mirror') {
+      for (let x = 0; x < VW; x++) {
+        let yy;
+        if (x <= MIRROR_L1) {
+          const k = clamp((MIRROR_L1 - x) / 22, 0, 1);
+          const sm = k * k * (3 - 2 * k);
+          yy = lerp(MIRROR_TRENCH_Y, MIRROR_BANK_Y, sm);
+          yy += Math.sin(x * 0.07) * 1.2 + Math.sin(x * 0.19) * 0.5;
+        } else if (x >= MIRROR_R0) {
+          const k = clamp((x - MIRROR_R0) / 22, 0, 1);
+          const sm = k * k * (3 - 2 * k);
+          yy = lerp(MIRROR_TRENCH_Y, MIRROR_BANK_Y, sm);
+          yy += Math.sin(x * 0.07) * 1.2 + Math.sin(x * 0.19) * 0.5;
+        } else {
+          yy = MIRROR_TRENCH_Y + Math.sin(x * 0.09) * 1.6 + Math.sin(x * 0.21) * 0.7;
+        }
+        h[x] = yy;
+      }
+      padFlat(h, 72, 220, MIRROR_BANK_Y);
+      padFlat(h, 740, 888, MIRROR_BANK_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -1648,6 +1843,7 @@
     if (id === 'gate') return side === 'p' ? GATE_PX : GATE_FX;
     if (id === 'frost') return side === 'p' ? FROST_PX : FROST_FX;
     if (id === 'cloud') return side === 'p' ? CLOUD_PX : CLOUD_FX;
+    if (id === 'mirror') return side === 'p' ? MIRROR_PX : MIRROR_FX;
     return side === 'p' ? 152 : 768;
   }
 
@@ -1659,6 +1855,7 @@
     if (G.mapId === 'gate' && slot) return side === 'p' ? GATE_P2X : GATE_F2X;
     if (G.mapId === 'frost' && slot) return side === 'p' ? FROST_P2X : FROST_F2X;
     if (G.mapId === 'cloud' && slot) return side === 'p' ? CLOUD_P2X : CLOUD_F2X;
+    if (G.mapId === 'mirror' && slot) return side === 'p' ? MIRROR_P2X : MIRROR_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -1803,12 +2000,12 @@
   }
 
   function wallBlocksWalk(x, y, r) {
-    if (!G.walls || !G.walls.length) return false;
     r = r || UNIT_R;
     const x0 = Math.max(0, (x - r + 2) | 0);
     const x1 = Math.min(VW - 1, (x + r - 2) | 0);
     for (let i = x0; i <= x1; i++) {
-      if (inWall(i, y) || inWall(i, y + r * 0.45)) return true;
+      if (G.walls && G.walls.length && (inWall(i, y) || inWall(i, y + r * 0.45))) return true;
+      if (inMirror(i, y) || inMirror(i, y + r * 0.45)) return true;
     }
     return false;
   }
@@ -1910,6 +2107,7 @@
   function carve(cx, cy, r) {
     if (!G.H || r <= 0) return;
     carveCloud(cx, cy, r);
+    carveMirror(cx, cy, r);
     const x0 = Math.max(0, Math.floor(cx - r));
     const x1 = Math.min(VW - 1, Math.ceil(cx + r));
     for (let x = x0; x <= x1; x++) {
@@ -2025,6 +2223,7 @@
     let pierced = false;
     let fuse = 0;
     let iceSkip = false;
+    let mirrorBounce = false;
     const dt = 1 / 60;
     let hitU = null;
     let t = 0;
@@ -2036,15 +2235,30 @@
       t += dt;
       if (x < 4 || x > VW - 4 || y > VH + 30) {
         if (Hsave) G.H = old;
-        return { x: clamp(x, 0, VW - 1), y: Math.min(y, VH), t: t, hit: null, air: y < VH, iceSkip: iceSkip };
+        return { x: clamp(x, 0, VW - 1), y: Math.min(y, VH), t: t, hit: null, air: y < VH, iceSkip: iceSkip, mirrorBounce: mirrorBounce };
       }
       const u = unitAt(x, y, skip);
       if (u) {
         if (Hsave) G.H = old;
-        return { x: x, y: y, t: t, hit: u, air: false, iceSkip: iceSkip };
+        return { x: x, y: y, t: t, hit: u, air: false, iceSkip: iceSkip, mirrorBounce: mirrorBounce };
       }
-      if (inGround(x, y) || inWall(x, y)) {
-        if (wep && wep.id === 2 && !pierced) {
+      if (inGround(x, y) || inWall(x, y) || inMirror(x, y)) {
+        if (!mirrorBounce && G.mirror && G.mirror.live && inMirror(x, y)) {
+          const n = mirrorNormal(x, y);
+          if (Math.abs(n.nx) >= MIRROR_NX) {
+            mirrorBounce = true;
+            vx *= -1;
+            const push = n.nx !== 0 ? n.nx : (vx >= 0 ? 1 : -1);
+            x += push * 8;
+            let gm = 0;
+            while (inMirror(x, y) && gm < 14) {
+              x += push * 2;
+              gm += 1;
+            }
+            continue;
+          }
+        }
+        if (wep && wep.id === 2 && !pierced && !mirrorBounce) {
           pierced = true;
           fuse = 0.18;
           const s = hypot(vx, vy) || 1;
@@ -2053,7 +2267,7 @@
           x += ux * 46;
           y += uy * 46;
           let g = 0;
-          while ((inGround(x, y) || inWall(x, y)) && g < 18) {
+          while ((inGround(x, y) || inWall(x, y) || inMirror(x, y)) && g < 18) {
             x += ux * 3;
             y += uy * 3;
             g += 1;
@@ -2074,18 +2288,18 @@
           continue;
         }
         if (Hsave) G.H = old;
-        return { x: x, y: y, t: t, hit: null, air: false, pierced: pierced, iceSkip: iceSkip };
+        return { x: x, y: y, t: t, hit: null, air: false, pierced: pierced, iceSkip: iceSkip, mirrorBounce: mirrorBounce };
       }
       if (pierced) {
         fuse -= dt;
         if (fuse <= 0) {
           if (Hsave) G.H = old;
-          return { x: x, y: y, t: t, hit: null, air: true, pierced: true };
+          return { x: x, y: y, t: t, hit: null, air: true, pierced: true, iceSkip: iceSkip, mirrorBounce: mirrorBounce };
         }
       }
     }
     if (Hsave) G.H = old;
-    return { x: x, y: y, t: t, hit: hitU, air: true, iceSkip: iceSkip };
+    return { x: x, y: y, t: t, hit: hitU, air: true, iceSkip: iceSkip, mirrorBounce: mirrorBounce };
   }
 
   const audio = {
@@ -3412,14 +3626,14 @@
 
   function fruitBlocked(x, y) {
     if (x < 90 || x > VW - 90 || y < 52 || y > VH - 80) return true;
-    if (inGround(x, y) || inWall(x, y)) return true;
+    if (inGround(x, y) || inWall(x, y) || inMirror(x, y)) return true;
     const gy = groundAt(x);
     if (!(gy - y >= 56)) return true;
     for (let a = 0; a < 8; a++) {
       const th = a * TAU / 8;
       const wx = x + Math.cos(th) * FRUIT_WALL;
       const wy = y + Math.sin(th) * FRUIT_WALL;
-      if (inWall(wx, wy)) return true;
+      if (inWall(wx, wy) || inMirror(wx, wy)) return true;
     }
     const bodies = allUnits();
     for (let bi = 0; bi < bodies.length; bi++) {
@@ -3791,9 +4005,10 @@
     crater = Math.round(sandR(crater));
     crater = Math.round(stoneR(crater, x));
     crater = Math.round(iceR(crater, x));
+    crater = Math.round(mirrorR(crater, x));
     let hit = !!fromHit;
     if (wep.id === 4) {
-      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : 1));
+      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : (isMirrorStoneX(x) ? MIRROR_CRATER : 1)));
       const pops = carveCluster(x, y, ultMul * terrainMul);
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
@@ -4060,17 +4275,21 @@
       else explode(s.x, s.y, s.wep, s.owner, true, s);
       return;
     }
-    if (inGround(s.x, s.y) || inWall(s.x, s.y)) {
+    if (inGround(s.x, s.y) || inWall(s.x, s.y) || inMirror(s.x, s.y)) {
+      if (wantMirrorBounce(s, s.x, s.y)) {
+        applyMirrorBounce(s);
+        return;
+      }
       if (wantIceSkip(s, s.x)) {
         applyIceSkip(s);
         return;
       }
       if (isMineWep(s.wep)) {
-        if (isDeathVoid(s.x) || s.y > VH) explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false, s);
+        if (isDeathVoid(s.x) || s.y > VH || inMirror(s.x, s.y)) explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false, s);
         else plantMine(s);
         return;
       }
-      if (s.wep.id === 2 && !s.pierced) {
+      if (s.wep.id === 2 && !s.pierced && !s.mirrorBounce) {
         s.pierced = true;
         s.fuse = 0.18;
         const sp = hypot(s.vx, s.vy) || 1;
@@ -4087,7 +4306,7 @@
         s.x += ux * 46;
         s.y += uy * 46;
         let g = 0;
-        while ((inGround(s.x, s.y) || inWall(s.x, s.y)) && g < 18) {
+        while ((inGround(s.x, s.y) || inWall(s.x, s.y) || inMirror(s.x, s.y)) && g < 18) {
           s.x += ux * 3;
           s.y += uy * 3;
           g += 1;
@@ -4625,6 +4844,27 @@
       else if (e >= 50 && e <= 78) score += 400;
       if (isCloudSlabX(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 500;
     }
+    if (G.mapId === 'mirror') {
+      const e = ang != null ? elev(ang) : 0;
+      const live = !!(G.mirror && G.mirror.live);
+      const far = isMirrorBank(from.x) && isMirrorBank(t.x) && ((from.x < 480) !== (t.x < 480));
+      const landD = Math.abs(imp.x - t.x);
+      if (far && live) {
+        if (imp.mirrorBounce) {
+          if (landD < 90) score += 2400;
+          else if (landD < 150) score += 1000;
+          else score -= 400;
+          if (e >= 40 && e <= 55) score += 800;
+        } else {
+          if (e >= 58 && e <= 72) score += 1400;
+          else if (e >= 50 && e <= 78) score += 400;
+        }
+      } else if (live && imp.mirrorBounce) {
+        if (landD < 80) score += 1600;
+        if (e >= 40 && e <= 55) score += 600;
+      }
+      if (isMirrorTrenchX(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 500;
+    }
     if (wep.id === 8) {
       const spot = denySpotX(from, t);
       if (spot) {
@@ -5129,6 +5369,7 @@
     G.H = buildHeight(G.mapId);
     buildWalls(G.mapId, G.H);
     G.slab = G.mapId === 'cloud' ? makeCloudSlab() : null;
+    G.mirror = G.mapId === 'mirror' ? makeMirrorWall() : null;
     G.fires = [];
     crumbs.length = 0;
     terrainDirty = true;
@@ -5540,8 +5781,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : G.mapId === 'frost' ? '#d4f2ff' : G.mapId === 'cloud' ? '#e8d8b8' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : G.mapId === 'frost' ? '#143044' : G.mapId === 'cloud' ? '#241c28' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : G.mapId === 'frost' ? '#d4f2ff' : G.mapId === 'cloud' ? '#e8d8b8' : G.mapId === 'mirror' ? '#c8e8ff' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : G.mapId === 'frost' ? '#143044' : G.mapId === 'cloud' ? '#241c28' : G.mapId === 'mirror' ? '#182030' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -5799,6 +6040,18 @@
       g.fillRect(48, CLOUD_BANK_Y - 4, CLOUD_L1 - 64, 8);
       g.fillRect(CLOUD_R0 + 16, CLOUD_BANK_Y - 4, 900 - CLOUD_R0, 8);
     }
+    if (G.mapId === 'mirror') {
+      const ditch = g.createLinearGradient(0, MIRROR_BANK_Y, 0, VH);
+      ditch.addColorStop(0, 'rgba(12, 10, 22, 0.08)');
+      ditch.addColorStop(0.22, 'rgba(18, 16, 32, 0.36)');
+      ditch.addColorStop(0.6, '#101018');
+      ditch.addColorStop(1, '#080610');
+      g.fillStyle = ditch;
+      g.fillRect(MIRROR_L1, MIRROR_BANK_Y + 6, MIRROR_R0 - MIRROR_L1, VH - MIRROR_BANK_Y - 6);
+      g.fillStyle = 'rgba(90, 64, 44, 0.22)';
+      g.fillRect(48, MIRROR_BANK_Y - 4, MIRROR_L1 - 64, 8);
+      g.fillRect(MIRROR_R0 + 16, MIRROR_BANK_Y - 4, 900 - MIRROR_R0, 8);
+    }
     terrainDirty = false;
   }
 
@@ -5914,6 +6167,18 @@
       bowl.addColorStop(0, 'rgba(24, 16, 32, 0.28)');
       bowl.addColorStop(1, 'rgba(24, 16, 32, 0)');
       g.fillStyle = bowl;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'mirror') {
+      const gleam = g.createRadialGradient(480, 90, 10, 480, 140, 280);
+      gleam.addColorStop(0, 'rgba(200, 232, 255, 0.16)');
+      gleam.addColorStop(1, 'rgba(200, 232, 255, 0)');
+      g.fillStyle = gleam;
+      g.fillRect(0, 0, VW, VH);
+      const ditch = g.createRadialGradient(480, MIRROR_TRENCH_Y, 16, 480, MIRROR_TRENCH_Y + 40, 240);
+      ditch.addColorStop(0, 'rgba(20, 18, 32, 0.26)');
+      ditch.addColorStop(1, 'rgba(20, 18, 32, 0)');
+      g.fillStyle = ditch;
       g.fillRect(0, 0, VW, VH);
     }
     if (G.mapId === 'gate') {
@@ -6424,6 +6689,32 @@
     g.restore();
   }
 
+  function drawMirror(g) {
+    if (G.mapId !== 'mirror' || !G.mirror || !G.mirror.col) return;
+    g.save();
+    const t = G.t;
+    const live = !!G.mirror.live;
+    const bot = G.mirror.bot;
+    for (let i = 0; i < MIRROR_W; i++) {
+      const top = G.mirror.col[i];
+      if (!(top < bot - 4)) continue;
+      const x = MIRROR_X0 + i;
+      const h = bot - top;
+      g.fillStyle = live ? 'rgba(120, 168, 210, 0.92)' : 'rgba(110, 96, 82, 0.88)';
+      g.fillRect(x, top, 1, h);
+      g.fillStyle = live ? 'rgba(220, 244, 255, 0.78)' : 'rgba(170, 150, 128, 0.45)';
+      g.fillRect(x, top, 1, Math.min(4, h));
+    }
+    if (live && !REDUCE) {
+      const sheen = 0.10 + 0.10 * (0.5 + 0.5 * Math.sin(t * 2.2));
+      g.fillStyle = 'rgba(230, 248, 255,' + sheen + ')';
+      g.fillRect(MIRROR_X0 + 3, MIRROR_TOP_Y + 16, 4, MIRROR_H - 36);
+      g.fillStyle = 'rgba(180, 220, 255,' + (0.08 + 0.08 * (0.5 + 0.5 * Math.sin(t * 1.6 + 1))) + ')';
+      g.fillRect(MIRROR_X0 + 10, MIRROR_TOP_Y + 28, 3, MIRROR_H - 52);
+    }
+    g.restore();
+  }
+
   function drawGate(g) {
     if (G.mapId !== 'gate') return;
     g.save();
@@ -6906,6 +7197,7 @@
     pts.push({ x: x, y: y });
     let len = 0;
     let t = 0;
+    let sBounce = false;
     for (let i = 0; i < 420; i++) {
       vx += G.wind * windKAt(wep, t) * dt;
       vy += (GRAV + gustAy(x)) * dt;
@@ -6917,7 +7209,24 @@
       t += dt;
       pts.push({ x: x, y: y });
       if (x < 2 || x > VW - 2 || y > VH + 8) break;
-      if (inGround(x, y) || inWall(x, y)) break;
+      if (inGround(x, y) || inWall(x, y) || inMirror(x, y)) {
+        if (!sBounce && G.mirror && G.mirror.live && inMirror(x, y)) {
+          const n = mirrorNormal(x, y);
+          if (Math.abs(n.nx) >= MIRROR_NX) {
+            sBounce = true;
+            vx *= -1;
+            const push = n.nx !== 0 ? n.nx : (vx >= 0 ? 1 : -1);
+            x += push * 8;
+            let gm = 0;
+            while (inMirror(x, y) && gm < 14) {
+              x += push * 2;
+              gm += 1;
+            }
+            continue;
+          }
+        }
+        break;
+      }
       if (unitAt(x, y, u)) break;
     }
     return { points: pts, len: len };
@@ -7026,6 +7335,7 @@
     drawGate(ctx);
     drawFrost(ctx);
     drawCloud(ctx);
+    drawMirror(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -7388,7 +7698,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps seventeen', MAP_IDS.length === 17 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台');
+    ok('maps eighteen', MAP_IDS.length === 18 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -7923,7 +8233,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 17', MAP_IDS.length === 17 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14 && MAP_IDS.indexOf('frost') === 15 && MAP_IDS.indexOf('cloud') === 16);
+    ok('随图 pool 18', MAP_IDS.length === 18 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14 && MAP_IDS.indexOf('frost') === 15 && MAP_IDS.indexOf('cloud') === 16 && MAP_IDS.indexOf('mirror') === 17);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -8167,7 +8477,7 @@
     G.ghostOn = true;
     ok('ghost match only', G.ghost == null);
     ok('g vk v20', GRAV === 260 && VK === 420);
-    ok('maps still 14 after ghost', MAP_IDS.length === 17 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after ghost', MAP_IDS.length === 18 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
     ok('断崖 name locked', MAP_NAME.cliff === '断崖' && MAP_IDS[12] === 'cliff');
     ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
@@ -8186,7 +8496,7 @@
     const silkPhys = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     const silkPhys2 = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     ok('silk no physics drift', Math.abs(silkPhys.x - silkPhys2.x) < 0.01 && Math.abs(silkPhys.y - silkPhys2.y) < 0.01);
-    ok('maps still 14 after silk', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after silk', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after silk', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned silk', '风丝'.indexOf('传送') < 0 && '风丝'.indexOf('飞行') < 0 && '风丝'.indexOf('三叉戟') < 0 && '风丝'.indexOf('激怒') < 0);
     ok('g vk v22', GRAV === 260 && VK === 420);
@@ -8285,7 +8595,7 @@
     for (let i = 0; i < VW; i++) G.H[i] = 400;
     G.p = { x: 200, y: 386, r: 14, hp: 100, side: 'p', id: 'p' };
     ok('AI open not 叠珠', pickAIWeapon(G.f) !== 6);
-    ok('maps still 14 after 叠珠', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after 叠珠', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after 叠珠', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('g vk v24', GRAV === 260 && VK === 420);
 
@@ -8329,7 +8639,7 @@
     ok('storm hud name stays', STORM_NAME === '雷泽' && MAP_NAME.vale === '风谷');
     G.storm = false;
     ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps still 14 after 雷泽', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
+    ok('maps still 14 after 雷泽', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
     ok('ghost K still after 雷泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned 雷泽', STORM_NAME.indexOf('传送') < 0 && STORM_NAME.indexOf('飞行') < 0 && STORM_NAME.indexOf('三叉戟') < 0 && STORM_NAME.indexOf('激怒') < 0);
     ok('g vk v25', GRAV === 260 && VK === 420 && WIND_K === 2.05);
@@ -8421,7 +8731,7 @@
     ok('gate storm roll not forced', !stormForced('gate') && !stormBanned('gate') && STORM_P === 0.35);
     ok('石门 name locked', MAP_NAME.gate === '石门' && MAP_IDS[14] === 'gate');
     ok('no banned gate', MAP_NAME.gate.indexOf('传送') < 0 && MAP_NAME.gate.indexOf('飞行') < 0 && MAP_NAME.gate.indexOf('三叉戟') < 0 && MAP_NAME.gate.indexOf('激怒') < 0);
-    ok('maps 15 with 石门', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 with 石门', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('叠珠 still 7 after 石门', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('ghost K still after 石门', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 石门', typeof silkCount === 'function' && silkCount(0) === 0);
@@ -8507,7 +8817,7 @@
     const mscHit = scoreOne({ x: 210, y: G.p.y, t: 0.6, hit: G.p }, WEPS[7], G.f, G.p, 45);
     ok('迟雷 prefer deny stick', mscDeny > 2000, Math.round(mscDeny) + '/' + Math.round(mscHit));
     ok('叠珠 still 7 after 迟雷', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps 15 after 迟雷', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 after 迟雷', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('ghost K still after 迟雷', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 迟雷', typeof silkCount === 'function' && silkCount(0) === 0);
     ok('雷泽 still after 迟雷', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune'));
@@ -8619,7 +8929,7 @@
     ok('frost storm roll not forced', !stormForced('frost') && !stormBanned('frost') && STORM_P === 0.35);
     ok('霜泽 name locked', MAP_NAME.frost === '霜泽' && MAP_IDS[15] === 'frost');
     ok('no banned frost', MAP_NAME.frost.indexOf('传送') < 0 && MAP_NAME.frost.indexOf('飞行') < 0 && MAP_NAME.frost.indexOf('三叉戟') < 0 && MAP_NAME.frost.indexOf('激怒') < 0);
-    ok('maps 16 with 霜泽', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps 16 with 霜泽', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('叠珠 still 7 after 霜泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 霜泽', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 霜泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -8738,7 +9048,7 @@
     ok('crate late is 殿塌', crateLate() === true && CRATE_SUDDEN_P > CRATE_P);
     G.sudden = false;
     ok('no 9th wep', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
-    ok('maps still 16 after 堂匣', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps still 16 after 堂匣', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('locked names after 堂匣', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('ghost K still after 堂匣', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 堂匣', typeof silkCount === 'function' && silkCount(0) === 0);
@@ -8785,7 +9095,7 @@
     ok('clock pause shell', clockPaused() === true);
     G.shots = [];
     ok('clock free after shell', clockPaused() === false);
-    ok('maps still 16 after 时尽', MAP_IDS.length === 17 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps still 16 after 时尽', MAP_IDS.length === 18 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('locked names after 时尽', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('no banned 时尽', '时尽'.indexOf('传送') < 0 && '时尽'.indexOf('飞行') < 0 && '时尽'.indexOf('三叉戟') < 0 && '时尽'.indexOf('激怒') < 0);
     ok('g vk v30', GRAV === 260 && VK === 420 && WIND_K === 2.05);
@@ -8887,7 +9197,7 @@
     ok('cloud storm ~30', !stormForced('cloud') && !stormBanned('cloud') && CLOUD_STORM_P === 0.30 && STORM_P === 0.35);
     ok('云台 name locked', MAP_NAME.cloud === '云台' && MAP_IDS[16] === 'cloud');
     ok('no banned cloud', MAP_NAME.cloud.indexOf('传送') < 0 && MAP_NAME.cloud.indexOf('飞行') < 0 && MAP_NAME.cloud.indexOf('三叉戟') < 0 && MAP_NAME.cloud.indexOf('激怒') < 0);
-    ok('maps 17 with 云台', MAP_IDS.length === 17 && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
+    ok('maps 17 with 云台', MAP_IDS.length === 18 && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
     ok('叠珠 still 7 after 云台', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 云台', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 云台', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -8898,6 +9208,120 @@
     ok('g vk v31', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('no 9th wep after 云台', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     G.slab = null;
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+
+    G.H = buildHeight('mirror');
+    G.mapId = 'mirror';
+    G.mirror = makeMirrorWall();
+    G.kind = 'hall';
+    G.storm = false;
+    G.walls = [];
+    G.ai = 1;
+    G.turns = 3;
+    G.mines = [];
+    G.walk = WALK_PX;
+    ok('mirror spawn', spawnX('mirror', 'p') === MIRROR_PX && spawnX('mirror', 'f') === MIRROR_FX);
+    ok('mirror spawn on banks', isMirrorBank(MIRROR_PX) && isMirrorBank(MIRROR_FX), Math.round(G.H[MIRROR_PX]) + '/' + Math.round(G.H[MIRROR_FX]));
+    ok('mirror banks high', G.H[MIRROR_PX] < 340 && G.H[MIRROR_FX] < 340, Math.round(G.H[MIRROR_PX]));
+    ok('mirror trench low', G.H[480] > G.H[MIRROR_PX] + 40 && Math.abs(G.H[480] - MIRROR_TRENCH_Y) < 16, Math.round(G.H[480]));
+    ok('mirror no void', !isDeathVoid(MIRROR_PX) && !isDeathVoid(MIRROR_FX) && !isDeathVoid(480));
+    ok('mirror nums', MIRROR_W === 18 && MIRROR_H === 220 && MIRROR_CRATER === 0.5 && MIRROR_DEAD_H === 0.40 && GRAV === 260 && VK === 420);
+    ok('mirror wall mid', inMirror(MIRROR_CX, MIRROR_TOP_Y + 40) && isMirrorStoneX(MIRROR_CX));
+    ok('mirror wall thin', isMirrorStoneX(MIRROR_X0) && isMirrorStoneX(MIRROR_X1) && !isMirrorStoneX(MIRROR_X0 - 2) && !isMirrorStoneX(MIRROR_X1 + 2));
+    ok('mirror wall tall', inMirror(MIRROR_CX, MIRROR_TOP_Y + 8) && inMirror(MIRROR_CX, MIRROR_TRENCH_Y - 8) && !inMirror(MIRROR_CX, MIRROR_TOP_Y - 8));
+    const mBankU = { x: MIRROR_PX, y: G.H[MIRROR_PX] - 14, r: 14, hp: 100, grounded: true };
+    ok('mirror walk into wall', wallBlocksWalk(MIRROR_CX, (MIRROR_TOP_Y + MIRROR_TRENCH_Y) * 0.5, 14) === true);
+    ok('mirror bank walk open', wallBlocksWalk(MIRROR_PX, mBankU.y, 14) === false);
+    const sideS = { x: MIRROR_X0 + 1, y: MIRROR_TOP_Y + 90, vx: 220, vy: 40, mirrorBounce: false };
+    ok('mirror side bounce want', wantMirrorBounce(sideS, sideS.x, sideS.y) === true);
+    const oldVx = sideS.vx;
+    applyMirrorBounce(sideS);
+    ok('mirror bounce vx', sideS.mirrorBounce === true && Math.abs(sideS.vx + oldVx) < 0.02, sideS.vx);
+    ok('mirror bounce once', wantMirrorBounce(sideS, MIRROR_X0 + 1, MIRROR_TOP_Y + 90) === false);
+    const topS = { x: MIRROR_CX, y: MIRROR_TOP_Y + 2, vx: 30, vy: 280, mirrorBounce: false };
+    ok('mirror top no bounce', wantMirrorBounce(topS, topS.x, topS.y) === false && Math.abs(mirrorNormal(topS.x, topS.y).nx) < MIRROR_NX);
+    G.p = { x: MIRROR_PX, y: G.H[MIRROR_PX] - 18, r: 14, hp: 100, side: 'p', id: 'p' };
+    const bounceTr = traceShot(MIRROR_PX, G.H[MIRROR_PX] - 18, 42, 58, 0, WEPS[0], G.H, G.p);
+    ok('mirror trace bounce', bounceTr.mirrorBounce === true, Math.round(bounceTr.x) + ' bounce=' + bounceTr.mirrorBounce);
+    const dunkTr = traceShot(MIRROR_CX, MIRROR_TOP_Y - 40, 90, 70, 0, WEPS[0], G.H, G.p);
+    ok('mirror trace top no bounce', !dunkTr.mirrorBounce && isMirrorStoneX(dunkTr.x), Math.round(dunkTr.x));
+    G.H = buildHeight('plain');
+    G.mapId = 'plain';
+    G.mirror = null;
+    carve(500, 400, 30);
+    const mirrorDirt = G.H[500] - 400;
+    G.H = buildHeight('mirror');
+    G.mapId = 'mirror';
+    G.mirror = makeMirrorWall();
+    const top0 = G.mirror.col[(MIRROR_W / 2) | 0];
+    carve(MIRROR_CX, MIRROR_TOP_Y, mirrorR(30, MIRROR_CX));
+    const chip = G.mirror.col[(MIRROR_W / 2) | 0] - top0;
+    ok('mirror crater ~0.5', chip > 4 && chip < mirrorDirt * 0.85, Math.round(chip) + '/' + Math.round(mirrorDirt));
+    G.H = buildHeight('plain');
+    G.mapId = 'plain';
+    G.mirror = null;
+    carve(168, 400, 30);
+    const bankDirt = G.H[168] - 400;
+    G.H = buildHeight('mirror');
+    G.mapId = 'mirror';
+    G.mirror = makeMirrorWall();
+    const bankBefore = G.H[MIRROR_PX];
+    carve(MIRROR_PX, bankBefore, 30);
+    const bankChip = G.H[MIRROR_PX] - bankBefore;
+    ok('mirror bank crater full', Math.abs(bankChip - bankDirt) < 0.6, Math.round(bankChip));
+    G.mirror = makeMirrorWall();
+    for (let i = 0; i < MIRROR_W; i++) G.mirror.col[i] = G.mirror.bot - 20;
+    refreshMirrorLive();
+    ok('mirror collapse rubble', G.mirror.live === false && !wantMirrorBounce({ vx: 200, vy: 10, mirrorBounce: false }, MIRROR_CX, MIRROR_TOP_Y + 80), mirrorSolidCount() + '/' + G.mirror.live);
+    G.H = buildHeight('mirror');
+    G.mapId = 'mirror';
+    G.mirror = makeMirrorWall();
+    G.kind = 'hall';
+    G.wind = 0;
+    G.ai = 1;
+    G.p = { x: MIRROR_FX, y: G.H[MIRROR_FX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p', grounded: true };
+    G.f = { x: MIRROR_PX, y: G.H[MIRROR_PX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 65 };
+    G.p2 = null; G.f2 = null;
+    const overImp = { x: MIRROR_FX, y: MIRROR_BANK_Y, t: 1.2, hit: null, mirrorBounce: false };
+    const bounceNear = { x: MIRROR_FX, y: MIRROR_BANK_Y, t: 1.2, hit: null, mirrorBounce: true };
+    const bounceFar = { x: 220, y: MIRROR_BANK_Y, t: 1.2, hit: null, mirrorBounce: true };
+    const msc65 = scoreOne(overImp, WEPS[0], G.f, G.p, 65);
+    const msc20 = scoreOne(overImp, WEPS[0], G.f, G.p, 20);
+    const mscBounce = scoreOne(bounceNear, WEPS[0], G.f, G.p, 48);
+    const mscBounceMiss = scoreOne(bounceFar, WEPS[0], G.f, G.p, 48);
+    ok('mirror AI prefer 65 over', msc65 > msc20 + 400, Math.round(msc65) + '>' + Math.round(msc20));
+    ok('mirror AI bounce closer', mscBounce > msc65 && mscBounce > mscBounceMiss, Math.round(mscBounce) + '>' + Math.round(msc65));
+    G.kind = 'duo';
+    const mirDx0 = spawnAt('p', 0);
+    const mirDx1 = spawnAt('p', 1);
+    const mirDr0 = spawnAt('f', 0);
+    const mirDr1 = spawnAt('f', 1);
+    ok('mirror duo extras bank', isMirrorBank(mirDx0) && isMirrorBank(mirDx1) && isMirrorBank(mirDr0) && isMirrorBank(mirDr1), mirDx1 + '/' + mirDr1);
+    ok('mirror duo tops', mirDx0 === MIRROR_PX && mirDr0 === MIRROR_FX);
+    ok('mirror duo extras along', Math.abs(mirDx1 - mirDx0) >= 20 && Math.abs(mirDr1 - mirDr0) >= 20, Math.round(Math.abs(mirDx1 - mirDx0)));
+    ok('mirror duo not wall', !isMirrorStoneX(mirDx0) && !isMirrorStoneX(mirDx1) && !isMirrorStoneX(mirDr0) && !isMirrorStoneX(mirDr1));
+    ok('mirror duo not void', !isDeathVoid(mirDx0) && !isDeathVoid(mirDx1) && !isDeathVoid(mirDr0) && !isDeathVoid(mirDr1));
+    G.kind = 'hall';
+    ok('crate not trench', crateGroundOk(480) === false && crateGroundOk(MIRROR_PX) === true);
+    const fallU2 = { x: 420, y: MIRROR_BANK_Y - 14, r: 14, hp: 100, max: 100, grounded: false, vy: 0, fall: 0 };
+    for (let i = 0; i < 90; i++) stepUnitPhys(fallU2, 1 / 60);
+    ok('mirror fall trench not void', fallU2.grounded && fallU2.hp > 0 && fallU2.hp < 100 && Math.abs(fallU2.y + 14 - G.H[fallU2.x | 0]) < 10, fallU2.hp + '@' + Math.round(fallU2.y));
+    ok('mirror storm ~30', !stormForced('mirror') && !stormBanned('mirror') && MIRROR_STORM_P === 0.30 && STORM_P === 0.35);
+    ok('镜廊 name locked', MAP_NAME.mirror === '镜廊' && MAP_IDS[17] === 'mirror');
+    ok('no banned mirror', MAP_NAME.mirror.indexOf('传送') < 0 && MAP_NAME.mirror.indexOf('飞行') < 0 && MAP_NAME.mirror.indexOf('三叉戟') < 0 && MAP_NAME.mirror.indexOf('激怒') < 0);
+    ok('maps 18 with 镜廊', MAP_IDS.length === 18 && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cliff === '断崖');
+    ok('叠珠 still 7 after 镜廊', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('迟雷 still 8 after 镜廊', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
+    ok('ghost K still after 镜廊', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('silk still after 镜廊', typeof silkCount === 'function' && silkCount(0) === 0);
+    ok('时尽 still after 镜廊', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
+    ok('堂匣 still after 镜廊', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣');
+    ok('云台 still after 镜廊', MAP_NAME.cloud === '云台' && MAP_IDS[16] === 'cloud');
+    ok('雷泽 still after 镜廊', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune') && stormBanned('forge'));
+    ok('g vk v32', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('no 9th wep after 镜廊', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    G.mirror = null;
     G.mapId = 'plain';
     G.H = buildHeight('plain');
 

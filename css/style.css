@@ -591,6 +591,10 @@ canvas {
   border-color: rgba(232, 214, 176, 0.48);
 }
 
+#map-mirror {
+  border-color: rgba(180, 220, 255, 0.5);
+}
+
 #btn-rand-map {
   border-color: rgba(0, 232, 255, 0.6);
   color: var(--cyan);
