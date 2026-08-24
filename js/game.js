@@ -10,6 +10,7 @@
   const WALK_PX = 96;
   const CHARGE_T = 2;
   const TAP_POW = 12;
+  const CHARGE_BAR_NAME = '蓄条';
   const TURN_T = 18;
   const TURN_T_CORE = 14;
   const TURN_T_SUDDEN = 11;
@@ -477,6 +478,8 @@
   const windNum = el('wind-num');
   const angLabel = el('ang-label');
   const powLabel = el('pow-label');
+  const chargeBar = el('charge-bar');
+  const chargeFill = el('charge-bar-fill');
   const bagAimTag = el('bag-aim-tag');
   const walkLabel = el('walk-label');
   const comboEl = el('combo-label');
@@ -573,6 +576,7 @@
     salvoT: 0,
     mines: [],
     charging: false,
+    chargePulsed: false,
     stam: STAM_MAX,
     neonOn: false,
     busy: null,
@@ -3898,7 +3902,7 @@
     }
     const u = curUnit() || G.p;
     if (angLabel) angLabel.textContent = '角 ' + Math.round((u && u.ang) || 65) + '°';
-    if (powLabel) powLabel.textContent = '力 ' + Math.round(G.power);
+    syncChargeBar();
     if (bagAimTag) {
       const aiming = G.mode === 'play' && (G.phase === 'aim' || G.phase === 'charge');
       const showBag = aiming && anyBagArmed(u);
@@ -4545,6 +4549,7 @@
     G.turn = u && u.id ? u.id : (who === 'f' ? 'f' : 'p');
     G.phase = 'aim';
     G.charging = false;
+    G.chargePulsed = false;
     G.busy = null;
     G.busyT = 0;
     G.power = TAP_POW;
@@ -4691,6 +4696,7 @@
     }
     G.phase = 'charge';
     G.charging = true;
+    G.chargePulsed = false;
     G.power = TAP_POW;
     audio.ensure();
     audio.chargeStart();
@@ -4784,6 +4790,7 @@
     trail.length = 0;
     G.phase = 'fly';
     G.charging = false;
+    G.chargePulsed = false;
     G.busy = null;
     G.camHold = false;
     audio.fire(wep);
@@ -5945,6 +5952,7 @@
     G.neonOn = false;
     G.combo = 0;
     G.charging = false;
+    G.chargePulsed = false;
     G.busy = null;
     G.actDelay = { skip: true, wepId: 0, ult: false };
     audio.chargeStop();
@@ -6820,6 +6828,7 @@
         AI.stage = 3;
         G.phase = 'charge';
         G.charging = true;
+        G.chargePulsed = false;
         G.power = TAP_POW;
         audio.chargeStart();
       }
@@ -6894,6 +6903,45 @@
     if (!holdAng && Math.abs(from.ang - tip.ang65) <= 3) {
       from.ang = clamp(approach(from.ang, tip.ang65, 40 * dt), 0, 180);
     }
+  }
+
+  function chargeBarFill(p) {
+    return clamp((Number(p) - TAP_POW) / (100 - TAP_POW), 0, 1);
+  }
+
+  function wantChargeBar() {
+    return G.mode === 'play' && G.phase === 'charge' && !!G.charging && !overlayOpen();
+  }
+
+  function bumpChargePulse(node) {
+    if (!node || REDUCE) return;
+    node.classList.remove('pulse');
+    void node.offsetWidth;
+    node.classList.add('pulse');
+  }
+
+  function syncChargeBar() {
+    const show = wantChargeBar();
+    const full = show && G.power >= 100 - 1e-9;
+    const fill = show ? chargeBarFill(G.power) : 0;
+    if (powLabel) {
+      powLabel.textContent = '力 ' + Math.round(G.power);
+      powLabel.classList.toggle('full', full);
+      if (!show) powLabel.classList.remove('pulse');
+    }
+    if (chargeBar) {
+      chargeBar.classList.toggle('gone', !show);
+      chargeBar.classList.toggle('full', full);
+      chargeBar.setAttribute('aria-hidden', show ? 'false' : 'true');
+      if (!show) chargeBar.classList.remove('pulse');
+    }
+    if (chargeFill) chargeFill.style.transform = 'scaleX(' + fill + ')';
+    if (full && !G.chargePulsed) {
+      G.chargePulsed = true;
+      bumpChargePulse(powLabel);
+      bumpChargePulse(chargeBar);
+    }
+    if (!show) G.chargePulsed = false;
   }
 
   function applyCharge(dt) {
@@ -12171,6 +12219,30 @@
     ok('g vk v410', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('蓄力 2s', CHARGE_T === 2 && TAP_POW === 12);
     ok('stack math still after 环坑', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
+    ok('蓄条 name', CHARGE_BAR_NAME === '蓄条');
+    ok('蓄条 not a gun', WEPS.length === 8 && WEPS.every(function (w) { return w.name !== CHARGE_BAR_NAME; }));
+    ok('蓄条 no banned', CHARGE_BAR_NAME.indexOf('传送') < 0 && CHARGE_BAR_NAME.indexOf('飞行') < 0 && CHARGE_BAR_NAME.indexOf('三叉戟') < 0 && CHARGE_BAR_NAME.indexOf('激怒') < 0 && CHARGE_BAR_NAME.indexOf('天使') < 0 && CHARGE_BAR_NAME.indexOf('恶魔') < 0);
+    ok('蓄条 fill tap', chargeBarFill(TAP_POW) === 0);
+    ok('蓄条 fill 100', chargeBarFill(100) === 1);
+    ok('蓄条 fill mid', Math.abs(chargeBarFill(56) - 0.5) < 1e-9);
+    ok('CHARGE_T still 2', CHARGE_T === 2 && TAP_POW === 12);
+    ok('maps 22 after 蓄条', MAP_IDS.length === 22 && MAP_NAME.ring === '环坑');
+    ok('g vk v412', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('plus still additive', Math.abs(bagPlusMul(plusU) - 2.1) < 1e-9);
+    ok('plus still stack +1+2+3+5', BAG_P1 === 0.10 && BAG_P2 === 0.20 && BAG_P3 === 0.30 && BAG_P5 === 0.50);
+    ok('×2 ×3 exclusive still after 蓄条', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3');
+    const modeSaveBar = G.mode, phaseSaveBar = G.phase, chargeSaveBar = G.charging;
+    G.mode = 'play'; G.phase = 'charge'; G.charging = true;
+    ok('蓄条 show play charge', wantChargeBar() === true);
+    G.mode = 'title'; G.phase = 'charge'; G.charging = true;
+    ok('蓄条 hide title', wantChargeBar() === false);
+    G.mode = modeSaveBar; G.phase = phaseSaveBar; G.charging = chargeSaveBar;
+    fireBagU({ x3: true, ang: 65, power: 70, wep: 0 });
+    ok('×3 still 3 shells after 蓄条', G.shots && G.shots.length === 3 && (!G.queue || G.queue.length === 0));
+    ok('堂袋 hud still after 蓄条', bagStackReadout(x2p5) === '2发×1.35' && bagStackReadout(x3u) === '3发×0.60');
+    ok('stack math still after 蓄条', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_COST.p1 === 20 && BAG_KEYS.length === 7);
+    ok('no 9th wep after 蓄条', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('蓄力 2s still after 蓄条', CHARGE_T === 2 && TAP_POW === 12);
     }
 
     G.mode = fireSave.mode;

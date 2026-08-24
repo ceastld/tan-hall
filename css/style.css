@@ -164,6 +164,68 @@ body {
   white-space: nowrap;
 }
 
+.pow-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+#pow-label {
+  pointer-events: none;
+}
+
+#pow-label.full {
+  color: var(--gold);
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(255, 227, 107, 0.6);
+}
+
+.charge-bar {
+  display: inline-block;
+  width: 40px;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 227, 107, 0.38);
+  overflow: hidden;
+  pointer-events: none;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.charge-bar em {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 99px;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #007a88, var(--cyan));
+  box-shadow: 0 0 6px rgba(0, 232, 255, 0.45);
+  pointer-events: none;
+}
+
+.charge-bar.full {
+  border-color: rgba(255, 227, 107, 0.88);
+}
+
+.charge-bar.full em {
+  background: linear-gradient(90deg, #c9a227, var(--gold));
+  box-shadow: 0 0 8px rgba(255, 227, 107, 0.75);
+}
+
+.charge-bar.pulse,
+#pow-label.pulse {
+  animation: chargeGoldPulse 0.42s ease-out 1;
+}
+
+@keyframes chargeGoldPulse {
+  0% { filter: brightness(1); }
+  35% { filter: brightness(1.9) saturate(1.4); }
+  100% { filter: brightness(1); }
+}
+
 #stage-label.hot {
   color: var(--gold);
   text-shadow: 0 0 12px rgba(255, 227, 107, 0.45);
@@ -709,7 +771,7 @@ canvas {
 }
 
 @media (max-width: 860px) {
-  #ang-label, #pow-label, #walk-label, #bag-aim-tag { display: none; }
+  #ang-label, #pow-label, #pow-hud, #walk-label, #bag-aim-tag { display: none; }
 }
 
 @media (max-width: 720px) {
@@ -747,7 +809,9 @@ canvas {
   .stage.hit,
   .hp.flash .hp-bar,
   .time-lab.pulse,
-  .dly.now { animation: none; }
+  .dly.now,
+  .charge-bar.pulse,
+  #pow-label.pulse { animation: none; }
   .wind-arr.spin { animation: none; }
   .overlay { transition: none; }
 }
@@ -1093,7 +1157,7 @@ canvas {
 }
 
 @media (max-width: 860px) {
-  #ang-label, #pow-label, #walk-label, #land-label, #bag-aim-tag { display: none; }
+  #ang-label, #pow-label, #pow-hud, #walk-label, #land-label, #bag-aim-tag { display: none; }
   .aim-meters { width: min(280px, 100%); }
   .ang-meter { flex-basis: 80px; }
 }
