@@ -8,7 +8,7 @@
   const TAU = Math.PI * 2;
   const UNIT_R = 14;
   const WALK_PX = 96;
-  const CHARGE_T = 0.8;
+  const CHARGE_T = 2;
   const TAP_POW = 12;
   const TURN_T = 18;
   const TURN_T_CORE = 14;
@@ -12169,6 +12169,7 @@
     ok('时尽 still after 环坑', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
     ok('no 9th wep after 环坑', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('g vk v410', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('蓄力 2s', CHARGE_T === 2 && TAP_POW === 12);
     ok('stack math still after 环坑', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
     }
 
