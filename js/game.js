@@ -65,7 +65,7 @@
   const CRATE_WALK = 36;
   const BAG_NAME = { x2: '×2', x3: '×3', p1: '+1', p2: '+2', p3: '+3', p5: '+5', heal: '回春' };
   const BAG_SHORT = { x2: '×2', x3: '×3', p1: '+1', p2: '+2', p3: '+3', p5: '+5', heal: '回' };
-  const BAG_TINT = { x2: '#ffe36b', x3: '#ff6b6b', p1: '#fff3c2', p2: '#ff9a3d', p3: '#ff4d3d', p5: '#ffe36b', heal: '#5dffb2' };
+  const BAG_TINT = { x2: '#ffe36b', x3: '#dc143c', p1: '#fff3c2', p2: '#ff9a3d', p3: '#ff2d2d', p5: '#ffd24a', heal: '#5dffb2' };
   const BAG_KEYS = ['x2', 'x3', 'p1', 'p2', 'p3', 'p5', 'heal'];
   const BAG_START = 2;
   const BAG_DRILL = 3;
@@ -918,6 +918,57 @@
     void btn.offsetWidth;
     btn.classList.add('shake');
     setTimeout(function () { btn.classList.remove('shake'); }, 130);
+  }
+  function hexRgb(h) {
+    h = String(h || '#ffe36b').replace('#', '');
+    if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    const n = parseInt(h, 16);
+    if (!isFinite(n)) return GOLD.slice();
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function bagRgb(id) {
+    return hexRgb(BAG_TINT[id] || '#ffe36b');
+  }
+  function flashBagSlots(parts) {
+    if (!itemDock || !parts || !parts.length) return;
+    for (let i = 0; i < parts.length; i++) {
+      const btn = itemDock.querySelector('[data-bag="' + parts[i] + '"]');
+      if (!btn) continue;
+      btn.classList.remove('flash');
+      void btn.offsetWidth;
+      btn.classList.add('flash');
+    }
+    setTimeout(function () {
+      if (!itemDock) return;
+      const list = itemDock.querySelectorAll('.bag-slot.flash');
+      for (let i = 0; i < list.length; i++) list[i].classList.remove('flash');
+    }, 180);
+  }
+  function bagMuzzleBurst(x, y, ang, parts) {
+    if (REDUCE || !parts || !parts.length) return;
+    const th = ang * Math.PI / 180;
+    const ux = Math.cos(th);
+    const uy = -Math.sin(th);
+    for (let i = 0; i < parts.length; i++) {
+      const rgb = bagRgb(parts[i]);
+      const n = 6;
+      for (let j = 0; j < n; j++) {
+        const spr = rand(-0.38, 0.38);
+        const s = rand(70, 210);
+        const life = rand(0.12, 0.2);
+        particles.push({
+          x: x + ux * rand(0, 10),
+          y: y + uy * rand(0, 10),
+          vx: Math.cos(th + spr) * s,
+          vy: -Math.sin(th + spr) * s - rand(8, 36),
+          g: 240,
+          life: life,
+          max: life,
+          r: rand(1.5, 3.8),
+          rgb: rgb
+        });
+      }
+    }
   }
   function bagIdFromKey(e) {
     if (!e) return null;
@@ -3975,6 +4026,7 @@
       }
       disarmBagToAfford(u);
     }
+    const parts = bagChipParts(u);
     const mods = consumeBagOnFire(u);
     const ang = u.ang;
     const wep = bagWep(wepOf(), mods);
@@ -4051,6 +4103,8 @@
       audio.beep(280, 0.1, 'triangle', 0.03, 420);
     }
     if (u.ult) audio.beep(90, 0.28, 'sine', 0.06, 36);
+    flashBagSlots(parts);
+    bagMuzzleBurst(sx, sy, ang, parts);
     burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 8 ? MINE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : unitRgb(u)))))), 8, 80, 0.25);
     u.walkT = 0;
     spawnFruits();
@@ -10340,6 +10394,12 @@
     ok('bag 7 v40', BAG_KEYS.length === 7 && WEPS.length === 8);
     ok('maps 19 after v40', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
     ok('no 9th wep after v40', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('tints gold crimson cream orange scarlet foil leaf', BAG_TINT.x2 === '#ffe36b' && BAG_TINT.x3 === '#dc143c' && BAG_TINT.p1 === '#fff3c2' && BAG_TINT.p2 === '#ff9a3d' && BAG_TINT.p3 === '#ff2d2d' && BAG_TINT.p5 === '#ffd24a' && BAG_TINT.heal === '#5dffb2');
+    ok('tints distinct', BAG_TINT.x2 !== BAG_TINT.x3 && BAG_TINT.p1 !== BAG_TINT.p2 && BAG_TINT.p2 !== BAG_TINT.p3 && BAG_TINT.p5 !== BAG_TINT.x3 && BAG_TINT.heal !== BAG_TINT.x2);
+    ok('hexRgb gold', hexRgb('#ffe36b')[0] === 255 && hexRgb('#ffe36b')[1] === 227 && hexRgb('#ffe36b')[2] === 107);
+    ok('bagRgb crimson', bagRgb('x3')[0] === 220 && bagRgb('x3')[1] === 20 && bagRgb('x3')[2] === 60);
+    ok('g vk v41', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('stack math still v40', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
 
     G.mapId = 'plain';
     G.H = buildHeight('plain');

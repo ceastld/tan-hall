@@ -1424,6 +1424,7 @@ canvas {
   border: 1px solid currentColor;
   background: rgba(12, 8, 16, 0.82);
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.35);
+  color: var(--chip, var(--gold));
 }
 
 .bag-chip-join {
@@ -1433,13 +1434,55 @@ canvas {
   pointer-events: none;
 }
 
-.bag-chip-x2 { color: #ffe36b; }
-.bag-chip-x3 { color: #ff6b6b; }
-.bag-chip-p1 { color: #fff3c2; }
-.bag-chip-p2 { color: #ff9a3d; }
-.bag-chip-p3 { color: #ff4d3d; }
-.bag-chip-p5 { color: #ffe36b; }
-.bag-chip-heal { color: #5dffb2; }
+.bag-chip-x2 {
+  --chip: #ffe36b;
+  color: #ffe36b;
+  background: rgba(58, 40, 8, 0.92);
+  border-color: #c9a227;
+  box-shadow: 0 0 10px rgba(255, 227, 107, 0.42);
+}
+.bag-chip-x3 {
+  --chip: #ff8a9a;
+  color: #ff8a9a;
+  background: rgba(72, 8, 18, 0.92);
+  border-color: #dc143c;
+  box-shadow: 0 0 10px rgba(220, 20, 60, 0.42);
+}
+.bag-chip-p1 {
+  --chip: #fff3c2;
+  color: #fff3c2;
+  background: rgba(58, 52, 16, 0.92);
+  border-color: #e8d48a;
+  box-shadow: 0 0 10px rgba(255, 243, 194, 0.38);
+}
+.bag-chip-p2 {
+  --chip: #ffb06a;
+  color: #ffb06a;
+  background: rgba(58, 28, 8, 0.92);
+  border-color: #ff9a3d;
+  box-shadow: 0 0 10px rgba(255, 154, 61, 0.42);
+}
+.bag-chip-p3 {
+  --chip: #ff6a5a;
+  color: #ff6a5a;
+  background: rgba(58, 10, 10, 0.92);
+  border-color: #ff2d2d;
+  box-shadow: 0 0 10px rgba(255, 45, 45, 0.42);
+}
+.bag-chip-p5 {
+  --chip: #ffd24a;
+  color: #ffd24a;
+  background: rgba(58, 42, 8, 0.92);
+  border-color: #e8c44a;
+  box-shadow: 0 0 10px rgba(255, 210, 74, 0.48);
+}
+.bag-chip-heal {
+  --chip: #5dffb2;
+  color: #5dffb2;
+  background: rgba(8, 42, 24, 0.92);
+  border-color: #3dff8a;
+  box-shadow: 0 0 10px rgba(93, 255, 178, 0.38);
+}
 
 .item-dock-rail {
   display: flex;
@@ -1458,6 +1501,7 @@ canvas {
   min-width: 56px;
   height: 72px;
   min-height: 72px;
+  --bag-flash: #ffe36b;
   padding: 6px 4px 7px;
   border-radius: 11px;
   pointer-events: auto;
@@ -1528,6 +1572,22 @@ canvas {
 .bag-sparks i:nth-child(2) { left: 78%; top: 8%; animation-delay: 0.28s; }
 .bag-sparks i:nth-child(3) { left: 64%; top: 74%; animation-delay: 0.52s; }
 
+.bag-slot[data-bag="x2"] { --bag-flash: #ffe36b; }
+.bag-slot[data-bag="x3"] { --bag-flash: #dc143c; }
+.bag-slot[data-bag="p1"] { --bag-flash: #fff3c2; }
+.bag-slot[data-bag="p2"] { --bag-flash: #ff9a3d; }
+.bag-slot[data-bag="p3"] { --bag-flash: #ff2d2d; }
+.bag-slot[data-bag="p5"] { --bag-flash: #ffd24a; }
+.bag-slot[data-bag="heal"] { --bag-flash: #5dffb2; }
+
+.bag-slot[data-bag="x2"] .bag-sparks i { background: #fff8dc; box-shadow: 0 0 5px #ffe36b, 0 0 1px #fff; }
+.bag-slot[data-bag="x3"] .bag-sparks i { background: #ffd0d4; box-shadow: 0 0 5px #dc143c, 0 0 1px #fff; }
+.bag-slot[data-bag="p1"] .bag-sparks i { background: #fff8dc; box-shadow: 0 0 5px #fff3c2, 0 0 1px #fff; }
+.bag-slot[data-bag="p2"] .bag-sparks i { background: #ffd8a8; box-shadow: 0 0 5px #ff9a3d, 0 0 1px #fff; }
+.bag-slot[data-bag="p3"] .bag-sparks i { background: #ffb0a8; box-shadow: 0 0 5px #ff2d2d, 0 0 1px #fff; }
+.bag-slot[data-bag="p5"] .bag-sparks i { background: #fff8dc; box-shadow: 0 0 5px #ffd24a, 0 0 1px #fff; }
+.bag-slot[data-bag="heal"] .bag-sparks i { background: #e8ffe8; box-shadow: 0 0 5px #5dffb2, 0 0 1px #fff; }
+
 .bag-name {
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -1596,6 +1656,11 @@ canvas {
   animation: bagShake 0.12s ease;
 }
 
+.bag-slot.flash,
+.bag-slot.armed.flash {
+  animation: bagFlash 0.18s ease-out;
+}
+
 .bag-aim-tag {
   font-size: 10px;
   font-weight: 800;
@@ -1630,6 +1695,18 @@ canvas {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-3px); }
   75% { transform: translateX(3px); }
+}
+
+@keyframes bagFlash {
+  0% {
+    filter: brightness(2.35) saturate(1.35);
+    box-shadow:
+      0 0 22px var(--bag-flash, #ffe36b),
+      0 2px 0 rgba(255, 248, 220, 0.72) inset;
+  }
+  100% {
+    filter: none;
+  }
 }
 
 @media (pointer: coarse) {
@@ -1669,5 +1746,10 @@ canvas {
   .bag-slot.armed .bag-sparks,
   .bag-sparks {
     display: none;
+  }
+  .bag-slot.flash,
+  .bag-slot.armed.flash {
+    animation: none;
+    filter: brightness(1.35);
   }
 }
