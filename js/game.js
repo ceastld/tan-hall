@@ -348,6 +348,13 @@
   const RING_CRATER = 0.72;
   const RING_STORM_P = 0.25;
   const RING_NAME = '环坑';
+  const DUST_NAME = '坑尘';
+  const DUST_IDLE_N = 5;
+  const DUST_BURST_MIN = 6;
+  const DUST_BURST_MAX = 10;
+  const DUST_LIFE = 0.5;
+  const DUST_R = 1.6;
+  const DUST_RGB = [168, 132, 96];
   const FALL_NAME = '落顶';
   const FALL_N_MIN = 2;
   const FALL_N_MAX = 4;
@@ -642,6 +649,7 @@
   const trail = [];
   const crumbs = [];
   const falls = [];
+  const dusts = [];
 
   let hidden = false;
   let addTok = 0;
@@ -1797,6 +1805,118 @@
     if (G.mapId !== 'ring' || r <= 0) return r;
     if (isRingRimX(x)) return r * RING_CRATER;
     return r;
+  }
+
+  function wantDust() {
+    return !REDUCE && G.mapId === 'ring';
+  }
+
+  function wantDustBurst(x) {
+    return wantDust() && isRingBowlX(x);
+  }
+
+  function dustBowlX(x) {
+    return clamp(x, RING_RIM1 + 8, RING_RIM2 - 8);
+  }
+
+  function dustBowlY(x, y) {
+    const gy = groundAt(x) - 4;
+    const top = RING_RIM_Y + 10;
+    return clamp(y, top, Math.max(top, gy));
+  }
+
+  function seedIdleDust() {
+    for (let i = dusts.length - 1; i >= 0; i--) {
+      if (dusts[i].idle) dusts.splice(i, 1);
+    }
+    if (!wantDust() || !G.H) return 0;
+    for (let i = 0; i < DUST_IDLE_N; i++) {
+      const x = dustBowlX(RING_CX + rand(-RING_INNER * 0.68, RING_INNER * 0.68));
+      const gy = groundAt(x);
+      const y = dustBowlY(x, lerp(RING_RIM_Y + 18, gy - 8, rand(0.18, 0.82)));
+      dusts.push({
+        x: x,
+        y: y,
+        vx: rand(-12, 12),
+        vy: rand(-7, 7),
+        g: 0,
+        r: rand(1.0, 2.0),
+        rgb: DUST_RGB,
+        life: 1,
+        max: 1,
+        idle: true,
+        ph: rand(0, TAU)
+      });
+    }
+    return DUST_IDLE_N;
+  }
+
+  function spawnDustBurst(cx, cy, n) {
+    if (!wantDustBurst(cx)) return 0;
+    const count = n == null ? irand(DUST_BURST_MIN, DUST_BURST_MAX) : clamp(n | 0, DUST_BURST_MIN, DUST_BURST_MAX);
+    const y0 = cy == null ? groundAt(cx) : cy;
+    for (let i = 0; i < count; i++) {
+      dusts.push({
+        x: dustBowlX(cx + rand(-16, 16)),
+        y: y0 + rand(-10, 6),
+        vx: rand(-55, 55),
+        vy: rand(-90, -12),
+        g: GRAV,
+        r: rand(1.2, 2.8),
+        rgb: DUST_RGB,
+        life: DUST_LIFE,
+        max: DUST_LIFE,
+        idle: false
+      });
+    }
+    return count;
+  }
+
+  function tickDusts(dt) {
+    if (!dusts.length) return;
+    if (!wantDust()) {
+      dusts.length = 0;
+      return;
+    }
+    for (let i = dusts.length - 1; i >= 0; i--) {
+      const q = dusts[i];
+      if (q.idle) {
+        q.ph = (q.ph || 0) + dt * 0.7;
+        q.x += q.vx * dt;
+        q.y += q.vy * dt + Math.sin(q.ph) * 5 * dt;
+        if (q.x < RING_RIM1 + 8) { q.x = RING_RIM1 + 8; q.vx = Math.abs(q.vx); }
+        else if (q.x > RING_RIM2 - 8) { q.x = RING_RIM2 - 8; q.vx = -Math.abs(q.vx); }
+        if (!isRingBowlX(q.x)) {
+          q.x = RING_CX;
+          q.vx = -q.vx;
+        }
+        const gy = groundAt(q.x) - 4;
+        const top = RING_RIM_Y + 10;
+        if (q.y > gy) { q.y = gy; q.vy = -Math.abs(q.vy || 6); }
+        else if (q.y < top) { q.y = top; q.vy = Math.abs(q.vy || 6); }
+      } else {
+        q.vy += GRAV * dt;
+        q.x += q.vx * dt;
+        q.y += q.vy * dt;
+        q.life -= dt;
+        q.x = dustBowlX(q.x);
+        if (q.life <= 0 || q.y > VH + 12) dusts.splice(i, 1);
+      }
+    }
+  }
+
+  function drawDusts(g) {
+    if (REDUCE || !dusts.length) return;
+    for (let i = 0; i < dusts.length; i++) {
+      const q = dusts[i];
+      const a = q.idle
+        ? 0.26 + 0.18 * (0.5 + 0.5 * Math.sin(G.t * 1.15 + (q.ph || 0)))
+        : clamp(q.life / (q.max || DUST_LIFE), 0, 0.88);
+      g.fillStyle = rgba(q.rgb || DUST_RGB, a);
+      g.beginPath();
+      g.arc(q.x, q.y, q.r || DUST_R, 0, TAU);
+      g.fill();
+    }
   }
 
   function rainCaveCrumbs(cx, cy) {
@@ -5368,6 +5488,7 @@
     }
     if (wep.id === 6) plantFire(x, y, wasUlt, owner);
     dirtBurst(x, y, hit ? 14 : 20);
+    if (wantDustBurst(x)) spawnDustBurst(x, y);
     audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y, !!fromHit);
     if (wasUlt && (!shot || (shot.lead && !shot.extra) || !G.dual)) {
@@ -6969,6 +7090,7 @@
     G.fires = [];
     crumbs.length = 0;
     falls.length = 0;
+    dusts.length = 0;
     terrainDirty = true;
     G.p = makeUnit('p', { id: 'p', name: '岚丸', delay: 0, ord: 0, slot: 0 });
     G.f = makeUnit('f', { id: 'f', name: G.kind === 'drill' ? '石俑' : '烬丸', delay: isSquad() ? 8 : 0, ord: 1, slot: 0 });
@@ -7025,6 +7147,7 @@
     G.fallBlast = 0;
     G.fallAte = null;
     falls.length = 0;
+    seedIdleDust();
     G.ctrlSide = null;
     G.windSpinT = 0;
     G.nextWind = null;
@@ -7187,6 +7310,7 @@
         crumbs.splice(i, 1);
       }
     }
+    tickDusts(dt);
   }
 
   function landDust(x, y) {
@@ -9211,6 +9335,7 @@
     drawFires(ctx);
     drawCrumbs(ctx);
     drawFalls(ctx);
+    drawDusts(ctx);
     drawGust(ctx);
     drawWindMotes(ctx);
     if (G.sudden) {
@@ -12243,6 +12368,89 @@
     ok('stack math still after 蓄条', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_COST.p1 === 20 && BAG_KEYS.length === 7);
     ok('no 9th wep after 蓄条', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('蓄力 2s still after 蓄条', CHARGE_T === 2 && TAP_POW === 12);
+
+    ok('坑尘 name', DUST_NAME === '坑尘' && DUST_IDLE_N === 5 && DUST_BURST_MIN === 6 && DUST_BURST_MAX === 10 && DUST_LIFE === 0.5);
+    ok('坑尘 no banned', DUST_NAME.indexOf('传送') < 0 && DUST_NAME.indexOf('飞行') < 0 && DUST_NAME.indexOf('三叉戟') < 0 && DUST_NAME.indexOf('激怒') < 0 && DUST_NAME.indexOf('天使') < 0 && DUST_NAME.indexOf('恶魔') < 0 && DUST_NAME.indexOf('月池') < 0 && DUST_NAME.indexOf('井口') < 0 && DUST_NAME.indexOf('落顶') < 0);
+    ok('坑尘 not a gun', WEPS.length === 8 && WEPS.every(function (w) { return w.name !== DUST_NAME; }) && DUST_NAME !== FALL_NAME);
+    G.H = buildHeight('ring');
+    G.mapId = 'ring';
+    G.kind = 'hall';
+    G.mode = 'play';
+    G.p2 = null; G.f2 = null;
+    G.p = { x: RING_PX, y: G.H[RING_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: RING_FX, y: G.H[RING_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    dusts.length = 0;
+    const idleN = seedIdleDust();
+    ok('坑尘 idle few', REDUCE ? (idleN === 0 && dusts.length === 0) : (idleN === DUST_IDLE_N && dusts.length === DUST_IDLE_N), dusts.length);
+    ok('坑尘 idle in bowl', REDUCE || dusts.every(function (q) { return q.idle && isRingBowlX(q.x); }));
+    for (let di = 0; di < 180; di++) tickDusts(STEP);
+    ok('坑尘 idle stay bowl', REDUCE || (dusts.length === DUST_IDLE_N && dusts.every(function (q) { return q.idle && isRingBowlX(q.x); })), dusts.length);
+    ok('坑尘 idle no dmg', G.p.hp === 100);
+    dusts.length = 0;
+    G.wind = 8;
+    const burstN = spawnDustBurst(RING_CX, G.H[RING_CX]);
+    ok('坑尘 burst 6-10', REDUCE ? burstN === 0 : (burstN >= DUST_BURST_MIN && burstN <= DUST_BURST_MAX && dusts.length === burstN), burstN);
+    if (!REDUCE && dusts.length) {
+      ok('坑尘 burst GRAV', dusts[0].g === GRAV && dusts[0].idle === false && dusts[0].life === DUST_LIFE && dusts[0].rgb === DUST_RGB);
+      const dvx0 = dusts[0].vx;
+      const dvy0 = dusts[0].vy;
+      tickDusts(STEP);
+      ok('坑尘 no wind', Math.abs(dusts[0].vx - dvx0) < 1e-9, dusts[0].vx);
+      ok('坑尘 gravity', dusts[0].vy > dvy0 + GRAV * STEP * 0.9, Math.round(dusts[0].vy - dvy0));
+    } else {
+      ok('坑尘 burst GRAV', REDUCE);
+      ok('坑尘 no wind', REDUCE);
+      ok('坑尘 gravity', REDUCE);
+    }
+    G.wind = 0;
+    G.p.hp = 100;
+    G.p.x = RING_CX;
+    G.p.y = G.H[RING_CX] - 14;
+    dusts.length = 0;
+    spawnDustBurst(RING_CX, G.p.y, 8);
+    tickDusts(STEP);
+    ok('坑尘 burst no dmg', G.p.hp === 100, G.p.hp);
+    dusts.length = 0;
+    const rimDust = spawnDustBurst(RING_LIP_L, RING_RIM_Y, 8);
+    ok('坑尘 rim skip', rimDust === 0 && dusts.length === 0, rimDust);
+    ok('坑尘 rim is stone', isRingRimX(RING_LIP_L) === true && isRingBowlX(RING_LIP_L) === false);
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+    dusts.length = 0;
+    ok('plain skip 坑尘', wantDust() === false && spawnDustBurst(400, G.H[400], 8) === 0 && dusts.length === 0);
+    G.mapId = 'moon';
+    G.H = buildHeight('moon');
+    ok('月池 skip 坑尘', wantDust() === false && spawnDustBurst(MOON_CX, G.H[MOON_CX], 8) === 0);
+    G.mapId = 'well';
+    G.H = buildHeight('well');
+    ok('井口 skip 坑尘', wantDust() === false && spawnDustBurst(WELL_CX, G.H[WELL_CX], 8) === 0);
+    G.mapId = 'cave';
+    G.H = buildHeight('cave');
+    G.cave = makeCaveRoof();
+    ok('reduce skip 坑尘', wantDust() === (!REDUCE && G.mapId === 'ring'));
+    ok('落顶 still cave-only', FALL_NAME === '落顶' && wantFallChips() === (!REDUCE && G.mapId === 'cave'));
+    G.mapId = 'ring';
+    G.H = buildHeight('ring');
+    G.cave = null;
+    falls.length = 0;
+    dusts.length = 0;
+    const ringAteCeil = carveCave(RING_CX, 200, 22);
+    ok('ring no 落顶', ringAteCeil === false && falls.length === 0, falls.length);
+    ok('maps 22 after 坑尘', MAP_IDS.length === 22 && MAP_NAME.ring === '环坑' && MAP_IDS[21] === 'ring');
+    ok('CHARGE_T still 2 after 坑尘', CHARGE_T === 2 && TAP_POW === 12);
+    ok('g vk v413', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('plus still additive after 坑尘', Math.abs(bagPlusMul(plusU) - 2.1) < 1e-9);
+    ok('plus still stack after 坑尘', BAG_P1 === 0.10 && BAG_P2 === 0.20 && BAG_P3 === 0.30 && BAG_P5 === 0.50);
+    fireBagU({ x3: true, ang: 65, power: 70, wep: 0 });
+    ok('×3 3 shells still after 坑尘', G.shots && G.shots.length === 3 && (!G.queue || G.queue.length === 0));
+    ok('×2 ×3 exclusive still after 坑尘', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3');
+    ok('蓄条 still after 坑尘', CHARGE_BAR_NAME === '蓄条' && CHARGE_T === 2);
+    ok('落顶 still after 坑尘', FALL_NAME === '落顶' && wantFallChips() === false);
+    ok('袋火 still after 坑尘', BAG_FIRE_NAME === '袋火' && BAG_TINT.x3 === '#dc143c');
+    ok('金匣袋 still after 坑尘', GOLD_BAG_NAME === '金匣袋' && GOLD_BAG_P === 0.40 && maybeBagCrate('gold') === 'gold');
+    ok('堂袋 hud still after 坑尘', bagStackReadout(x2p5) === '2发×1.35' && bagStackReadout(x3u) === '3发×0.60');
+    ok('stack math still after 坑尘', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_KEYS.length === 7);
+    ok('no 9th wep after 坑尘', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     }
 
     G.mode = fireSave.mode;
