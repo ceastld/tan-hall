@@ -1377,3 +1377,162 @@ canvas {
 @media (max-width: 720px) {
   .drill-table { width: 132px; font-size: 9px; right: 6px; top: 6px; }
 }
+
+.item-dock {
+  flex-shrink: 0;
+  margin: 0 10px 2px;
+  padding: 7px 10px 8px;
+  border-radius: 12px;
+  pointer-events: auto;
+  z-index: 4;
+  background:
+    linear-gradient(180deg, rgba(86, 58, 32, 0.96) 0%, rgba(42, 26, 14, 0.98) 42%, rgba(22, 14, 10, 0.98) 100%);
+  border: 1px solid rgba(168, 122, 64, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(18, 10, 6, 0.72) inset,
+    0 10px 22px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(255, 180, 80, 0.08);
+}
+
+.item-dock.gone { display: none !important; }
+
+.item-dock-rail {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.bag-slot {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 52px;
+  min-width: 52px;
+  min-height: 64px;
+  padding: 5px 4px 6px;
+  border-radius: 10px;
+  pointer-events: auto;
+  cursor: pointer;
+  color: #f4eeff;
+  background:
+    linear-gradient(180deg, rgba(38, 26, 16, 0.92), rgba(12, 8, 6, 0.92));
+  border: 1px solid rgba(92, 64, 34, 0.85);
+  box-shadow:
+    0 1px 0 rgba(255, 220, 160, 0.12) inset,
+    0 4px 8px rgba(0, 0, 0, 0.28);
+  font: inherit;
+  letter-spacing: 0.08em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  touch-action: manipulation;
+}
+
+.bag-slot:hover {
+  border-color: rgba(255, 227, 107, 0.45);
+}
+
+.bag-slot:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.bag-ico {
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+
+.bag-ico svg {
+  width: 36px;
+  height: 36px;
+  display: block;
+}
+
+.bag-name {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #ead6b4;
+  pointer-events: none;
+  line-height: 1.2;
+}
+
+.bag-n {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 99px;
+  background: rgba(10, 8, 16, 0.86);
+  border: 1px solid rgba(255, 227, 107, 0.45);
+  color: var(--gold);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bag-slot.armed {
+  border-color: rgba(255, 227, 107, 0.95);
+  background:
+    linear-gradient(180deg, rgba(64, 46, 16, 0.95), rgba(24, 16, 8, 0.95));
+  box-shadow:
+    0 0 0 2px rgba(255, 227, 107, 0.72),
+    0 0 16px rgba(255, 227, 107, 0.38),
+    0 1px 0 rgba(255, 244, 200, 0.28) inset;
+  transform: translateY(-3px);
+  animation: bagArmed 1.15s ease-in-out infinite;
+  z-index: 1;
+}
+
+.bag-slot.armed .bag-name { color: var(--gold); }
+
+.bag-slot.empty {
+  opacity: 0.38;
+  filter: grayscale(0.35);
+  cursor: default;
+}
+
+.bag-slot.empty .bag-n {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #8a7aa8;
+}
+
+@keyframes bagArmed {
+  0%, 100% { transform: translateY(-3px); }
+  50% { transform: translateY(-5px); }
+}
+
+@media (pointer: coarse) {
+  .bag-slot {
+    min-height: 68px;
+    min-width: 48px;
+  }
+}
+
+@media (max-width: 720px) {
+  .item-dock { margin: 0 8px 2px; padding: 6px 6px 7px; }
+  .item-dock-rail { gap: 5px; }
+  .bag-slot { width: 46px; min-width: 44px; padding: 4px 2px 5px; }
+  .bag-name { font-size: 9px; letter-spacing: 0.06em; }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .item-dock { padding: 3px 8px 4px; margin-bottom: 0; }
+  .bag-slot { min-height: 48px; padding: 2px 2px 3px; }
+  .bag-name { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bag-slot.armed {
+    animation: none;
+    transform: none;
+  }
+}
