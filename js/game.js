@@ -25,7 +25,7 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条 · K 残影';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 7叠珠 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 7叠珠 8迟雷 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅 · K残影';
   const MINI_W = 160;
   const MINI_H = 48;
@@ -172,6 +172,8 @@
   const DUAL_POW = 0.72;
   const DUAL_JIT = 1.2;
   const DUAL_BLAST = 0.72;
+  const MINE_FUSE = 1.6;
+  const MINE_HIT = 0.85;
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
@@ -200,6 +202,7 @@
   const FIRE = [255, 120, 48];
   const STONE = [196, 156, 112];
   const PEARL = [255, 236, 180];
+  const MINE = [255, 176, 64];
 
   const WEPS = [
     { id: 0, name: '普通弹', direct: 32, splash: 36, crater: 30, spd: 1.00 },
@@ -208,7 +211,8 @@
     { id: 4, name: '三裂', direct: 14, splash: 22, crater: 16, spd: 0.96 },
     { id: 5, name: '霓轨', direct: 20, splash: 40, crater: 22, spd: 0.70 },
     { id: 6, name: '霓火', direct: 18, splash: 44, crater: 20, spd: 1.00 },
-    { id: 7, name: '叠珠', direct: 32, splash: 36, crater: 30, spd: 1.00 }
+    { id: 7, name: '叠珠', direct: 32, splash: 36, crater: 30, spd: 1.00 },
+    { id: 8, name: '迟雷', direct: 26, splash: 42, crater: 34, spd: 0.94 }
   ];
   const NEON = { id: 3, name: '霓弹', direct: 8, splash: 28, crater: 18, spd: 1.00 };
 
@@ -355,6 +359,7 @@
     shot: null,
     shots: [],
     dual: null,
+    mines: [],
     charging: false,
     stam: STAM_MAX,
     neonOn: false,
@@ -540,6 +545,7 @@
     else if (wepId === 5) d += 40;
     else if (wepId === 6) d += 25;
     else if (wepId === 7) d += 35;
+    else if (wepId === 8) d += 20;
     if (ult) d += 20;
     return d;
   }
@@ -579,6 +585,26 @@
   }
   function wepOf() { return G.neonOn ? NEON : (WEPS[G.wep] || WEPS[0]); }
   function isDualWep(wep) { return !!(wep && wep.id === 7); }
+  function isMineWep(wep) { return !!(wep && wep.id === 8); }
+  function mineHitWep(wep) {
+    wep = wep || WEPS[7] || WEPS[0];
+    return {
+      id: wep.id,
+      name: wep.name,
+      direct: wep.direct,
+      splash: wep.splash * MINE_HIT,
+      crater: wep.crater,
+      spd: wep.spd
+    };
+  }
+  function liveMineOf(side) {
+    const list = G.mines;
+    if (!list || !list.length) return null;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] && list[i].side === side) return list[i];
+    }
+    return null;
+  }
   function dualFollowWep(wep) {
     wep = wep || WEPS[6] || WEPS[0];
     return {
@@ -1739,6 +1765,7 @@
       if (wep && wep.id === 5) this.beep(210, 0.16, 'sine', 0.045, 90);
       if (wep && wep.id === 6) this.beep(140, 0.2, 'sawtooth', 0.045, 50);
       if (wep && wep.id === 7) this.beep(260, 0.16, 'sine', 0.04, 70);
+      if (wep && wep.id === 8) this.beep(90, 0.28, 'triangle', 0.05, 36);
       if (ult) {
         this.noise(0.42, 0.16, 70);
         this.beep(48, 0.5, 'sine', 0.14, 24);
@@ -2470,9 +2497,10 @@
     return dmg;
   }
 
-  function applyBlast(x, y, wep, shooter) {
+  function applyBlast(x, y, wep, shooter, ultOn) {
     const mul = dmgMul();
     let any = false;
+    if (ultOn == null) ultOn = !!(shooter && shooter.ult);
     const list = allUnits();
     for (let i = 0; i < list.length; i++) {
       const u = list[i];
@@ -2486,7 +2514,7 @@
         const spl = wep.direct * 0.72 * fall * mul;
         if (spl > dmg) dmg = spl;
       }
-      if (shooter && shooter.ult) dmg *= 1.6;
+      if (ultOn) dmg *= 1.6;
       if (dmg >= 1) {
         const dealt = hurt(u, dmg, 'blast');
         if (dealt > 0 && u !== shooter) {
@@ -2871,8 +2899,13 @@
       audio.beep(340, 0.08, 'sine', 0.034, 620);
       audio.beep(510, 0.1, 'triangle', 0.028, 880);
     }
+    if (wep.id === 8) {
+      fizzleSideMine(u && u.side);
+      audio.beep(160, 0.12, 'sawtooth', 0.036, 70);
+      audio.beep(280, 0.1, 'triangle', 0.03, 420);
+    }
     if (u.ult) audio.beep(90, 0.28, 'sine', 0.06, 36);
-    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : unitRgb(u))))), 8, 80, 0.25);
+    burst(sx, sy, u.ult ? GOLD : (wep.id === 3 ? ICE : (wep.id === 8 ? MINE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (wep.id === 5 ? RAIL : unitRgb(u)))))), 8, 80, 0.25);
     u.walkT = 0;
     spawnFruits();
     queueNextWind();
@@ -3064,11 +3097,13 @@
     }
   }
 
-  function explode(x, y, wep, owner, fromHit, shot) {
-    shot = shot || G.shot;
+  function explode(x, y, wep, owner, fromHit, shot, opts) {
+    opts = opts || {};
+    if (shot === undefined) shot = G.shot;
+    const keepPhase = !!opts.keepPhase;
     G.killVictim = null;
     let crater = wep.crater;
-    const wasUlt = !!(shot ? shot.ult : (owner && owner.ult));
+    const wasUlt = opts.ult != null ? !!opts.ult : !!(shot ? shot.ult : (owner && owner.ult));
     const ultMul = wasUlt ? 1.35 : 1;
     if (wasUlt) crater = Math.round(crater * 1.35);
     crater = Math.round(sandR(crater));
@@ -3084,7 +3119,7 @@
         snapArcade(pop.x, pop.r, wep);
         snapMoon(pop.x, pop.r, wep);
         punchCover(pop.x, pop.y, pop.r, wep);
-        if (applyBlast(pop.x, pop.y, wep, owner)) hit = true;
+        if (applyBlast(pop.x, pop.y, wep, owner, wasUlt)) hit = true;
         burst(pop.x, pop.y, hit ? HOT : DIRT, hit ? 12 : 8, 160, 0.4);
         ringAt(pop.x, pop.y, HOT, pop.r * 1.5);
       }
@@ -3107,11 +3142,11 @@
           punchWall(px, py, 12);
         }
       }
-      hit = applyBlast(x, y, wep, owner) || hit;
-      const rgb = wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (hit ? unitRgb(owner) : DIRT));
+      hit = applyBlast(x, y, wep, owner, wasUlt) || hit;
+      const rgb = wep.id === 8 ? MINE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (hit ? unitRgb(owner) : DIRT)));
       burst(x, y, rgb, hit ? 28 : 16, hit ? 260 : 180, 0.55);
-      burst(x, y, wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : GOLD), hit ? 10 : 4, 140, 0.35);
-      ringAt(x, y, wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (hit ? GOLD : HOT)), crater * 1.6);
+      burst(x, y, wep.id === 8 ? MINE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : GOLD)), hit ? 10 : 4, 140, 0.35);
+      ringAt(x, y, wep.id === 8 ? MINE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (hit ? GOLD : HOT))), crater * 1.6);
     }
     if (wep.id === 6) plantFire(x, y, wasUlt, owner);
     dirtBurst(x, y, hit ? 14 : 20);
@@ -3123,12 +3158,12 @@
       hitStop(0.12);
       kick(6.5);
     }
-    if (G.shots && shot) {
+    if (!keepPhase && G.shots && shot) {
       const ix = G.shots.indexOf(shot);
       if (ix >= 0) G.shots.splice(ix, 1);
     }
-    if (G.shot === shot) G.shot = (G.shots && G.shots[0]) || null;
-    if (G.dual && hit) G.dual.hit = true;
+    if (!keepPhase && G.shot === shot) G.shot = (G.shots && G.shots[0]) || null;
+    if (!keepPhase && G.dual && hit) G.dual.hit = true;
     const more = flyStillGoing();
     if (hit) {
       audio.hit();
@@ -3165,15 +3200,106 @@
       armKillCam(G.killVictim);
       G.killVictim = null;
     }
-    if (!shot || shot.lead) commitLastGhost(x, y);
+    if (!keepPhase && (!shot || shot.lead)) commitLastGhost(x, y);
     eachUnit(ungroundIfAir);
     eachUnit(refreshBury);
+    if (keepPhase) {
+      if (G.mode === 'play') checkEnd();
+      syncHud();
+      return;
+    }
     if (more) {
       G.phase = 'fly';
       syncHud();
       return;
     }
     finishFly();
+  }
+
+  function fizzleMine(m, silent) {
+    if (!m) return;
+    const list = G.mines;
+    if (list) {
+      const ix = list.indexOf(m);
+      if (ix >= 0) list.splice(ix, 1);
+    }
+    burst(m.x, m.y, DIRT, REDUCE ? 4 : 8, 50, 0.22);
+    ringAt(m.x, m.y, MINE, 16);
+    if (!silent) {
+      audio.ensure();
+      audio.beep(180, 0.08, 'sine', 0.028, 70);
+      toast('迟雷熄了', false, false);
+    }
+  }
+
+  function fizzleSideMine(side, silent) {
+    const old = liveMineOf(side);
+    if (old) fizzleMine(old, silent);
+  }
+
+  function plantMine(s) {
+    if (!s) return;
+    const owner = s.owner;
+    const side = owner && owner.side ? owner.side : 'p';
+    fizzleSideMine(side, true);
+    const mx = clamp(s.x, 2, VW - 2);
+    let my = s.y;
+    if (inGround(mx, my)) my = groundAt(mx);
+    if (!G.mines) G.mines = [];
+    G.mines.push({
+      x: mx,
+      y: my,
+      side: side,
+      owner: owner,
+      wep: s.wep,
+      fuse: MINE_FUSE,
+      max: MINE_FUSE,
+      ult: !!s.ult,
+      t: 0
+    });
+    if (G.shots) {
+      const ix = G.shots.indexOf(s);
+      if (ix >= 0) G.shots.splice(ix, 1);
+    }
+    if (G.shot === s) G.shot = (G.shots && G.shots[0]) || null;
+    if (!s.follow) commitLastGhost(mx, my);
+    toast('迟雷', false, true);
+    audio.ensure();
+    audio.beep(140, 0.1, 'triangle', 0.032, 90);
+    audio.beep(320, 0.08, 'sine', 0.024, 520);
+    burst(mx, my, MINE, REDUCE ? 5 : 10, 70, 0.28);
+    ringAt(mx, my, MINE, 22);
+    if (flyStillGoing()) {
+      G.phase = 'fly';
+      syncHud();
+      return;
+    }
+    finishFly();
+  }
+
+  function detonateMine(m) {
+    if (!m) return;
+    const list = G.mines;
+    if (list) {
+      const ix = list.indexOf(m);
+      if (ix >= 0) list.splice(ix, 1);
+    }
+    const wep = m.wep || WEPS[7] || WEPS[0];
+    explode(m.x, m.y, wep, m.owner, false, null, { keepPhase: true, ult: !!m.ult });
+  }
+
+  function tickMines(dt) {
+    if (G.mode !== 'play') return;
+    const list = G.mines;
+    if (!list || !list.length) return;
+    const snap = list.slice();
+    for (let i = 0; i < snap.length; i++) {
+      const m = snap[i];
+      if (!m || list.indexOf(m) < 0) continue;
+      m.t = (m.t || 0) + dt;
+      m.fuse -= dt;
+      if (m.fuse <= 0) detonateMine(m);
+    }
   }
 
   function plantFire(x, y, ult, owner) {
@@ -3240,10 +3366,16 @@
     }
     const u = unitAt(s.x, s.y, s.owner);
     if (u) {
-      explode(s.x, s.y, s.wep, s.owner, true, s);
+      if (isMineWep(s.wep)) explode(s.x, s.y, mineHitWep(s.wep), s.owner, true, s);
+      else explode(s.x, s.y, s.wep, s.owner, true, s);
       return;
     }
     if (inGround(s.x, s.y) || inWall(s.x, s.y)) {
+      if (isMineWep(s.wep)) {
+        if (isDeathVoid(s.x) || s.y > VH) explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false, s);
+        else plantMine(s);
+        return;
+      }
       if (s.wep.id === 2 && !s.pierced) {
         s.pierced = true;
         s.fuse = 0.18;
@@ -3638,13 +3770,54 @@
 
   let AI = { wait: 0, walked: false, ang: 65, pow: 70, wep: 0, stage: 0 };
 
+  function denyZoneDist(foe) {
+    if (!foe) return 1e9;
+    if (G.mapId === 'gate') {
+      if (isGateCorridor(foe.x)) return 0;
+      if (!isGateLedge(foe.x)) return 1e9;
+      const enter = foe.x < 480 ? GATE_L1 : GATE_R0;
+      return Math.abs(enter - foe.x);
+    }
+    if (G.mapId === 'dune') {
+      if (isDuneSaddle(foe.x)) return 0;
+      if (!isDuneCrest(foe.x)) return 1e9;
+      const enter = foe.x < 480 ? 360 : 600;
+      return Math.abs(enter - foe.x);
+    }
+    return 1e9;
+  }
+
+  function denySpotX(from, foe) {
+    const sideLeft = foe ? foe.x < 480 : true;
+    if (G.mapId === 'gate') return sideLeft ? GATE_L1 + 36 : GATE_R0 - 36;
+    if (G.mapId === 'dune') return sideLeft ? 400 : 560;
+    return 0;
+  }
+
+  function wantChiLei(from, foe) {
+    if (aiEasy()) return false;
+    if ((G.turns | 0) < 2) return false;
+    if (!from || !foe || foe.hp <= 0) return false;
+    if (foe.hp <= 24) return false;
+    if (liveMineOf(from.side)) return false;
+    if (G.mapId !== 'gate' && G.mapId !== 'dune') return false;
+    if (G.mapId === 'gate' && isGateCorridor(foe.x)) return false;
+    if (G.mapId === 'dune' && isDuneSaddle(foe.x)) return false;
+    const dist = denyZoneDist(foe);
+    if (dist >= 1e8) return false;
+    const reach = aiHard() ? WALK_PX * 2.2 : WALK_PX * 1.4;
+    return dist > 8 && dist <= reach;
+  }
+
   function pickAIWeapon(from) {
     from = from || curUnit() || G.f;
     const foes = foesOf(from);
     const foe = foes[0] || otherUnit(from) || G.p;
     if (foe) {
       const pit = pitDepth(foe);
-      if (foe.buried || walkBlocked(foe) || pit > (aiHard() ? 8 : 16)) return 6;
+      if (foe.buried || walkBlocked(foe)) return 6;
+      if (wantChiLei(from, foe)) return 7;
+      if (pit > (aiHard() ? 8 : 16)) return 6;
       if (thinLedge(foe)) return 3;
       if (G.mapId === 'bridge' && liveBridge(foe.x)) return 3;
       if (G.mapId === 'forge' && isForgeCrust(foe.x) && !isDeathVoid(foe.x)) return 3;
@@ -3716,6 +3889,16 @@
       else if (!far && e >= 78) score += 1200;
     }
     if (G.mapId === 'gate' && isGateCorridor(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
+    if (wep.id === 8) {
+      const spot = denySpotX(from, t);
+      if (spot) {
+        const dx = Math.abs(imp.x - spot);
+        score += 5200 - dx * 8;
+        if (imp.hit) score -= 3600;
+        else if (G.mapId === 'gate' && isGateCorridor(imp.x)) score += 900;
+        else if (G.mapId === 'dune' && isDuneSaddle(imp.x)) score += 900;
+      }
+    }
     score += bury;
     return score;
   }
@@ -3876,7 +4059,7 @@
     G.wep = pickAIWeapon(from);
     G.neonOn = false;
     syncWeps();
-    if (aiHard() && G.wep !== 6) {
+    if (aiHard() && G.wep !== 6 && G.wep !== 7) {
       const cur = G.wep;
       const scoreNow = solveAI(from).score;
       G.wep = 3;
@@ -4201,6 +4384,7 @@
     G.shot = null;
     G.shots = [];
     G.dual = null;
+    G.mines = [];
     G.combo = 0;
     G.turns = 0;
     G.wep = 0;
@@ -4328,7 +4512,7 @@
     syncWeps();
     syncHud();
     const w = WEPS[n];
-    toast(w.id === 7 ? (w.name + ' · 两发') : w.name, false, n === 1 || w.id === 7);
+    toast(w.id === 7 ? (w.name + ' · 两发') : (w.id === 8 ? (w.name + ' · 迟爆') : w.name), false, n === 1 || w.id === 7 || w.id === 8);
   }
 
 
@@ -4460,6 +4644,7 @@
       G.stormT += dt;
       if (G.stormT >= G.stormNext) strikeStorm();
     }
+    tickMines(dt);
 
     if (G.phase === 'frozenWait') {
       G.frozenT -= dt;
@@ -5489,6 +5674,7 @@
     const id = s.wep && s.wep.id;
     if (id === 3) return ICE;
     if (id === 4) return HOT;
+    if (id === 8) return MINE;
     if (id === 7) return PEARL;
     if (id === 6) return FIRE;
     if (id === 5) return RAIL;
@@ -5522,7 +5708,7 @@
     g.shadowBlur = 12;
     const id = s.wep && s.wep.id;
     g.beginPath();
-    g.arc(s.x, s.y, id === 1 ? 5.2 : (id === 7 ? 3.8 : (id === 4 ? 4.4 : (id === 6 ? 4.2 : (id === 5 ? 4.0 : 3.6)))), 0, TAU);
+    g.arc(s.x, s.y, id === 1 ? 5.2 : (id === 8 ? 4.6 : (id === 7 ? 3.8 : (id === 4 ? 4.4 : (id === 6 ? 4.2 : (id === 5 ? 4.0 : 3.6))))), 0, TAU);
     g.fill();
     g.restore();
   }
@@ -5530,6 +5716,44 @@
   function drawShot(g) {
     const list = G.shots && G.shots.length ? G.shots : (G.shot ? [G.shot] : []);
     for (let i = 0; i < list.length; i++) drawOneShot(g, list[i]);
+  }
+
+  function drawMines(g) {
+    const list = G.mines;
+    if (!list || !list.length) return;
+    if (G.mode !== 'play' && G.mode !== 'end') return;
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i];
+      if (!m) continue;
+      const max = m.max || MINE_FUSE;
+      const left = clamp(m.fuse / max, 0, 1);
+      const pulse = REDUCE ? 1 : (1 + 0.14 * Math.sin((G.t || 0) * 9.2 + (m.t || 0)));
+      const rgb = m.side === 'p' ? MINE : MAG;
+      const r = 5.4 * (REDUCE ? 1 : pulse);
+      g.save();
+      g.shadowColor = rgba(rgb, REDUCE ? 0.35 : 0.55 + 0.25 * (pulse - 1) * 4);
+      g.shadowBlur = REDUCE ? 6 : 14;
+      g.fillStyle = rgba(rgb, 0.92);
+      g.beginPath();
+      g.arc(m.x, m.y - 3, r, 0, TAU);
+      g.fill();
+      g.fillStyle = rgba(WHT, 0.55);
+      g.beginPath();
+      g.arc(m.x - 1.6, m.y - 4.6, r * 0.32, 0, TAU);
+      g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = rgba(GOLD, REDUCE ? 0.7 : 0.55 + 0.35 * left);
+      g.lineWidth = 2.2;
+      g.beginPath();
+      g.arc(m.x, m.y - 3, r + 6, -Math.PI * 0.5, -Math.PI * 0.5 + TAU * left, false);
+      g.stroke();
+      g.strokeStyle = rgba(rgb, 0.28);
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.arc(m.x, m.y - 3, r + 6, 0, TAU);
+      g.stroke();
+      g.restore();
+    }
   }
 
   function drawFruits(g) {
@@ -5854,6 +6078,7 @@
       drawChargeBar(ctx, u);
     });
     drawShot(ctx);
+    drawMines(ctx);
     drawClock(ctx);
 
     for (let i = 0; i < particles.length; i++) {
@@ -6043,6 +6268,7 @@
     if (k === '5') setWep(4);
     if (k === '6') setWep(5);
     if (k === '7') setWep(6);
+    if (k === '8') setWep(7);
   }
 
   function bindPad() {
@@ -7060,7 +7286,7 @@
     ok('g vk v23', GRAV === 260 && VK === 420);
     ok('cliff moon silk ghost kept', MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
 
-    ok('叠珠 is 7', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 7);
+    ok('叠珠 is 7', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
     ok('叠珠 stats 普通', WEPS[6].direct === 32 && WEPS[6].splash === 36 && WEPS[6].crater === 30 && WEPS[6].spd === 1);
     ok('1-6 names stay', WEPS[0].name === '普通弹' && WEPS[1].name === '高爆' && WEPS[2].name === '穿透' && WEPS[3].name === '三裂' && WEPS[4].name === '霓轨' && WEPS[5].name === '霓火');
     ok('1-6 ids stay', WEPS[0].id === 0 && WEPS[1].id === 1 && WEPS[2].id === 2 && WEPS[3].id === 4 && WEPS[4].id === 5 && WEPS[5].id === 6);
@@ -7128,7 +7354,7 @@
     G.mode = 'play';
     ok('storm hud name stays', STORM_NAME === '雷泽' && MAP_NAME.vale === '风谷');
     G.storm = false;
-    ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 7);
+    ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
     ok('maps still 14 after 雷泽', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
     ok('ghost K still after 雷泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned 雷泽', STORM_NAME.indexOf('传送') < 0 && STORM_NAME.indexOf('飞行') < 0 && STORM_NAME.indexOf('三叉戟') < 0 && STORM_NAME.indexOf('激怒') < 0);
@@ -7226,6 +7452,92 @@
     ok('ghost K still after 石门', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 石门', typeof silkCount === 'function' && silkCount(0) === 0);
     ok('g vk v26', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+
+    ok('迟雷 is 8', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8 && WEPS.length === 8);
+    ok('迟雷 stats', WEPS[7].direct === 26 && WEPS[7].splash === 42 && WEPS[7].crater === 34 && WEPS[7].spd === 0.94);
+    ok('迟雷 fuse 1.6', MINE_FUSE === 1.6 && MINE_HIT === 0.85);
+    ok('迟雷 hit splash 0.85', Math.abs(mineHitWep(WEPS[7]).splash - 42 * 0.85) < 0.001 && mineHitWep(WEPS[7]).crater === 34);
+    ok('迟雷 delay 120', delayCost(8) === 120 && delayCost(7) === 135 && delayCost(0) === 100);
+    ok('1-7 names stay', WEPS[0].name === '普通弹' && WEPS[1].name === '高爆' && WEPS[2].name === '穿透' && WEPS[3].name === '三裂' && WEPS[4].name === '霓轨' && WEPS[5].name === '霓火' && WEPS[6].name === '叠珠');
+    ok('no banned 迟雷', WEPS[7].name.indexOf('传送') < 0 && WEPS[7].name.indexOf('飞行') < 0 && WEPS[7].name.indexOf('三叉戟') < 0 && WEPS[7].name.indexOf('激怒') < 0);
+    ok('isMineWep', isMineWep(WEPS[7]) === true && isMineWep(WEPS[6]) === false && isDualWep(WEPS[6]) === true);
+    G.H = buildHeight('gate');
+    G.mapId = 'gate';
+    G.kind = 'hall';
+    G.storm = false;
+    G.wind = 0;
+    G.ai = 1;
+    G.turns = 1;
+    G.mines = [];
+    G.p = { x: 210, y: G.H[210] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: GATE_FX, y: G.H[GATE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    ok('AI opener not 迟雷', (G.turns | 0) < 2 && pickAIWeapon(G.f) !== 7);
+    G.turns = 3;
+    ok('gate approach on ledge', isGateLedge(210) && !isGateCorridor(210) && denyZoneDist(G.p) > 8 && denyZoneDist(G.p) <= WALK_PX * 1.4);
+    ok('AI 迟雷 deny 石门', wantChiLei(G.f, G.p) === true && pickAIWeapon(G.f) === 7);
+    G.ai = 0;
+    ok('easy never 迟雷', wantChiLei(G.f, G.p) === false && pickAIWeapon(G.f) !== 7);
+    G.ai = 1;
+    G.p = { x: 480, y: G.H[480] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    ok('gate already in 廊 still 高爆', isGateCorridor(G.p.x) && pickAIWeapon(G.f) === 1);
+    G.H = buildHeight('dune');
+    G.mapId = 'dune';
+    G.turns = 3;
+    G.ai = 1;
+    let duneX = DUNE_PX;
+    for (let x = 190; x <= 310; x += 2) {
+      if (!isDuneCrest(x) || isDuneSaddle(x)) continue;
+      const d = Math.abs(360 - x);
+      if (d > 8 && d <= WALK_PX * 1.4) { duneX = x; break; }
+    }
+    G.p = { x: duneX, y: G.H[duneX | 0] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: DUNE_FX, y: G.H[DUNE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    ok('dune approach crest', isDuneCrest(duneX) && !isDuneSaddle(duneX) && denyZoneDist(G.p) > 8 && denyZoneDist(G.p) <= WALK_PX * 1.4, duneX);
+    ok('AI 迟雷 deny 沙脊', wantChiLei(G.f, G.p) === true && pickAIWeapon(G.f) === 7);
+    G.p = { x: 480, y: G.H[480] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    ok('dune already in 鞍 still 高爆', isDuneSaddle(G.p.x) && pickAIWeapon(G.f) === 1);
+    G.H = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    for (let i = 176; i <= 224; i++) G.H[i] = 452;
+    G.mapId = 'plain';
+    G.turns = 4;
+    G.p = { x: 200, y: G.H[200] - 14, r: 14, hp: 100, side: 'p', id: 'p', buried: true };
+    G.f = { x: 620, y: 386, r: 14, hp: 100, side: 'f', id: 'f' };
+    ok('AI 叠珠 over 迟雷', pickAIWeapon(G.f) === 6 && pitDepth(G.p) >= BURY_PX);
+    G.H = buildHeight('gate');
+    G.mapId = 'gate';
+    G.turns = 3;
+    G.mines = [];
+    G.p = { x: 210, y: G.H[210] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: GATE_FX, y: G.H[GATE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    G.mines = [{ x: 400, y: 400, side: 'f', fuse: 1, max: 1.6, owner: G.f, wep: WEPS[7] }];
+    ok('AI no second 迟雷', liveMineOf('f') && pickAIWeapon(G.f) !== 7);
+    G.mines = [{ x: 200, y: 300, side: 'p', fuse: 1.2, max: 1.6, owner: G.p, wep: WEPS[7] }];
+    fizzleSideMine('p', true);
+    ok('replace fizzle', !liveMineOf('p') && G.mines.length === 0);
+    G.mines = [
+      { x: 200, y: 300, side: 'p', fuse: 1.2, max: 1.6, owner: G.p, wep: WEPS[7] },
+      { x: 700, y: 300, side: 'f', fuse: 0.8, max: 1.6, owner: G.f, wep: WEPS[7] }
+    ];
+    ok('one live per side', !!liveMineOf('p') && !!liveMineOf('f') && G.mines.length === 2);
+    fizzleSideMine('p', true);
+    ok('fizzle only own side', !liveMineOf('p') && !!liveMineOf('f') && G.mines.length === 1);
+    G.mines = [];
+    G.H = buildHeight('gate');
+    G.mapId = 'gate';
+    G.p = { x: 210, y: G.H[210] - 14, r: 14, hp: 100, side: 'p', id: 'p' };
+    G.f = { x: GATE_FX, y: G.H[GATE_FX] - 14, r: 14, hp: 100, side: 'f', id: 'f' };
+    const gimpM = { x: GATE_L1 + 36, y: G.H[(GATE_L1 + 36) | 0], t: 1.1, hit: null };
+    const mscDeny = scoreOne(gimpM, WEPS[7], G.f, G.p, 45);
+    const mscHit = scoreOne({ x: 210, y: G.p.y, t: 0.6, hit: G.p }, WEPS[7], G.f, G.p, 45);
+    ok('迟雷 prefer deny stick', mscDeny > 2000, Math.round(mscDeny) + '/' + Math.round(mscHit));
+    ok('叠珠 still 7 after 迟雷', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
+    ok('maps 15 after 迟雷', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('ghost K still after 迟雷', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('silk still after 迟雷', typeof silkCount === 'function' && silkCount(0) === 0);
+    ok('雷泽 still after 迟雷', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune'));
+    ok('g vk v27', GRAV === 260 && VK === 420 && WIND_K === 2.05);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);

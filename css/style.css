@@ -1173,6 +1173,18 @@ canvas {
   box-shadow: 0 0 14px rgba(255, 227, 107, 0.32);
 }
 
+.weps button[data-w="7"] {
+  padding: 5px 9px;
+  line-height: 1.15;
+}
+
+.weps button[data-w="7"].on {
+  border-color: rgba(255, 176, 64, 0.85);
+  color: #ffd08a;
+  background: rgba(255, 176, 64, 0.14);
+  box-shadow: 0 0 14px rgba(255, 176, 64, 0.32);
+}
+
 .time-lab {
   color: var(--gold);
   text-shadow: 0 0 10px rgba(255, 227, 107, 0.35);
