@@ -79,6 +79,7 @@
   const BAG_P5 = 0.50;
   const BAG_MULTI_WAIT = 0.32;
   const BAG_MULTI_JIT = 1;
+  const BAG_X3_SPREAD = 8;
   const BAG_CRATE_P = 0.50;
   const BAG_CRATE_W = { x2: 3, x3: 2, p1: 2, p2: 3, p3: 3, p5: 2, heal: 1 };
   const BAG_FIRE_NAME = '袋火';
@@ -1109,21 +1110,34 @@
   function bagMulFmt(n) {
     return (Math.round((Number(n) + 1e-12) * 100) / 100).toFixed(2);
   }
+  function bagVolleyCount(u) {
+    if (bagArmed(u, 'x3')) return 3;
+    if (bagArmed(u, 'x2')) return 2;
+    return 1;
+  }
   function bagStackReadout(u) {
     if (!anyBagArmed(u)) return '';
-    const extra = bagExtraCount(u);
+    const n = bagVolleyCount(u);
     const plus = bagPlusMul(u);
     const shell = bagShellMul(u);
-    if (extra <= 0) {
+    if (n <= 1) {
       const pct = Math.round((plus - 1) * 100);
       return '+' + pct + '%';
     }
-    return (extra + 1) + '发×' + bagMulFmt(shell);
+    return n + '发×' + bagMulFmt(shell);
   }
   function bagExtraCount(u) {
-    if (bagArmed(u, 'x3')) return 2;
+    if (bagArmed(u, 'x3')) return 0;
     if (bagArmed(u, 'x2')) return 1;
     return 0;
+  }
+  function bagForkAngles(ang) {
+    ang = clamp(+ang || 0, 0, 180);
+    return [
+      clamp(ang - BAG_X3_SPREAD, 0, 180),
+      ang,
+      clamp(ang + BAG_X3_SPREAD, 0, 180)
+    ];
   }
   function bagFireCost(u) {
     let c = 0;
@@ -1204,12 +1218,13 @@
     return kind;
   }
   function consumeBagOnFire(u) {
-    const mods = { dmgMul: 1, splashMul: 1, craterMul: 1, extra: 0, xMul: 1, plusMul: 1, shellMul: 1 };
+    const mods = { dmgMul: 1, splashMul: 1, craterMul: 1, extra: 0, fork: false, xMul: 1, plusMul: 1, shellMul: 1 };
     if (!u) return mods;
     ensureBag(u);
     const plus = bagPlusMul(u);
     const xMul = bagXMul(u);
     const extra = bagExtraCount(u);
+    const fork = bagArmed(u, 'x3');
     const cost = bagFireCost(u);
     const names = [];
     mods.plusMul = plus;
@@ -1219,6 +1234,7 @@
     mods.splashMul = xMul;
     mods.craterMul = xMul;
     mods.extra = extra;
+    mods.fork = fork;
     function eat(id) {
       if (!bagArmed(u, id)) return;
       u.bag[id] = (u.bag[id] | 0) - 1;
@@ -4538,8 +4554,8 @@
     if (G.busy) return;
     const actor = curUnit();
     if (actor && !bagCanFire(actor)) {
-      toastDeny('体不够');
-      return;
+      if (bagFireCost(actor) > 0) toastDeny('体不够');
+      disarmBagToAfford(actor);
     }
     G.phase = 'charge';
     G.charging = true;
@@ -4558,14 +4574,7 @@
   function fire(u) {
     if (!u || G.phase === 'fly') return;
     if (!bagCanFire(u)) {
-      if (isHuman(u)) {
-        toastDeny('体不够');
-        G.phase = 'aim';
-        G.charging = false;
-        audio.chargeStop();
-        syncHud();
-        return;
-      }
+      if (isHuman(u) && bagFireCost(u) > 0) toastDeny('体不够');
       disarmBagToAfford(u);
     }
     const parts = bagChipParts(u);
@@ -4585,37 +4594,56 @@
       G.neonOn = false;
     }
     G.actDelay = { skip: false, wepId: wep.id, ult: !!u.ult };
-    const shell = makeShell(sx, sy, ang, G.power, wep, u, { ult: !!u.ult, lead: true, wind: shotWind, windMul: windMul, bagFire: bagLead });
-    G.shot = shell;
-    G.shots = [shell];
     G.queue = [];
     G.salvoT = 0;
     const extra = mods.extra || 0;
     const dual = isDualWep(wep);
-    if (dual) {
-      G.queue.push({
-        at: DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
-        jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
-        bagFire: bagFollow
-      });
-    }
-    for (let i = 1; i <= extra; i++) {
-      const at = i * BAG_MULTI_WAIT;
-      G.queue.push({
-        at: at, lead: true, extra: true, ang: ang, power: G.power, wep: wep,
-        jitter: BAG_MULTI_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
-        bagFire: bagFollow
-      });
+    const fork = !!mods.fork;
+    if (fork) {
+      const angs = bagForkAngles(ang);
+      const shells = [];
+      for (let i = 0; i < 3; i++) {
+        const side = i !== 1;
+        shells.push(makeShell(sx, sy, angs[i], G.power, wep, u, {
+          ult: !!u.ult,
+          lead: !side,
+          extra: side,
+          wind: shotWind,
+          windMul: windMul,
+          bagFire: side ? bagFollow : bagLead
+        }));
+      }
+      G.shot = shells[1];
+      G.shots = shells;
+    } else {
+      const shell = makeShell(sx, sy, ang, G.power, wep, u, { ult: !!u.ult, lead: true, wind: shotWind, windMul: windMul, bagFire: bagLead });
+      G.shot = shell;
+      G.shots = [shell];
       if (dual) {
         G.queue.push({
-          at: at + DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
+          at: DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
           jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
           bagFire: bagFollow
         });
       }
+      for (let i = 1; i <= extra; i++) {
+        const at = i * BAG_MULTI_WAIT;
+        G.queue.push({
+          at: at, lead: true, extra: true, ang: ang, power: G.power, wep: wep,
+          jitter: BAG_MULTI_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
+          bagFire: bagFollow
+        });
+        if (dual) {
+          G.queue.push({
+            at: at + DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
+            jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul,
+            bagFire: bagFollow
+          });
+        }
+      }
     }
-    G.dual = (extra > 0 || dual) ? {
-      spawned: G.queue.length === 0,
+    G.dual = (extra > 0 || dual || fork) ? {
+      spawned: !(G.queue && G.queue.length),
       owner: u,
       hit: false,
       comboDone: false
@@ -11115,10 +11143,15 @@
     ok('x2++5 total 2.7', Math.abs(2 * bagShellMul(x2p5) - 2.7) < 1e-9);
     ok('x2 extra 1', bagExtraCount(x2p5) === 1);
     const x3u = { bag: { x2: 1, x3: 1, p1: 0, p2: 0, p3: 0, p5: 0, heal: 0 }, armed: { x2: false, x3: true, p1: false, p2: false, p3: false, p5: false, heal: false }, stam: 100 };
-    ok('x3 extra 2 mul 0.6', bagExtraCount(x3u) === 2 && bagXMul(x3u) === 0.60);
+    ok('x3 extra 0', bagExtraCount(x3u) === 0);
+    ok('x3 mul 0.6', bagXMul(x3u) === 0.60);
+    ok('x3 volley 3', bagVolleyCount(x3u) === 3 && bagVolleyCount(x2p5) === 2);
     ok('x2++5 cost 80', bagFireCost(x2p5) === 80 && bagCanFire(x2p5) === true);
     const poor = { bag: { x2: 1, p5: 1 }, armed: { x2: true, p5: true }, stam: 79 };
     ok('body block', bagCanFire(poor) === false && bagFireCost(poor) === 80);
+    const poorFire = { bag: { x2: 1, x3: 0, p1: 0, p2: 0, p3: 0, p5: 1, heal: 0 }, armed: { x2: true, x3: false, p1: false, p2: false, p3: false, p5: true, heal: false }, stam: 0 };
+    disarmBagToAfford(poorFire);
+    ok('0 stam still fires', bagCanFire(poorFire) === true && bagFireCost(poorFire) === 0 && poorFire.armed.x2 === false && poorFire.armed.p5 === false);
     const stacked = { bag: { x2: 2, x3: 2, p1: 1, p2: 1, p3: 1, p5: 1, heal: 2 }, armed: { x2: true, x3: false, p1: false, p2: true, p3: true, p5: false, heal: false }, hp: 80, max: 100, x: 160, y: 400, stam: 100 };
     ok('chip ×2++2++3', bagChipText(stacked) === '×2++2++3');
     const sm = consumeBagOnFire(stacked);
@@ -11645,6 +11678,91 @@
     ok('迟雷 still 8 after 袋火', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('no 9th wep after 袋火', WEPS.length === 8);
     ok('g vk v47', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+
+    ok('x3 spread 8', BAG_X3_SPREAD === 8);
+    ok('x3 extra 0 still', bagExtraCount(x3u) === 0 && bagExtraCount(x2p5) === 1);
+    ok('x3 fork 65', bagForkAngles(65).join(',') === '57,65,73');
+    ok('x3 fork clamp 0', bagForkAngles(2).join(',') === '0,2,10');
+    ok('x3 fork clamp 180', bagForkAngles(178).join(',') === '170,178,180');
+    ok('x3 name stays ×3', BAG_NAME.x3 === '×3' && BAG_SHORT.x3 === '×3');
+    ok('x3 no 分裂弹 label', BAG_NAME.x3.indexOf('分裂弹') < 0 && BAG_SHORT.x3.indexOf('分裂弹') < 0);
+    ok('x3 no banned', BAG_NAME.x3.indexOf('传送') < 0 && BAG_NAME.x3.indexOf('飞行') < 0 && BAG_NAME.x3.indexOf('三叉戟') < 0 && BAG_NAME.x3.indexOf('激怒') < 0 && BAG_NAME.x3.indexOf('天使') < 0 && BAG_NAME.x3.indexOf('恶魔') < 0);
+    const smX3 = consumeBagOnFire({ bag: { x2: 1, x3: 1, p1: 0, p2: 0, p3: 0, p5: 0, heal: 0 }, armed: { x2: false, x3: true, p1: false, p2: false, p3: false, p5: false, heal: false }, stam: 100 });
+    ok('x3 consume extra 0 fork', smX3.extra === 0 && smX3.fork === true && smX3.xMul === 0.60);
+    const fireSave = {
+      mode: G.mode, phase: G.phase, kind: G.kind, wep: G.wep, power: G.power, wind: G.wind,
+      neonOn: G.neonOn, turns: G.turns, turn: G.turn, shot: G.shot, shots: G.shots, queue: G.queue, dual: G.dual
+    };
+    function launchAng(s) { return Math.atan2(-(s.vy || 0), s.vx || 0) * 180 / Math.PI; }
+    function fireBagU(opts) {
+      G.mode = 'play';
+      G.phase = 'aim';
+      G.kind = 'hall';
+      G.wep = opts.wep != null ? opts.wep : 0;
+      G.power = opts.power != null ? opts.power : 70;
+      G.wind = 0;
+      G.neonOn = false;
+      G.turns = 0;
+      G.turn = 'p';
+      G.queue = [];
+      G.shots = [];
+      G.shot = null;
+      G.dual = null;
+      const u = {
+        x: 152, y: 400, r: 14, ang: opts.ang != null ? opts.ang : 65, stam: opts.stam != null ? opts.stam : 100, hp: 100, max: 100, side: 'p', id: 'p',
+        bag: { x2: 1, x3: 1, p1: 0, p2: 0, p3: 0, p5: 0, heal: 0 },
+        armed: { x2: !!opts.x2, x3: !!opts.x3, p1: false, p2: false, p3: false, p5: false, heal: false }
+      };
+      fire(u);
+      return u;
+    }
+    fireBagU({ x3: true, ang: 65, power: 70, wep: 0 });
+    ok('x3 three shells', G.shots && G.shots.length === 3);
+    ok('x3 sequential empty', !G.queue || G.queue.length === 0);
+    const forkA = [launchAng(G.shots[0]), launchAng(G.shots[1]), launchAng(G.shots[2])];
+    ok('x3 simultaneous ±8', Math.abs(forkA[0] - 57) < 0.05 && Math.abs(forkA[1] - 65) < 0.05 && Math.abs(forkA[2] - 73) < 0.05, forkA.map(function (n) { return n.toFixed(2); }).join(','));
+    ok('x3 same muzzle', G.shots[0].x === G.shots[1].x && G.shots[1].x === G.shots[2].x && G.shots[0].y === G.shots[1].y);
+    ok('x3 bagFire all crimson', G.shots.every(function (s) { return s.bagFire && s.bagFire.xId === 'x3'; }));
+    ok('x3 side follow-bright', G.shots[0].bagFire.follow === true && G.shots[2].bagFire.follow === true && G.shots[1].bagFire.follow === false);
+    ok('x3 hud 3发×0.60', bagStackReadout(x3u) === '3发×0.60');
+    fireBagU({ x3: true, ang: 2, power: 70, wep: 0 });
+    const clampA = [launchAng(G.shots[0]), launchAng(G.shots[1]), launchAng(G.shots[2])];
+    ok('x3 clamp 0–180', Math.abs(clampA[0] - 0) < 0.05 && Math.abs(clampA[1] - 2) < 0.05 && Math.abs(clampA[2] - 10) < 0.05);
+    fireBagU({ x2: true, ang: 65, power: 70, wep: 0 });
+    ok('x2 extra 1 still', bagExtraCount(x2p5) === 1);
+    ok('x2 one live + queue 1', G.shots && G.shots.length === 1 && G.queue && G.queue.length === 1 && Math.abs(G.queue[0].at - BAG_MULTI_WAIT) < 1e-9);
+    ok('x2 sequential extra', G.queue[0].extra === true && G.queue[0].jitter === BAG_MULTI_JIT);
+    fireBagU({ x3: true, ang: 65, power: 70, wep: 6 });
+    ok('x3 叠珠 no delayed', G.shots && G.shots.length === 3 && (!G.queue || G.queue.length === 0));
+    fireBagU({ x2: true, ang: 65, power: 70, wep: 6 });
+    ok('x2 叠珠 sequential keep', G.shots && G.shots.length === 1 && G.queue && G.queue.length === 3);
+    fireBagU({ x2: true, ang: 65, power: 70, wep: 0, stam: 0 });
+    ok('0 stam still launches', G.shots && G.shots.length === 1 && (!G.queue || G.queue.length === 0));
+    fireBagU({ ang: 65, power: 70, wep: 0, stam: 0 });
+    ok('0 stam bare shot', G.shots && G.shots.length === 1);
+    G.mode = fireSave.mode;
+    G.phase = fireSave.phase;
+    G.kind = fireSave.kind;
+    G.wep = fireSave.wep;
+    G.power = fireSave.power;
+    G.wind = fireSave.wind;
+    G.neonOn = fireSave.neonOn;
+    G.turns = fireSave.turns;
+    G.turn = fireSave.turn;
+    G.shot = fireSave.shot;
+    G.shots = fireSave.shots;
+    G.queue = fireSave.queue;
+    G.dual = fireSave.dual;
+    ok('狠 close ×3++2 still', closePlan.join('+') === 'x3+p2');
+    ok('x2 x3 exclusive still', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3');
+    ok('叠珠 still 7 after ×3 分裂', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('迟雷 still 8 after ×3 分裂', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
+    ok('袋火 still after ×3 分裂', BAG_FIRE_NAME === '袋火' && BAG_TINT.x3 === '#dc143c');
+    ok('齿岸 still after ×3 分裂', MAP_NAME.teeth === '齿岸' && MAP_IDS.length === 21);
+    ok('落顶 still after ×3 分裂', FALL_NAME === '落顶');
+    ok('no 9th wep after ×3 分裂', WEPS.length === 8);
+    ok('g vk v48', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('stack math still after ×3 分裂', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
 
     G.mode = 'title';
     G.kind = 'hall';
