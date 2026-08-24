@@ -87,8 +87,8 @@
   const BAG_AI_MID_P = 0.28;
   const BAG_KEY_MAP = { '-': 'x2', '_': 'x2', '=': 'x3', '+': 'x3', '[': 'p1', '{': 'p1', ']': 'p2', '}': 'p2', '\\': 'p3', '|': 'p3', ';': 'p5', ':': 'p5', "'": 'heal', '"': 'heal' };
   const BAG_CODE_MAP = { Minus: 'x2', Equal: 'x3', BracketLeft: 'p1', BracketRight: 'p2', Backslash: 'p3', IntlBackslash: 'p3', Semicolon: 'p5', Quote: 'heal' };
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊', well: '井口', cave: '洞顶' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud', 'mirror', 'well', 'cave'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊', well: '井口', cave: '洞顶', teeth: '齿岸' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud', 'mirror', 'well', 'cave', 'teeth'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -298,6 +298,24 @@
   const CAVE_CRATER = 0.70;
   const CAVE_STORM_P = 0.20;
   const CAVE_HOLE = 8;
+  const TEETH_PX = 168;
+  const TEETH_FX = 772;
+  const TEETH_P2X = 204;
+  const TEETH_F2X = 736;
+  const TEETH_BANK_Y = 308;
+  const TEETH_PEAK_Y = 226;
+  const TEETH_VALLEY_Y = 360;
+  const TEETH_W = 70;
+  const TEETH_HW = 35;
+  const TEETH_PEAKS = [300, 420, 540, 660];
+  const TEETH_SPAN = 60;
+  const TEETH_L1 = 240;
+  const TEETH_R0 = 720;
+  const TEETH_LIP_L = 216;
+  const TEETH_LIP_R = 744;
+  const TEETH_WALK = 0.90;
+  const TEETH_CRATER = 0.75;
+  const TEETH_STORM_P = 0.30;
   const FALL_NAME = '落顶';
   const FALL_N_MIN = 2;
   const FALL_N_MAX = 4;
@@ -1498,6 +1516,101 @@
     return r;
   }
 
+  function nearestTeethPeak(x) {
+    let best = TEETH_PEAKS[0];
+    let bd = 1e9;
+    for (let i = 0; i < TEETH_PEAKS.length; i++) {
+      const d = Math.abs(x - TEETH_PEAKS[i]);
+      if (d < bd) {
+        bd = d;
+        best = TEETH_PEAKS[i];
+      }
+    }
+    return { peak: best, d: bd };
+  }
+
+  function teethPeakBump(x, peak) {
+    const d = Math.abs(x - peak);
+    if (d >= TEETH_SPAN) return TEETH_VALLEY_Y;
+    const t = d / TEETH_SPAN;
+    const k = Math.pow(Math.max(0, Math.cos(t * Math.PI * 0.5)), 2.15);
+    return lerp(TEETH_VALLEY_Y, TEETH_PEAK_Y, k);
+  }
+
+  function teethYAt(x) {
+    let y = TEETH_VALLEY_Y;
+    for (let i = 0; i < TEETH_PEAKS.length; i++) {
+      const yy = teethPeakBump(x, TEETH_PEAKS[i]);
+      if (yy < y) y = yy;
+    }
+    if (x <= TEETH_L1) {
+      const k = clamp((TEETH_L1 - x) / 28, 0, 1);
+      const sm = k * k * (3 - 2 * k);
+      y = lerp(y, TEETH_BANK_Y, sm);
+    } else if (x >= TEETH_R0) {
+      const k = clamp((x - TEETH_R0) / 28, 0, 1);
+      const sm = k * k * (3 - 2 * k);
+      y = lerp(y, TEETH_BANK_Y, sm);
+    }
+    return y;
+  }
+
+  function isTeethPeakX(x) {
+    if (G.mapId !== 'teeth' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    const n = nearestTeethPeak(i);
+    if (n.d > TEETH_HW + 2) return false;
+    return G.H[i] < (TEETH_PEAK_Y + TEETH_VALLEY_Y) * 0.5;
+  }
+
+  function isTeethValleyX(x) {
+    if (G.mapId !== 'teeth' || !G.H) return false;
+    const i = x | 0;
+    if (i < TEETH_L1 || i > TEETH_R0) return false;
+    if (isTeethPeakX(i)) return false;
+    return G.H[i] > TEETH_BANK_Y + 16;
+  }
+
+  function isTeethBank(x) {
+    if (G.mapId !== 'teeth' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    if (isDeathVoid(i)) return false;
+    if (isTeethPeakX(i) || isTeethValleyX(i)) return false;
+    return G.H[i] < TEETH_BANK_Y + 36;
+  }
+
+  function isTeethLipX(x) {
+    if (G.mapId !== 'teeth' || !G.H) return false;
+    const i = x | 0;
+    if (!isTeethBank(i) && !isTeethValleyX(i) && !isTeethPeakX(i)) return false;
+    return Math.abs(i - TEETH_LIP_L) <= 22 || Math.abs(i - TEETH_LIP_R) <= 22;
+  }
+
+  function inTeethValley(u) {
+    if (!u || G.mapId !== 'teeth') return false;
+    return isTeethValleyX(u.x);
+  }
+
+  function teethFarShore(from, foe) {
+    if (!from || !foe) return false;
+    if (inTeethValley(from) || inTeethValley(foe)) return false;
+    if (!isTeethBank(from.x) || !isTeethBank(foe.x)) return false;
+    return (from.x < 480) !== (foe.x < 480);
+  }
+
+  function teethLipX(foe) {
+    if (!foe) return TEETH_LIP_R;
+    return foe.x < 480 ? TEETH_LIP_L : TEETH_LIP_R;
+  }
+
+  function teethR(r, x) {
+    if (G.mapId !== 'teeth' || r <= 0) return r;
+    if (isTeethPeakX(x)) return r * TEETH_CRATER;
+    return r;
+  }
+
   function rainCaveCrumbs(cx, cy) {
     const n = REDUCE ? 3 : irand(6, 11);
     const y0 = Math.min(cy + 4, caveBotAt(cx) + 2);
@@ -1703,6 +1816,7 @@
     if (G.mapId === 'mirror' && isMirrorStoneX(u.x)) return false;
     if (G.mapId === 'well' && (isWellLipX(u.x) || inWellWater(u))) return false;
     if (G.mapId === 'cave' && isCavePitX(u.x)) return false;
+    if (G.mapId === 'teeth' && (isTeethPeakX(u.x) || isTeethValleyX(u.x))) return false;
     if (inMoonWater(u) || inCliffWater(u)) return false;
     return true;
   }
@@ -1785,6 +1899,7 @@
     if (G.mapId === 'mirror' && (isMirrorStoneX(x) || isMirrorTrenchX(x))) return false;
     if (G.mapId === 'well' && (isWellShaft(x) || isWellLipX(x) || isWellMudX(x))) return false;
     if (G.mapId === 'cave' && (isCavePitX(x) || !isCaveFloor(x))) return false;
+    if (G.mapId === 'teeth' && (isTeethPeakX(x) || isTeethValleyX(x) || !isTeethBank(x))) return false;
     if (cratePitAt(x) >= BURY_PX) return false;
     if (Math.abs(groundAt(clamp(x - 8, 0, VW - 1)) - groundAt(clamp(x + 8, 0, VW - 1))) > 28) return false;
     if (inWall(x, gy - 8) || inWall(x, gy - 18)) return false;
@@ -2193,6 +2308,7 @@
     if (id === 'mirror') return Math.random() < MIRROR_STORM_P;
     if (id === 'well') return Math.random() < WELL_STORM_P;
     if (id === 'cave') return Math.random() < CAVE_STORM_P;
+    if (id === 'teeth') return Math.random() < TEETH_STORM_P;
     return Math.random() < STORM_P;
   }
 
@@ -2219,6 +2335,7 @@
     if (inMoonWater(u)) spd = base * MOON_WALK;
     else if (inWellWater(u)) spd = base * WELL_WALK;
     else if (inCliffWater(u)) spd = base * CLIFF_WALK;
+    else if (inTeethValley(u)) spd = base * TEETH_WALK;
     else if (onSand(u)) spd = base * DUNE_WALK;
     else if (onIce(u)) spd = base * FROST_WALK;
     else spd = base;
@@ -2612,6 +2729,14 @@
       }
       padFlat(h, 72, 370, CAVE_FLOOR_Y);
       padFlat(h, 590, 888, CAVE_FLOOR_Y);
+    } else if (id === 'teeth') {
+      for (let x = 0; x < VW; x++) {
+        let yy = teethYAt(x);
+        yy += Math.sin(x * 0.07) * 1.1 + Math.sin(x * 0.19) * 0.45;
+        h[x] = yy;
+      }
+      padFlat(h, 72, 220, TEETH_BANK_Y);
+      padFlat(h, 740, 888, TEETH_BANK_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -2642,6 +2767,7 @@
     if (id === 'mirror') return side === 'p' ? MIRROR_PX : MIRROR_FX;
     if (id === 'well') return side === 'p' ? WELL_PX : WELL_FX;
     if (id === 'cave') return side === 'p' ? CAVE_PX : CAVE_FX;
+    if (id === 'teeth') return side === 'p' ? TEETH_PX : TEETH_FX;
     return side === 'p' ? 152 : 768;
   }
 
@@ -2656,6 +2782,7 @@
     if (G.mapId === 'mirror' && slot) return side === 'p' ? MIRROR_P2X : MIRROR_F2X;
     if (G.mapId === 'well' && slot) return side === 'p' ? WELL_P2X : WELL_F2X;
     if (G.mapId === 'cave' && slot) return side === 'p' ? CAVE_P2X : CAVE_F2X;
+    if (G.mapId === 'teeth' && slot) return side === 'p' ? TEETH_P2X : TEETH_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -4951,10 +5078,11 @@
     crater = Math.round(mirrorR(crater, x));
     crater = Math.round(wellR(crater, x));
     crater = Math.round(caveR(crater, x, y));
+    crater = Math.round(teethR(crater, x));
     crater = (crater || 0) + (wep.craterAdd || 0);
     let hit = !!fromHit;
     if (wep.id === 4) {
-      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : (isMirrorStoneX(x) ? MIRROR_CRATER : (isWellLipX(x) ? WELL_LIP_CRATER : (isWellMudX(x) ? WELL_MUD_CRATER : ((G.mapId === 'cave' && inCave(x, y)) ? CAVE_CRATER : 1))))));
+      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : (isMirrorStoneX(x) ? MIRROR_CRATER : (isWellLipX(x) ? WELL_LIP_CRATER : (isWellMudX(x) ? WELL_MUD_CRATER : ((G.mapId === 'cave' && inCave(x, y)) ? CAVE_CRATER : (isTeethPeakX(x) ? TEETH_CRATER : 1)))))));
       const pops = carveCluster(x, y, ultMul * terrainMul * (wep.craterMul || 1), wep.craterAdd || 0);
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
@@ -5737,6 +5865,12 @@
       const d = Math.abs(foe.x - caveLipX(foe));
       return d < 8 ? 16 : d;
     }
+    if (G.mapId === 'teeth') {
+      if (inTeethValley(foe)) return 1e9;
+      if (!isTeethBank(foe.x)) return 1e9;
+      const d = Math.abs(foe.x - teethLipX(foe));
+      return d < 8 ? 16 : d;
+    }
     return 1e9;
   }
 
@@ -5750,6 +5884,7 @@
     }
     if (G.mapId === 'well') return wellExitX(foe);
     if (G.mapId === 'cave') return caveLipX(foe);
+    if (G.mapId === 'teeth') return teethLipX(foe);
     return 0;
   }
 
@@ -5759,7 +5894,7 @@
     if (!from || !foe || foe.hp <= 0) return false;
     if (foe.hp <= 24) return false;
     if (liveMineOf(from.side)) return false;
-    if (G.mapId !== 'gate' && G.mapId !== 'dune' && G.mapId !== 'frost' && G.mapId !== 'well' && G.mapId !== 'cave') return false;
+    if (G.mapId !== 'gate' && G.mapId !== 'dune' && G.mapId !== 'frost' && G.mapId !== 'well' && G.mapId !== 'cave' && G.mapId !== 'teeth') return false;
     if (G.mapId === 'gate' && isGateCorridor(foe.x)) return false;
     if (G.mapId === 'dune' && isDuneSaddle(foe.x)) return false;
     if (G.mapId === 'frost' && !isFrostIce(foe.x)) return false;
@@ -5768,6 +5903,11 @@
     if (G.mapId === 'cave') {
       if (underFang(foe)) return false;
       if (!caveFarFloor(from, foe)) return false;
+    }
+    if (G.mapId === 'teeth') {
+      if (inTeethValley(foe)) return false;
+      if (!teethFarShore(from, foe)) return false;
+      if (Math.abs(foe.x - teethLipX(foe)) > 40) return false;
     }
     const dist = denyZoneDist(foe);
     if (dist >= 1e8) return false;
@@ -5781,6 +5921,7 @@
     const foe = foes[0] || otherUnit(from) || G.p;
     if (foe) {
       const pit = pitDepth(foe);
+      if (G.mapId === 'teeth' && inTeethValley(foe)) return 1;
       if (foe.buried || walkBlocked(foe)) return 6;
       if (wantChiLei(from, foe)) return 7;
       if (pit > (aiHard() ? 8 : 16)) return 6;
@@ -5801,6 +5942,7 @@
       if (G.mapId === 'well' && inWell(foe)) return 1;
       if (G.mapId === 'well' && isWellBank(foe.x) && Math.abs(foe.x - from.x) > 6 * GRID) return 0;
       if (G.mapId === 'cave' && caveFarFloor(from, foe)) return 0;
+      if (G.mapId === 'teeth' && teethFarShore(from, foe)) return 0;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -5930,6 +6072,21 @@
     }
     if (G.mapId === 'cave' && isCaveFangX(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
     if (G.mapId === 'cave' && isCaveLipX(imp.x) && wep.id === 8) bury += 500;
+    if (G.mapId === 'teeth' && inTeethValley(t)) {
+      const e = ang != null ? elev(ang) : 0;
+      if (e >= 78) score += 2000;
+      else if (e >= 70) score += 900;
+      if (wep.id === 1) score += 500;
+      if (e < 40) score -= 800;
+    }
+    if (G.mapId === 'teeth' && teethFarShore(from, t)) {
+      const e = ang != null ? elev(ang) : 0;
+      if (e >= 28 && e <= 36) score += 1800;
+      else if (e >= 22 && e <= 42) score += 700;
+      else if (e >= 58) score -= 500;
+    }
+    if (G.mapId === 'teeth' && isTeethValleyX(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
+    if (G.mapId === 'teeth' && isTeethLipX(imp.x) && wep.id === 8) bury += 500;
     if (wep.id === 8) {
       const spot = denySpotX(from, t);
       if (spot) {
@@ -5941,6 +6098,7 @@
         else if (G.mapId === 'frost' && isFrostBank(imp.x)) score += 900;
         else if (G.mapId === 'well' && isWellLipX(imp.x)) score += 900;
         else if (G.mapId === 'cave' && isCaveLipX(imp.x)) score += 900;
+        else if (G.mapId === 'teeth' && isTeethLipX(imp.x)) score += 900;
       }
     }
     score += bury;
@@ -6920,8 +7078,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : G.mapId === 'frost' ? '#d4f2ff' : G.mapId === 'cloud' ? '#e8d8b8' : G.mapId === 'mirror' ? '#c8e8ff' : G.mapId === 'well' ? '#c8b898' : G.mapId === 'cave' ? '#d8c4a0' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : G.mapId === 'frost' ? '#143044' : G.mapId === 'cloud' ? '#241c28' : G.mapId === 'mirror' ? '#182030' : G.mapId === 'well' ? '#141018' : G.mapId === 'cave' ? '#1a1410' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : G.mapId === 'frost' ? '#d4f2ff' : G.mapId === 'cloud' ? '#e8d8b8' : G.mapId === 'mirror' ? '#c8e8ff' : G.mapId === 'well' ? '#c8b898' : G.mapId === 'cave' ? '#d8c4a0' : G.mapId === 'teeth' ? '#e0c8a0' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : G.mapId === 'frost' ? '#143044' : G.mapId === 'cloud' ? '#241c28' : G.mapId === 'mirror' ? '#182030' : G.mapId === 'well' ? '#141018' : G.mapId === 'cave' ? '#1a1410' : G.mapId === 'teeth' ? '#1c1410' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -7284,6 +7442,34 @@
       }
       if (drawing) g.stroke();
     }
+    if (G.mapId === 'teeth') {
+      const pit = g.createLinearGradient(0, TEETH_BANK_Y, 0, VH);
+      pit.addColorStop(0, 'rgba(12, 8, 16, 0.08)');
+      pit.addColorStop(0.22, 'rgba(18, 12, 22, 0.38)');
+      pit.addColorStop(0.6, '#100c14');
+      pit.addColorStop(1, '#08060c');
+      g.fillStyle = pit;
+      g.fillRect(TEETH_L1, TEETH_BANK_Y + 4, TEETH_R0 - TEETH_L1, VH - TEETH_BANK_Y - 4);
+      g.fillStyle = 'rgba(90, 64, 44, 0.22)';
+      g.fillRect(48, TEETH_BANK_Y - 4, TEETH_L1 - 64, 8);
+      g.fillRect(TEETH_R0 + 16, TEETH_BANK_Y - 4, 900 - TEETH_R0, 8);
+      g.fillStyle = 'rgba(196, 156, 112, 0.16)';
+      for (let i = 0; i < TEETH_PEAKS.length; i++) {
+        const px = TEETH_PEAKS[i];
+        g.fillRect(px - TEETH_HW, TEETH_PEAK_Y - 3, TEETH_W, 7);
+      }
+      g.strokeStyle = 'rgba(216, 184, 140, 0.55)';
+      g.lineWidth = 1.5;
+      for (let i = 0; i < TEETH_PEAKS.length; i++) {
+        const px = TEETH_PEAKS[i];
+        const x0 = Math.max(0, px - TEETH_HW);
+        const x1 = Math.min(VW - 1, px + TEETH_HW);
+        g.beginPath();
+        g.moveTo(x0, H[x0]);
+        for (let x = x0; x <= x1; x++) g.lineTo(x, H[x]);
+        g.stroke();
+      }
+    }
     terrainDirty = false;
   }
 
@@ -7436,6 +7622,21 @@
       rim.addColorStop(1, 'rgba(196, 156, 112, 0)');
       g.fillStyle = rim;
       g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'teeth') {
+      const shade = g.createRadialGradient(480, TEETH_VALLEY_Y, 20, 480, TEETH_VALLEY_Y + 50, 300);
+      shade.addColorStop(0, 'rgba(24, 16, 20, 0.22)');
+      shade.addColorStop(1, 'rgba(24, 16, 20, 0)');
+      g.fillStyle = shade;
+      g.fillRect(0, 0, VW, VH);
+      for (let i = 0; i < TEETH_PEAKS.length; i++) {
+        const px = TEETH_PEAKS[i];
+        const gleam = g.createRadialGradient(px, TEETH_PEAK_Y, 8, px, TEETH_PEAK_Y + 36, 110);
+        gleam.addColorStop(0, 'rgba(216, 184, 140, 0.12)');
+        gleam.addColorStop(1, 'rgba(216, 184, 140, 0)');
+        g.fillStyle = gleam;
+        g.fillRect(0, 0, VW, VH);
+      }
     }
     if (G.mapId === 'gate') {
       const shade = g.createRadialGradient(480, 380, 20, 480, 430, 300);
@@ -9014,7 +9215,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps eighteen', MAP_IDS.length === 20 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口' && MAP_NAME.cave === '洞顶');
+    ok('maps eighteen', MAP_IDS.length === 21 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口' && MAP_NAME.cave === '洞顶' && MAP_NAME.teeth === '齿岸');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -9549,7 +9750,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 20', MAP_IDS.length === 20 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14 && MAP_IDS.indexOf('frost') === 15 && MAP_IDS.indexOf('cloud') === 16 && MAP_IDS.indexOf('mirror') === 17 && MAP_IDS.indexOf('well') === 18 && MAP_IDS.indexOf('cave') === 19);
+    ok('随图 pool 21', MAP_IDS.length === 21 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14 && MAP_IDS.indexOf('frost') === 15 && MAP_IDS.indexOf('cloud') === 16 && MAP_IDS.indexOf('mirror') === 17 && MAP_IDS.indexOf('well') === 18 && MAP_IDS.indexOf('cave') === 19 && MAP_IDS.indexOf('teeth') === 20);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -9793,7 +9994,7 @@
     G.ghostOn = true;
     ok('ghost match only', G.ghost == null);
     ok('g vk v20', GRAV === 260 && VK === 420);
-    ok('maps still 14 after ghost', MAP_IDS.length === 20 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after ghost', MAP_IDS.length === 21 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
     ok('断崖 name locked', MAP_NAME.cliff === '断崖' && MAP_IDS[12] === 'cliff');
     ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
@@ -9812,7 +10013,7 @@
     const silkPhys = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     const silkPhys2 = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     ok('silk no physics drift', Math.abs(silkPhys.x - silkPhys2.x) < 0.01 && Math.abs(silkPhys.y - silkPhys2.y) < 0.01);
-    ok('maps still 14 after silk', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after silk', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after silk', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned silk', '风丝'.indexOf('传送') < 0 && '风丝'.indexOf('飞行') < 0 && '风丝'.indexOf('三叉戟') < 0 && '风丝'.indexOf('激怒') < 0);
     ok('g vk v22', GRAV === 260 && VK === 420);
@@ -9911,7 +10112,7 @@
     for (let i = 0; i < VW; i++) G.H[i] = 400;
     G.p = { x: 200, y: 386, r: 14, hp: 100, side: 'p', id: 'p' };
     ok('AI open not 叠珠', pickAIWeapon(G.f) !== 6);
-    ok('maps still 14 after 叠珠', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after 叠珠', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after 叠珠', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('g vk v24', GRAV === 260 && VK === 420);
 
@@ -9955,7 +10156,7 @@
     ok('storm hud name stays', STORM_NAME === '雷泽' && MAP_NAME.vale === '风谷');
     G.storm = false;
     ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps still 14 after 雷泽', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
+    ok('maps still 14 after 雷泽', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
     ok('ghost K still after 雷泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned 雷泽', STORM_NAME.indexOf('传送') < 0 && STORM_NAME.indexOf('飞行') < 0 && STORM_NAME.indexOf('三叉戟') < 0 && STORM_NAME.indexOf('激怒') < 0);
     ok('g vk v25', GRAV === 260 && VK === 420 && WIND_K === 2.05);
@@ -10047,7 +10248,7 @@
     ok('gate storm roll not forced', !stormForced('gate') && !stormBanned('gate') && STORM_P === 0.35);
     ok('石门 name locked', MAP_NAME.gate === '石门' && MAP_IDS[14] === 'gate');
     ok('no banned gate', MAP_NAME.gate.indexOf('传送') < 0 && MAP_NAME.gate.indexOf('飞行') < 0 && MAP_NAME.gate.indexOf('三叉戟') < 0 && MAP_NAME.gate.indexOf('激怒') < 0);
-    ok('maps 15 with 石门', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 with 石门', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('叠珠 still 7 after 石门', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('ghost K still after 石门', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 石门', typeof silkCount === 'function' && silkCount(0) === 0);
@@ -10133,7 +10334,7 @@
     const mscHit = scoreOne({ x: 210, y: G.p.y, t: 0.6, hit: G.p }, WEPS[7], G.f, G.p, 45);
     ok('迟雷 prefer deny stick', mscDeny > 2000, Math.round(mscDeny) + '/' + Math.round(mscHit));
     ok('叠珠 still 7 after 迟雷', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 8);
-    ok('maps 15 after 迟雷', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('maps 15 after 迟雷', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     ok('ghost K still after 迟雷', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 迟雷', typeof silkCount === 'function' && silkCount(0) === 0);
     ok('雷泽 still after 迟雷', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune'));
@@ -10245,7 +10446,7 @@
     ok('frost storm roll not forced', !stormForced('frost') && !stormBanned('frost') && STORM_P === 0.35);
     ok('霜泽 name locked', MAP_NAME.frost === '霜泽' && MAP_IDS[15] === 'frost');
     ok('no banned frost', MAP_NAME.frost.indexOf('传送') < 0 && MAP_NAME.frost.indexOf('飞行') < 0 && MAP_NAME.frost.indexOf('三叉戟') < 0 && MAP_NAME.frost.indexOf('激怒') < 0);
-    ok('maps 16 with 霜泽', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps 16 with 霜泽', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('叠珠 still 7 after 霜泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 霜泽', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 霜泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10364,7 +10565,7 @@
     ok('crate late is 殿塌', crateLate() === true && CRATE_SUDDEN_P > CRATE_P);
     G.sudden = false;
     ok('no 9th wep', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
-    ok('maps still 16 after 堂匣', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps still 16 after 堂匣', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('locked names after 堂匣', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('ghost K still after 堂匣', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('silk still after 堂匣', typeof silkCount === 'function' && silkCount(0) === 0);
@@ -10411,7 +10612,7 @@
     ok('clock pause shell', clockPaused() === true);
     G.shots = [];
     ok('clock free after shell', clockPaused() === false);
-    ok('maps still 16 after 时尽', MAP_IDS.length === 20 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('maps still 16 after 时尽', MAP_IDS.length === 21 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
     ok('locked names after 时尽', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('no banned 时尽', '时尽'.indexOf('传送') < 0 && '时尽'.indexOf('飞行') < 0 && '时尽'.indexOf('三叉戟') < 0 && '时尽'.indexOf('激怒') < 0);
     ok('g vk v30', GRAV === 260 && VK === 420 && WIND_K === 2.05);
@@ -10513,7 +10714,7 @@
     ok('cloud storm ~30', !stormForced('cloud') && !stormBanned('cloud') && CLOUD_STORM_P === 0.30 && STORM_P === 0.35);
     ok('云台 name locked', MAP_NAME.cloud === '云台' && MAP_IDS[16] === 'cloud');
     ok('no banned cloud', MAP_NAME.cloud.indexOf('传送') < 0 && MAP_NAME.cloud.indexOf('飞行') < 0 && MAP_NAME.cloud.indexOf('三叉戟') < 0 && MAP_NAME.cloud.indexOf('激怒') < 0);
-    ok('maps 17 with 云台', MAP_IDS.length === 20 && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
+    ok('maps 17 with 云台', MAP_IDS.length === 21 && MAP_NAME.frost === '霜泽' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
     ok('叠珠 still 7 after 云台', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 云台', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 云台', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10626,7 +10827,7 @@
     ok('mirror storm ~30', !stormForced('mirror') && !stormBanned('mirror') && MIRROR_STORM_P === 0.30 && STORM_P === 0.35);
     ok('镜廊 name locked', MAP_NAME.mirror === '镜廊' && MAP_IDS[17] === 'mirror');
     ok('no banned mirror', MAP_NAME.mirror.indexOf('传送') < 0 && MAP_NAME.mirror.indexOf('飞行') < 0 && MAP_NAME.mirror.indexOf('三叉戟') < 0 && MAP_NAME.mirror.indexOf('激怒') < 0);
-    ok('maps 18 with 镜廊', MAP_IDS.length === 20 && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cliff === '断崖');
+    ok('maps 18 with 镜廊', MAP_IDS.length === 21 && MAP_NAME.cloud === '云台' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cliff === '断崖');
     ok('叠珠 still 7 after 镜廊', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 镜廊', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 镜廊', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10675,7 +10876,7 @@
     const armed = triggerQuake(qCx, G.H[qCx], WEPS[1], 48);
     ok('quake one at a time refresh', armed === true && Math.abs(G.quakeT - QUAKE_T) < 0.001 && G.quakeMag >= 3 && G.quakeMag <= 5);
     ok('direct stop still 140 after 余震', HIT_STOP_DIRECT === 0.14);
-    ok('maps still 18 after 余震', MAP_IDS.length === 20 && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
+    ok('maps still 18 after 余震', MAP_IDS.length === 21 && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
     ok('叠珠 still 7 after 余震', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 余震', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 余震', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10797,7 +10998,7 @@
     ok('well storm ~30', !stormForced('well') && !stormBanned('well') && WELL_STORM_P === 0.30 && STORM_P === 0.35);
     ok('井口 name locked', MAP_NAME.well === '井口' && MAP_IDS[18] === 'well');
     ok('no banned well', MAP_NAME.well.indexOf('传送') < 0 && MAP_NAME.well.indexOf('飞行') < 0 && MAP_NAME.well.indexOf('三叉戟') < 0 && MAP_NAME.well.indexOf('激怒') < 0);
-    ok('maps 19 with 井口', MAP_IDS.length === 20 && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口' && MAP_NAME.cloud === '云台');
+    ok('maps 19 with 井口', MAP_IDS.length === 21 && MAP_NAME.mirror === '镜廊' && MAP_NAME.well === '井口' && MAP_NAME.cloud === '云台');
     ok('叠珠 still 7 after 井口', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 井口', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 井口', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -10872,7 +11073,7 @@
     ok('hotkeys no steal QECVBGFX', bagIdFromKey({ key: 'q', code: 'KeyQ' }) == null && bagIdFromKey({ key: 'e', code: 'KeyE' }) == null && bagIdFromKey({ key: 'c', code: 'KeyC' }) == null && bagIdFromKey({ key: 'v', code: 'KeyV' }) == null && bagIdFromKey({ key: 'b', code: 'KeyB' }) == null && bagIdFromKey({ key: 'g', code: 'KeyG' }) == null && bagIdFromKey({ key: 'f', code: 'KeyF' }) == null && bagIdFromKey({ key: 'x', code: 'KeyX' }) == null);
     ok('no 9th wep after 堂袋', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('叠珠 stays weapon', WEPS[6].id === 7 && BAG_KEYS.indexOf('x2') >= 0 && WEPS[6].name !== BAG_NAME.x2);
-    ok('maps 19 after 堂袋', MAP_IDS.length === 20 && MAP_NAME.well === '井口' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台');
+    ok('maps 19 after 堂袋', MAP_IDS.length === 21 && MAP_NAME.well === '井口' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台');
     ok('skills stay QECVBGFX', ITEM_NAME.leap === '飞步' && ITEM_NAME.warp === '影挪' && ITEM_NAME.neon === '霓弹' && ITEM_NAME.drum === '鼓息' && ITEM_NAME.nixi === '逆息' && ITEM_NAME.veil === '障幕');
     ok('堂匣 still after 堂袋', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣');
     ok('时尽 still after 堂袋', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
@@ -10888,7 +11089,7 @@
     ok('any armed false', anyBagArmed(idleU) === false);
     ok('bag tints 7', !!BAG_TINT.x2 && !!BAG_TINT.x3 && !!BAG_TINT.p1 && !!BAG_TINT.p2 && !!BAG_TINT.p3 && !!BAG_TINT.p5 && !!BAG_TINT.heal);
     ok('bag 7 v40', BAG_KEYS.length === 7 && WEPS.length === 8);
-    ok('maps 19 after v40', MAP_IDS.length === 20 && MAP_NAME.well === '井口');
+    ok('maps 19 after v40', MAP_IDS.length === 21 && MAP_NAME.well === '井口');
     ok('no 9th wep after v40', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('tints gold crimson cream orange scarlet foil leaf', BAG_TINT.x2 === '#ffe36b' && BAG_TINT.x3 === '#dc143c' && BAG_TINT.p1 === '#fff3c2' && BAG_TINT.p2 === '#ff9a3d' && BAG_TINT.p3 === '#ff2d2d' && BAG_TINT.p5 === '#ffd24a' && BAG_TINT.heal === '#5dffb2');
     ok('tints distinct', BAG_TINT.x2 !== BAG_TINT.x3 && BAG_TINT.p1 !== BAG_TINT.p2 && BAG_TINT.p2 !== BAG_TINT.p3 && BAG_TINT.p5 !== BAG_TINT.x3 && BAG_TINT.heal !== BAG_TINT.x2);
@@ -10968,7 +11169,7 @@
     ok('g vk v43', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('stack math still v40 after v43', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_COST.p3 === 25 && BAG_KEYS.length === 7);
     ok('no 9th wep after v43', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
-    ok('maps 19 after v43', MAP_IDS.length === 20 && MAP_NAME.well === '井口');
+    ok('maps 19 after v43', MAP_IDS.length === 21 && MAP_NAME.well === '井口');
     ok('hud readout still', bagStackReadout(x2p5) === '2发×1.35');
 
     { G.H = buildHeight('cave');
@@ -11076,7 +11277,7 @@
     ok('cave storm ~20', !stormForced('cave') && !stormBanned('cave') && CAVE_STORM_P === 0.20 && STORM_P === 0.35);
     ok('洞顶 name locked', MAP_NAME.cave === '洞顶' && MAP_IDS[19] === 'cave');
     ok('no banned cave', MAP_NAME.cave.indexOf('传送') < 0 && MAP_NAME.cave.indexOf('飞行') < 0 && MAP_NAME.cave.indexOf('三叉戟') < 0 && MAP_NAME.cave.indexOf('激怒') < 0 && MAP_NAME.cave.indexOf('天使') < 0 && MAP_NAME.cave.indexOf('恶魔') < 0);
-    ok('maps 20 with 洞顶', MAP_IDS.length === 20 && MAP_NAME.well === '井口' && MAP_NAME.cave === '洞顶' && MAP_NAME.mirror === '镜廊');
+    ok('maps 20 with 洞顶', MAP_IDS.length === 21 && MAP_NAME.well === '井口' && MAP_NAME.cave === '洞顶' && MAP_NAME.mirror === '镜廊');
     ok('叠珠 still 7 after 洞顶', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
     ok('迟雷 still 8 after 洞顶', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
     ok('ghost K still after 洞顶', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
@@ -11187,7 +11388,7 @@
     ok('AI not aim chips', WEPS.length === 8 && pickAIWeapon(G.f) !== undefined && falls.length === 2);
     ok('余震 still after 落顶', QUAKE_NAME === '余震' && HIT_STOP_DIRECT === 0.14 && wantQuake(WEPS[1], 20) === true);
     ok('堂袋 still after 落顶', BAG_NAME.x2 === '×2' && bagStackReadout(x2p5) === '2发×1.35' && BAG_CRATE_P === 0.50);
-    ok('maps 20 after 落顶', MAP_IDS.length === 20 && MAP_NAME.cave === '洞顶' && MAP_NAME.well === '井口');
+    ok('maps 20 after 落顶', MAP_IDS.length === 21 && MAP_NAME.cave === '洞顶' && MAP_NAME.well === '井口');
     ok('no 9th wep after 落顶', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('g vk v45', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('reduce skip chips', wantFallChips() === (!REDUCE && G.mapId === 'cave'));
@@ -11195,6 +11396,136 @@
     G.kind = 'hall';
     falls.length = 0;
     G.cave = null;
+    }
+
+    { G.H = buildHeight('teeth');
+    G.mapId = 'teeth';
+    G.kind = 'hall';
+    G.storm = false;
+    G.walls = [];
+    G.mirror = null;
+    G.slab = null;
+    G.cave = null;
+    G.ai = 1;
+    G.turns = 3;
+    G.mines = [];
+    G.walk = WALK_PX;
+    ok('teeth spawn', spawnX('teeth', 'p') === TEETH_PX && spawnX('teeth', 'f') === TEETH_FX);
+    ok('teeth spawn on shores', isTeethBank(TEETH_PX) && isTeethBank(TEETH_FX), Math.round(G.H[TEETH_PX]) + '/' + Math.round(G.H[TEETH_FX]));
+    ok('teeth shores y~308', G.H[TEETH_PX] > 292 && G.H[TEETH_PX] < 324 && G.H[TEETH_FX] > 292 && G.H[TEETH_FX] < 324, Math.round(G.H[TEETH_PX]));
+    ok('teeth 4 peaks', isTeethPeakX(300) && isTeethPeakX(420) && isTeethPeakX(540) && isTeethPeakX(660), Math.round(G.H[300]) + '/' + Math.round(G.H[420]));
+    ok('teeth peaks y~210', G.H[300] > 196 && G.H[300] < 240 && G.H[420] > 196 && G.H[420] < 240, Math.round(G.H[300]));
+    ok('teeth valleys y~360', isTeethValleyX(360) && isTeethValleyX(480) && isTeethValleyX(600) && G.H[360] > 340 && G.H[360] < 380, Math.round(G.H[360]));
+    ok('teeth width ~70', isTeethPeakX(300) && isTeethPeakX(300 + 28) && !isTeethPeakX(300 + 42), TEETH_W);
+    ok('teeth no void', !isDeathVoid(TEETH_PX) && !isDeathVoid(TEETH_FX) && !isDeathVoid(360) && !isDeathVoid(300));
+    ok('teeth nums', TEETH_WALK === 0.90 && TEETH_CRATER === 0.75 && TEETH_STORM_P === 0.30 && GRAV === 260 && VK === 420);
+    G.p = { x: TEETH_PX, y: G.H[TEETH_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: TEETH_FX, y: G.H[TEETH_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    const tpx = spawnX('teeth', 'p');
+    const tpy = G.H[tpx | 0] - UNIT_R;
+    const tth30 = 30 * Math.PI / 180;
+    const ts30 = traceShot(tpx + Math.cos(tth30) * 18, tpy - 4 - Math.sin(tth30) * 18, 30, 94, 0, WEPS[0], G.H, G.p);
+    ok('teeth 30 skip far shore', isTeethBank(ts30.x) && ts30.x > TEETH_R0 && !ts30.air, Math.round(ts30.x) + ',' + Math.round(ts30.y));
+    const tLip = TEETH_LIP_L;
+    const tley = G.H[tLip | 0] - UNIT_R;
+    const t90 = 86;
+    const tth90 = t90 * Math.PI / 180;
+    const ts90 = traceShot(tLip + Math.cos(tth90) * 18, tley - 4 - Math.sin(tth90) * 18, t90, 95, 0, WEPS[0], G.H, G.p);
+    ok('teeth 90 dunk valley', isTeethValleyX(ts90.x) && !ts90.air, Math.round(ts90.x) + ' a' + t90);
+    const tth65 = 65 * Math.PI / 180;
+    const ts65 = traceShot(tpx + Math.cos(tth65) * 18, tpy - 4 - Math.sin(tth65) * 18, 65, 32, 0, WEPS[0], G.H, G.p);
+    ok('teeth 65 clip near tooth', isTeethPeakX(ts65.x) && ts65.x < 400 && !ts65.air, Math.round(ts65.x) + ',' + Math.round(ts65.y));
+    const tVal = { x: 360, y: G.H[360] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    const tPeak = { x: 300, y: G.H[300] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    const tBank = { x: TEETH_PX, y: G.H[TEETH_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    ok('teeth valley walk 0.90', inTeethValley(tVal) && Math.abs(walkSpd(tVal) - 90 * TEETH_WALK) < 0.01, walkSpd(tVal));
+    ok('teeth peak walk full', isTeethPeakX(tPeak.x) && Math.abs(walkSpd(tPeak) - 78) < 0.01, walkSpd(tPeak));
+    ok('teeth shore walk full', isTeethBank(tBank.x) && Math.abs(walkSpd(tBank) - 90) < 0.01, walkSpd(tBank));
+    G.storm = true;
+    ok('teeth valley no storm extra', inTeethValley(tVal) && !onGrass(tVal) && Math.abs(walkSpd(tVal) - 90 * TEETH_WALK) < 0.01, walkSpd(tVal));
+    ok('teeth shore wet grass', onGrass(tBank) && Math.abs(walkSpd(tBank) - 90 * STORM_WALK) < 0.01, walkSpd(tBank));
+    G.storm = false;
+    const teethDirtH = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) teethDirtH[i] = 400;
+    G.H = teethDirtH;
+    G.mapId = 'plain';
+    carve(500, 400, 30);
+    const teethDirt = G.H[500] - 400;
+    G.mapId = 'teeth';
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    G.H[300] = TEETH_PEAK_Y;
+    carve(300, TEETH_PEAK_Y, teethR(30, 300));
+    const peakEat = G.H[300] - TEETH_PEAK_Y;
+    ok('teeth peak crater ~0.75', peakEat > 4 && peakEat < teethDirt * 0.92 && Math.abs(peakEat / teethDirt - TEETH_CRATER) < 0.12, Math.round(peakEat) + '/' + Math.round(teethDirt));
+    G.H = buildHeight('teeth');
+    G.mapId = 'teeth';
+    const shoreY = G.H[TEETH_PX];
+    carve(TEETH_PX, shoreY, 30);
+    const shoreEat = G.H[TEETH_PX] - shoreY;
+    ok('teeth shore crater normal', Math.abs(shoreEat - teethDirt) < 3, Math.round(shoreEat) + '/' + Math.round(teethDirt));
+    const hePeak = Math.round(teethR(WEPS[1].crater, 300));
+    ok('teeth peak 余震', wantQuake(WEPS[1], hePeak) === true && hePeak >= QUAKE_R * 0.65, hePeak);
+    G.H = buildHeight('teeth');
+    G.mapId = 'teeth';
+    G.kind = 'hall';
+    G.wind = 0;
+    G.ai = 1;
+    G.p = { x: 360, y: G.H[360] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: TEETH_FX, y: G.H[TEETH_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    ok('teeth AI valley 高爆', inTeethValley(G.p) && pickAIWeapon(G.f) === 1);
+    const timpV = { x: 360, y: G.H[360], t: 1, hit: null };
+    const tsc90 = scoreOne(timpV, WEPS[1], G.f, G.p, 88);
+    const tsc30v = scoreOne(timpV, WEPS[1], G.f, G.p, 30);
+    ok('teeth AI prefer 90 dunk', tsc90 > tsc30v + 400, Math.round(tsc90) + '>' + Math.round(tsc30v));
+    G.H = buildHeight('teeth');
+    G.mapId = 'teeth';
+    G.p = { x: TEETH_PX, y: G.H[TEETH_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: TEETH_FX, y: G.H[TEETH_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    ok('teeth AI far shore 普通', teethFarShore(G.f, G.p) && pickAIWeapon(G.f) === 0);
+    const timpFar = { x: TEETH_PX, y: G.H[TEETH_PX], t: 1, hit: null };
+    const tscSkip = scoreOne(timpFar, WEPS[0], G.f, G.p, 30);
+    const tscHi = scoreOne(timpFar, WEPS[0], G.f, G.p, 65);
+    ok('teeth AI prefer 30 skip', tscSkip > tscHi + 400, Math.round(tscSkip) + '>' + Math.round(tscHi));
+    G.p = { x: TEETH_LIP_L, y: G.H[TEETH_LIP_L] - 14, r: 14, hp: 50, max: 100, side: 'p', id: 'p' };
+    G.turns = 3;
+    ok('teeth AI far lip 迟雷', teethFarShore(G.f, G.p) && isTeethLipX(G.p.x) && wantChiLei(G.f, G.p) === true && pickAIWeapon(G.f) === 7);
+    G.kind = 'duo';
+    const tdx0 = spawnAt('p', 0);
+    const tdx1 = spawnAt('p', 1);
+    const tdr0 = spawnAt('f', 0);
+    const tdr1 = spawnAt('f', 1);
+    ok('teeth duo extras shore', isTeethBank(tdx0) && isTeethBank(tdx1) && isTeethBank(tdr0) && isTeethBank(tdr1), tdx1 + '/' + tdr1);
+    ok('teeth duo tops', tdx0 === TEETH_PX && tdr0 === TEETH_FX);
+    ok('teeth duo extras along', Math.abs(tdx1 - tdx0) >= 20 && Math.abs(tdr1 - tdr0) >= 20, Math.round(Math.abs(tdx1 - tdx0)));
+    ok('teeth duo not peak', !isTeethPeakX(tdx0) && !isTeethPeakX(tdx1) && !isTeethPeakX(tdr0) && !isTeethPeakX(tdr1));
+    ok('teeth duo not valley', !isTeethValleyX(tdx1) && !isTeethValleyX(tdr1));
+    ok('teeth duo not void', !isDeathVoid(tdx0) && !isDeathVoid(tdx1) && !isDeathVoid(tdr0) && !isDeathVoid(tdr1));
+    G.kind = 'hall';
+    ok('crate on teeth shore', crateGroundOk(TEETH_PX) === true && crateGroundOk(300) === false && crateGroundOk(360) === false);
+    ok('teeth storm ~30', !stormForced('teeth') && !stormBanned('teeth') && TEETH_STORM_P === 0.30 && STORM_P === 0.35);
+    ok('齿岸 name locked', MAP_NAME.teeth === '齿岸' && MAP_IDS[20] === 'teeth');
+    ok('no banned teeth', MAP_NAME.teeth.indexOf('传送') < 0 && MAP_NAME.teeth.indexOf('飞行') < 0 && MAP_NAME.teeth.indexOf('三叉戟') < 0 && MAP_NAME.teeth.indexOf('激怒') < 0 && MAP_NAME.teeth.indexOf('天使') < 0 && MAP_NAME.teeth.indexOf('恶魔') < 0);
+    ok('maps 21 with 齿岸', MAP_IDS.length === 21 && MAP_NAME.cave === '洞顶' && MAP_NAME.teeth === '齿岸' && MAP_NAME.well === '井口');
+    ok('叠珠 still 7 after 齿岸', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('迟雷 still 8 after 齿岸', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
+    ok('落顶 still after 齿岸', FALL_NAME === '落顶' && wantFallChips() === false);
+    ok('ghost K still after 齿岸', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('时尽 still after 齿岸', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
+    ok('堂匣 still after 齿岸', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣' && BAG_CRATE_P === 0.50);
+    ok('堂袋 still after 齿岸', BAG_NAME.x2 === '×2' && bagStackReadout(x2p5) === '2发×1.35');
+    ok('洞顶 still after 齿岸', MAP_NAME.cave === '洞顶' && MAP_IDS[19] === 'cave');
+    ok('井口 still after 齿岸', MAP_NAME.well === '井口' && MAP_IDS[18] === 'well');
+    ok('余震 still after 齿岸', QUAKE_NAME === '余震' && HIT_STOP_DIRECT === 0.14);
+    ok('雷泽 still after 齿岸', STORM_NAME === '雷泽' && stormForced('vale') && stormBanned('forge'));
+    ok('no 9th wep after 齿岸', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('g vk v46', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('stack math still after 齿岸', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
+    G.mode = 'title';
+    G.kind = 'hall';
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
     }
     G.mapId = 'plain';
     G.H = buildHeight('plain');
