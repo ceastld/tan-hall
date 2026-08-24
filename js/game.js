@@ -24,9 +24,9 @@
   const WARP_R = 220;
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
-  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · N地条 · H辅';
-  const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅';
+  const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条 · K 残影';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 4三裂 5霓轨 6霓火 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
+  const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅 · K残影';
   const MINI_W = 160;
   const MINI_H = 48;
   const ASSIST_NAME = ['关', '弱', '中', '强'];
@@ -306,6 +306,7 @@
     busyT: 0,
     ruler: true,
     mini: true,
+    ghostOn: true,
     assist: 2,
     ai: 1,
     drillWind: 'rand',
@@ -492,11 +493,38 @@
     return u.side === 'p';
   }
   function humanTurn() { return isHuman(curUnit()); }
-  function actorGhost() {
-    const u = curUnit();
-    if (!u || !u.ghost) return null;
-    if (!isHuman(u)) return null;
-    return u.ghost;
+  function ghostPref() { return G.ghostOn !== false; }
+  function lastGhost() {
+    if (!ghostPref()) return null;
+    const gh = G.ghost;
+    if (!gh || !gh.points || gh.points.length < 2) return null;
+    return gh;
+  }
+  function ghostVisible() {
+    if (G.mode !== 'play') return false;
+    if (G.phase !== 'aim' && G.phase !== 'charge') return false;
+    return !!lastGhost();
+  }
+  function commitLastGhost(landX, landY) {
+    if (!G.ghostPend) return;
+    const pts = G.ghostPend.points ? G.ghostPend.points.slice() : [];
+    pts.push({ x: landX, y: landY, a: 1 });
+    G.ghost = {
+      x: G.ghostPend.x,
+      y: G.ghostPend.y,
+      ang: G.ghostPend.ang,
+      power: G.ghostPend.power,
+      wepId: G.ghostPend.wepId,
+      wind: G.ghostPend.wind,
+      points: pts
+    };
+    G.ghostPend = null;
+  }
+  function setGhostOn(on) {
+    G.ghostOn = !!on;
+    saveBest();
+    toast(G.ghostOn ? '残影开' : '残影关', false, false);
+    syncHud();
   }
   function kindName() {
     return G.kind === 'core' ? '堂核' : G.kind === 'drill' ? '演习场' : G.kind === 'seat' ? '对坐' : G.kind === 'duo' ? '对堂' : G.kind === 'quad' ? '堂座' : '弹堂';
@@ -1505,6 +1533,8 @@
       else G.ruler = true;
       if (o.mini === false) G.mini = false;
       else G.mini = true;
+      if (o.ghost === false) G.ghostOn = false;
+      else G.ghostOn = true;
       const ast = parseInt(o.assist, 10);
       if (ast === 0 || ast === 1 || ast === 2 || ast === 3) G.assist = ast;
       else G.assist = 2;
@@ -1531,6 +1561,7 @@
         map: G.mapId,
         ruler: !!G.ruler,
         mini: G.mini !== false,
+        ghost: G.ghostOn !== false,
         assist: clamp(G.assist | 0, 0, 3),
         drillWind: G.drillWind || 'rand',
         coached: !!G.coached,
@@ -1688,8 +1719,8 @@
     if (walkLabel) walkLabel.textContent = '体 ' + Math.max(0, Math.round(stam));
     if (rageLabel) rageLabel.textContent = '怒 ' + Math.max(0, Math.round((u && u.rage) || 0));
     if (ghostLabel) {
-      const gh = actorGhost();
-      if (gh && G.mode === 'play') {
+      const gh = lastGhost();
+      if (gh && ghostVisible()) {
         ghostLabel.classList.remove('gone');
         ghostLabel.textContent = '上 ' + Math.round(gh.ang) + '°/' + Math.round(gh.power);
       } else {
@@ -2296,7 +2327,6 @@
       if (u.wep != null) G.wep = u.wep;
     }
     G.stam = u ? u.stam : STAM_MAX;
-    G.ghost = (u && u.ghost) || null;
     rollWind();
     if (u && u.id === 'p') G.turns += 1;
     maybeSudden();
@@ -2448,8 +2478,7 @@
       life: 0,
       ult: !!u.ult
     };
-    u.ghostPend = { x: sx, y: sy, ang: u.ang, power: Math.round(G.power), wepId: wep.id, wind: G.wind, points: [] };
-    G.ghostPend = u.ghostPend;
+    G.ghostPend = { x: sx, y: sy, ang: u.ang, power: Math.round(G.power), wepId: wep.id, wind: G.wind, points: [{ x: sx, y: sy, a: 1 }] };
     trail.length = 0;
     G.phase = 'fly';
     G.charging = false;
@@ -2710,19 +2739,7 @@
       G.killVictim = null;
     }
     if (owner && owner.ult) owner.ult = false;
-    if (G.ghostPend) {
-      const pts = trail.slice();
-      pts.push({ x: x, y: y, a: 1 });
-      const ghost = {
-        x: G.ghostPend.x, y: G.ghostPend.y,
-        ang: G.ghostPend.ang, power: G.ghostPend.power,
-        wepId: G.ghostPend.wepId, wind: G.ghostPend.wind,
-        points: pts
-      };
-      G.ghost = ghost;
-      if (owner) owner.ghost = ghost;
-      G.ghostPend = null;
-    }
+    commitLastGhost(x, y);
     eachUnit(ungroundIfAir);
     G.shot = null;
     G.phase = 'settle';
@@ -2784,7 +2801,7 @@
     s.life += dt;
     trail.push({ x: s.x, y: s.y, a: 1 });
     if (trail.length > 42) trail.shift();
-    if (G.ghostPend) G.ghostPend.points = trail.slice();
+    if (G.ghostPend) G.ghostPend.points.push({ x: s.x, y: s.y, a: 1 });
     setCamShot(s);
     sweepFruits(ox, oy, s.x, s.y, s.owner);
     if (s.x < 2 || s.x > VW - 2 || s.y > VH + 20) {
@@ -3771,7 +3788,7 @@
     rollWind();
     audio.chargeStop();
     showOverlay('title', '弹堂', '看风，拉满或点射，把对面从石殿上轰下去。');
-    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · 点地图换地形 · H 辅助 · N 地条');
+    setHint('1 / 回车 / 空格 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · 点地图换地形 · H 辅助 · N 地条 · K 残影');
     syncMaps();
     syncDrillWind();
     syncAiTier();
@@ -4719,20 +4736,6 @@
       g.stroke();
       g.restore();
     }
-    if (actorGhost() && curUnit() === u && (G.phase === 'aim' || G.phase === 'charge')) {
-      const gh = actorGhost().ang * Math.PI / 180;
-      g.save();
-      g.strokeStyle = 'rgba(255,227,107,0.35)';
-      g.lineWidth = 1.4;
-      g.beginPath();
-      g.arc(x0, y0, 10, 0, TAU);
-      g.stroke();
-      g.beginPath();
-      g.moveTo(x0, y0);
-      g.lineTo(x0 + Math.cos(gh) * 36, y0 - Math.sin(gh) * 36);
-      g.stroke();
-      g.restore();
-    }
     if (u.frozen) {
       g.strokeStyle = rgba(ICE, 0.7);
       g.lineWidth = 2;
@@ -4881,9 +4884,9 @@
   }
 
   function drawGhostPath(g) {
-    const ghost = actorGhost();
-    if (!ghost || G.mode !== 'play') return;
-    if (G.phase !== 'aim' && G.phase !== 'charge') return;
+    if (!ghostVisible()) return;
+    const ghost = lastGhost();
+    if (!ghost) return;
     const pts = ghost.points;
     if (!pts || pts.length < 2) return;
     g.save();
@@ -5249,6 +5252,11 @@
     if (k === 'n' || k === 'N') {
       e.preventDefault();
       setMini(!G.mini);
+      return;
+    }
+    if (k === 'k' || k === 'K') {
+      e.preventDefault();
+      setGhostOn(!G.ghostOn);
       return;
     }
     if (k === '[') {
@@ -6125,6 +6133,54 @@
     ok('g vk v19', GRAV === 260 && VK === 420);
     ok('月池 name locked', MAP_NAME.moon === '月池' && MAP_IDS[11] === 'moon');
     ok('no banned moon', MAP_NAME.moon.indexOf('传送') < 0 && MAP_NAME.moon.indexOf('飞行') < 0);
+    ok('ghost default on', G.ghostOn !== false && ghostPref() === true);
+    ok('ghost first null', G.ghost == null && lastGhost() == null && ghostVisible() === false);
+    G.mode = 'play';
+    G.phase = 'aim';
+    G.kind = 'hall';
+    G.turn = 'p';
+    G.ghostOn = true;
+    G.ghostPend = { x: 10, y: 20, ang: 65, power: 70, wepId: 0, wind: 2, points: [{ x: 10, y: 20, a: 1 }, { x: 40, y: 18, a: 1 }] };
+    commitLastGhost(80, 40);
+    ok('ghost stores polyline', !!(G.ghost && G.ghost.points && G.ghost.points.length === 3 && G.ghost.ang === 65 && G.ghost.power === 70));
+    ok('ghost land point', G.ghost.points[2].x === 80 && G.ghost.points[2].y === 40);
+    ok('ghost pend cleared', G.ghostPend == null);
+    ok('ghost next aimer 岚丸', ghostVisible() === true && lastGhost().ang === 65);
+    G.turn = 'f';
+    ok('ghost everyone 烬丸 aim', ghostVisible() === true && lastGhost().power === 70);
+    G.kind = 'duo';
+    G.turn = 'p2';
+    ok('ghost everyone 霜丸', ghostVisible() === true);
+    G.kind = 'quad';
+    G.turn = 'f2';
+    ok('ghost everyone 霆丸', ghostVisible() === true);
+    G.kind = 'hall';
+    G.turn = 'p';
+    G.phase = 'fly';
+    ok('ghost hide fly', ghostVisible() === false && lastGhost() && lastGhost().ang === 65);
+    G.phase = 'settle';
+    ok('ghost hide settle', ghostVisible() === false);
+    G.phase = 'charge';
+    ok('ghost show charge', ghostVisible() === true);
+    G.phase = 'aim';
+    G.ghostOn = false;
+    ok('ghost K off', ghostPref() === false && lastGhost() == null && ghostVisible() === false);
+    G.ghostOn = true;
+    ok('ghost K on', ghostVisible() === true);
+    G.p = { id: 'p', ghost: { ang: 10, power: 1, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] } };
+    G.f = { id: 'f', ghost: null };
+    ok('ghost is last shot not self', lastGhost().ang === 65 && lastGhost().power === 70);
+    const skipKeep = G.ghost;
+    G.phase = 'settle';
+    ok('skip keeps last shot', G.ghost === skipKeep && G.ghost.ang === 65);
+    G.phase = 'aim';
+    G.ghost = null;
+    G.ghostPend = null;
+    G.ghostOn = true;
+    ok('ghost match only', G.ghost == null);
+    ok('g vk v20', GRAV === 260 && VK === 420);
+    ok('maps still 12 after ghost', MAP_IDS.length === 12 && MAP_NAME.moon === '月池');
+    ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
