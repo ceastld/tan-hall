@@ -79,7 +79,12 @@
   const BAG_P5 = 0.50;
   const BAG_MULTI_WAIT = 0.32;
   const BAG_MULTI_JIT = 1;
-  const BAG_CRATE_P = 0.35;
+  const BAG_CRATE_P = 0.50;
+  const BAG_CRATE_W = { x2: 3, x3: 2, p1: 2, p2: 3, p3: 3, p5: 2, heal: 1 };
+  const BAG_AI_STAM_X2 = 60;
+  const BAG_AI_STAM_X3 = 80;
+  const BAG_AI_CLOSE = 6;
+  const BAG_AI_MID_P = 0.28;
   const BAG_KEY_MAP = { '-': 'x2', '_': 'x2', '=': 'x3', '+': 'x3', '[': 'p1', '{': 'p1', ']': 'p2', '}': 'p2', '\\': 'p3', '|': 'p3', ';': 'p5', ':': 'p5', "'": 'heal', '"': 'heal' };
   const BAG_CODE_MAP = { Minus: 'x2', Equal: 'x3', BracketLeft: 'p1', BracketRight: 'p2', Backslash: 'p3', IntlBackslash: 'p3', Semicolon: 'p5', Quote: 'heal' };
   const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊', well: '井口' };
@@ -1062,12 +1067,27 @@
       craterAdd: mods.craterAdd || 0
     };
   }
+  function pickCrateBagId(r) {
+    let total = 0;
+    for (let i = 0; i < BAG_KEYS.length; i++) total += BAG_CRATE_W[BAG_KEYS[i]] || 0;
+    if (total <= 0) return BAG_KEYS[irand(0, BAG_KEYS.length - 1)];
+    let t = r == null ? Math.random() : r;
+    if (!(t >= 0)) t = 0;
+    if (t >= 1) t = 0.999999;
+    t *= total;
+    for (let i = 0; i < BAG_KEYS.length; i++) {
+      const k = BAG_KEYS[i];
+      t -= BAG_CRATE_W[k] || 0;
+      if (t < 0) return k;
+    }
+    return BAG_KEYS[BAG_KEYS.length - 1];
+  }
   function grantBagItem(owner, id) {
     if (!owner || owner.stake) return null;
     ensureBag(owner);
-    const k = id && BAG_NAME[id] ? id : BAG_KEYS[irand(0, BAG_KEYS.length - 1)];
+    const k = id && BAG_NAME[id] ? id : pickCrateBagId();
     owner.bag[k] = (owner.bag[k] || 0) + 1;
-    return { kind: 'bag', toast: CRATE_NAME + ' · ' + BAG_NAME[k], id: k, name: BAG_NAME[k] };
+    return { kind: 'bag', toast: CRATE_NAME + ' · ' + BAG_NAME[k], id: k, name: BAG_NAME[k], tint: BAG_TINT[k] };
   }
   function maybeBagCrate(kind, r) {
     if (kind === 'gold') return kind;
@@ -5730,6 +5750,39 @@
     return picked;
   }
 
+  function planAIBag(from, roll) {
+    const out = [];
+    if (!from) return out;
+    ensureBag(from);
+    if (aiEasy()) return out;
+    const mark = otherUnit(from) || G.p;
+    if (!mark || mark.hp <= 0) return out;
+    if (pitDepth(mark) >= BURY_PX) return out;
+    const dist = Math.abs((from.x || 0) - (mark.x || 0));
+    const close = dist < BAG_AI_CLOSE * GRID;
+    const stam = from.stam || 0;
+    const bag = from.bag || zeroBag();
+    if (aiHard()) {
+      if (close && stam >= BAG_AI_STAM_X3 && (bag.x3 | 0) > 0) {
+        out.push('x3');
+        if ((bag.p2 | 0) > 0) out.push('p2');
+      } else if (stam >= BAG_AI_STAM_X2) {
+        if ((bag.x2 | 0) > 0) out.push('x2');
+        if ((bag.p3 | 0) > 0) out.push('p3');
+        else if ((bag.p2 | 0) > 0) out.push('p2');
+      }
+    } else {
+      const p = roll == null ? Math.random() : roll;
+      if ((bag.x2 | 0) > 0 && p < BAG_AI_MID_P) out.push('x2');
+    }
+    let hasX3 = false;
+    for (let i = 0; i < out.length; i++) if (out[i] === 'x3') hasX3 = true;
+    if (!hasX3) return out;
+    const filt = [];
+    for (let i = 0; i < out.length; i++) if (out[i] !== 'x2') filt.push(out[i]);
+    return filt;
+  }
+
   function startAI() {
     const from = curUnit() || G.f;
     G.wep = pickAIWeapon(from);
@@ -5808,21 +5861,7 @@
     if ((from.hp || 0) < 40 && (from.bag.heal | 0) > 0 && (from.stam || 0) >= BAG_COST.heal) {
       if (aiHard() || (!aiEasy() && Math.random() < 0.45) || Math.random() < 0.08) plan.heal = true;
     }
-    if (!aiEasy()) {
-      const hard = aiHard();
-      const wepIdx = G.wep;
-      const mark2 = otherUnit(from) || G.p;
-      const dist = mark2 ? Math.abs((from.x || 0) - (mark2.x || 0)) : 999;
-      const close = dist < 6 * GRID;
-      const exposed = mark2 && pitDepth(mark2) < BURY_PX;
-      if (hard && wepIdx === 1 && exposed) {
-        if (close && (from.bag.x3 | 0) > 0) plan.bag.push('x3');
-        else if ((from.bag.x2 | 0) > 0) plan.bag.push('x2');
-        if ((from.bag.p3 | 0) > 0) plan.bag.push('p3');
-      } else if (!hard && wepIdx === 1 && exposed && (from.bag.x2 | 0) > 0 && Math.random() < 0.28) {
-        plan.bag.push('x2');
-      }
-    }
+    plan.bag = planAIBag(from);
     const rageReady = (from.rage >= 100) || (plan.drum && from.rage + 50 >= 100) ? 100 : (from.rage || 0);
     if (aiWantUlt(from, best.score, rageReady)) plan.ult = true;
     const delayIdx = pickDelayWep(from, G.wep, best.score, plan.ult);
@@ -10344,7 +10383,7 @@
     G.kind = 'hall';
     ok('bag names locked', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3' && BAG_NAME.p1 === '+1' && BAG_NAME.p2 === '+2' && BAG_NAME.p3 === '+3' && BAG_NAME.p5 === '+5' && BAG_NAME.heal === '回春');
     ok('bag keys 7', BAG_KEYS.length === 7 && BAG_KEYS[0] === 'x2' && BAG_KEYS[1] === 'x3' && BAG_KEYS[5] === 'p5' && BAG_KEYS[6] === 'heal');
-    ok('bag nums', BAG_HEAL === 14 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_COST.p1 === 20 && BAG_COST.p2 === 20 && BAG_COST.p3 === 25 && BAG_COST.p5 === 40 && BAG_COST.heal === 15 && BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_MULTI_WAIT === 0.32 && BAG_MULTI_JIT === 1 && BAG_CRATE_P === 0.35);
+    ok('bag nums', BAG_HEAL === 14 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_COST.p1 === 20 && BAG_COST.p2 === 20 && BAG_COST.p3 === 25 && BAG_COST.p5 === 40 && BAG_COST.heal === 15 && BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_MULTI_WAIT === 0.32 && BAG_MULTI_JIT === 1 && BAG_CRATE_P === 0.50);
     const plusU = { bag: { x2: 1, x3: 0, p1: 1, p2: 1, p3: 1, p5: 1, heal: 0 }, armed: { x2: false, x3: false, p1: true, p2: true, p3: true, p5: true, heal: false }, stam: 100 };
     ok('plus add', Math.abs(bagPlusMul(plusU) - 2.1) < 1e-9);
     const x2p5 = { bag: { x2: 1, x3: 0, p1: 0, p2: 0, p3: 0, p5: 1, heal: 0 }, armed: { x2: true, x3: false, p1: false, p2: false, p3: false, p5: true, heal: false }, stam: 100 };
@@ -10377,8 +10416,8 @@
     ok('heal cap', useHeal(hu) === true && hu.hp === 100 && hu.bag.heal === 0 && hu.stam === 70);
     const broke = { bag: { x2: 0, x3: 0, p1: 0, p2: 0, p3: 0, p5: 0, heal: 1 }, armed: freshArmed(), hp: 50, max: 100, x: 152, y: 400, stam: 10 };
     ok('heal 体不够', useHeal(broke) === false && broke.bag.heal === 1 && broke.hp === 50);
-    ok('crate bag instead of 术', maybeBagCrate('item', 0.34) === 'bag');
-    ok('crate bag miss 术', maybeBagCrate('item', 0.35) === 'item');
+    ok('crate bag instead of 术', maybeBagCrate('item', 0.49) === 'bag');
+    ok('crate bag miss 术', maybeBagCrate('item', 0.50) === 'item');
     ok('crate bag instead of 怒', maybeBagCrate('rage', 0.0) === 'bag');
     ok('crate gold stays', maybeBagCrate('gold', 0) === 'gold');
     const bagC = { items: freshItems(), bag: freshBag(), rage: 10, stake: false };
@@ -10428,6 +10467,69 @@
     ok('readout 体不够 still', bagCanFire(poor) === false && bagFireCost(poor) === 80);
     ok('g vk v42', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('stack math still v40 after readout', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
+    ok('crate bag p 50', BAG_CRATE_P === 0.50);
+    ok('crate bag prefer ×2 +3 +2', BAG_CRATE_W.x2 > BAG_CRATE_W.heal && BAG_CRATE_W.p3 > BAG_CRATE_W.heal && BAG_CRATE_W.p2 > BAG_CRATE_W.heal);
+    const wTot = BAG_CRATE_W.x2 + BAG_CRATE_W.x3 + BAG_CRATE_W.p1 + BAG_CRATE_W.p2 + BAG_CRATE_W.p3 + BAG_CRATE_W.p5 + BAG_CRATE_W.heal;
+    ok('pick crate ×2', pickCrateBagId(0) === 'x2');
+    ok('pick crate +2', pickCrateBagId((BAG_CRATE_W.x2 + BAG_CRATE_W.x3 + BAG_CRATE_W.p1 + 0.5) / wTot) === 'p2');
+    ok('pick crate +3', pickCrateBagId((BAG_CRATE_W.x2 + BAG_CRATE_W.x3 + BAG_CRATE_W.p1 + BAG_CRATE_W.p2 + 0.5) / wTot) === 'p3');
+    ok('pick crate 回春 last', pickCrateBagId((wTot - 0.4) / wTot) === 'heal');
+    const gx2 = grantBagItem({ bag: freshBag(), armed: freshArmed(), stake: false }, 'x2');
+    ok('toast 堂匣 · ×2', gx2 && gx2.toast === '堂匣 · ×2' && gx2.tint === BAG_TINT.x2);
+    const gp3 = grantBagItem({ bag: freshBag(), armed: freshArmed(), stake: false }, 'p3');
+    ok('toast 堂匣 · +3', gp3 && gp3.toast === '堂匣 · +3' && gp3.tint === BAG_TINT.p3);
+    const aiSave = G.ai;
+    const mapSave = G.mapId;
+    const hSave = G.H;
+    const pSave = G.p;
+    const fSave = G.f;
+    const p2Save = G.p2;
+    const f2Save = G.f2;
+    G.mapId = 'plain';
+    G.H = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    G.p = { x: 200, y: 386, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.p2 = null;
+    G.f2 = null;
+    G.ai = 2;
+    const hardFar = { x: 720, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 100, bag: { x2: 1, x3: 1, p1: 0, p2: 1, p3: 1, p5: 0, heal: 1 }, armed: freshArmed() };
+    const farPlan = planAIBag(hardFar);
+    ok('狠 far ×2++3', farPlan.join('+') === 'x2+p3');
+    const hardClose = { x: 280, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 90, bag: { x2: 1, x3: 1, p1: 0, p2: 1, p3: 1, p5: 0, heal: 0 }, armed: freshArmed() };
+    const closePlan = planAIBag(hardClose);
+    ok('狠 close ×3++2', closePlan.join('+') === 'x3+p2');
+    ok('狠 never ×2 and ×3', closePlan.indexOf('x2') < 0 && closePlan.indexOf('x3') >= 0);
+    const hardNoP3 = { x: 720, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 70, bag: { x2: 1, x3: 1, p1: 0, p2: 1, p3: 0, p5: 0, heal: 0 }, armed: freshArmed() };
+    ok('狠 no +3 uses +2', planAIBag(hardNoP3).join('+') === 'x2+p2');
+    const hardLow = { x: 280, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 59, bag: { x2: 1, x3: 1, p1: 0, p2: 1, p3: 1, p5: 0, heal: 0 }, armed: freshArmed() };
+    ok('狠 stam<60 none', planAIBag(hardLow).length === 0);
+    const hardMidClose = { x: 280, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 70, bag: { x2: 1, x3: 1, p1: 0, p2: 1, p3: 1, p5: 0, heal: 0 }, armed: freshArmed() };
+    ok('狠 close stam70 still ×2++3', planAIBag(hardMidClose).join('+') === 'x2+p3');
+    const hardNoX3 = { x: 280, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 90, bag: { x2: 1, x3: 0, p1: 0, p2: 1, p3: 1, p5: 0, heal: 0 }, armed: freshArmed() };
+    ok('狠 close no ×3 falls ×2++3', planAIBag(hardNoX3).join('+') === 'x2+p3');
+    G.ai = 1;
+    const midU = { x: 720, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 100, bag: { x2: 1, x3: 1, p1: 1, p2: 1, p3: 1, p5: 1, heal: 1 }, armed: freshArmed() };
+    ok('中 ×2 only', planAIBag(midU, 0).join('+') === 'x2');
+    ok('中 no plus', planAIBag(midU, 0).indexOf('p3') < 0 && planAIBag(midU, 0).indexOf('p2') < 0 && planAIBag(midU, 0).indexOf('x3') < 0);
+    ok('中 miss roll', planAIBag(midU, 0.28).length === 0);
+    G.ai = 0;
+    ok('易 almost never', planAIBag(midU, 0).length === 0);
+    carve(200, 400, 48);
+    G.ai = 2;
+    const hardVsPit = { x: 720, y: 386, r: 14, hp: 100, max: 100, side: 'f', id: 'f', stam: 100, bag: { x2: 1, x3: 1, p2: 1, p3: 1, p1: 0, p5: 0, heal: 0 }, armed: freshArmed() };
+    ok('狠 skip buried', pitDepth(G.p) >= BURY_PX && planAIBag(hardVsPit).length === 0);
+    G.ai = aiSave;
+    G.mapId = mapSave;
+    G.H = hSave;
+    G.p = pSave;
+    G.f = fSave;
+    G.p2 = p2Save;
+    G.f2 = f2Save;
+    ok('g vk v43', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('stack math still v40 after v43', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_COST.p3 === 25 && BAG_KEYS.length === 7);
+    ok('no 9th wep after v43', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('maps 19 after v43', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
+    ok('hud readout still', bagStackReadout(x2p5) === '2发×1.35');
 
     G.mapId = 'plain';
     G.H = buildHeight('plain');
