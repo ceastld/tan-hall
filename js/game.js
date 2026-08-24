@@ -48,6 +48,18 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
+  const CRATE_NAME = '堂匣';
+  const CRATE_GOLD_NAME = '金匣';
+  const CRATE_R = 9;
+  const CRATE_MAX = 2;
+  const CRATE_P = 0.28;
+  const CRATE_SUDDEN_P = 0.42;
+  const CRATE_ITEM_P = 0.50;
+  const CRATE_RAGE_P = 0.35;
+  const CRATE_GOLD_P = 0.15;
+  const CRATE_RAGE = 18;
+  const CRATE_GOLD_RAGE = 28;
+  const CRATE_WALK = 36;
   const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽' };
   const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost'];
   const WALL_MAXH = 160;
@@ -214,6 +226,8 @@
   const HOT = [139, 92, 255];
   const WHT = [244, 238, 255];
   const DIRT = [92, 68, 48];
+  const WOOD = [176, 118, 62];
+  const WOOD_DK = [96, 58, 28];
   const ICE = [160, 220, 255];
   const RAIL = [100, 255, 210];
   const FIRE = [255, 120, 48];
@@ -409,6 +423,7 @@
     fires: [],
     walls: [],
     fruits: [],
+    crates: [],
     veils: [],
     lastHit: null,
     windSpinT: 0,
@@ -936,6 +951,30 @@
     return isFrostIce(u.x) && !isDeathVoid(u.x);
   }
 
+  function cratePitAt(x) {
+    const g = groundAt(x);
+    const gl = groundAt(clamp(x - 48, 0, VW - 1));
+    const gr = groundAt(clamp(x + 48, 0, VW - 1));
+    return g - (gl + gr) * 0.5;
+  }
+
+  function crateGroundOk(x) {
+    if (x < 40 || x > VW - 40) return false;
+    if (!G.H) return false;
+    if (isDeathVoid(x)) return false;
+    if (isFrostIce(x)) return false;
+    if (G.sudden && (x < G.safeL + 16 || x > G.safeR - 16)) return false;
+    const gy = groundAt(x);
+    if (gy >= VH - 16) return false;
+    if (G.mapId === 'moon' && gy >= MOON_WATER_Y) return false;
+    if (G.mapId === 'cliff' && (x | 0) > CLIFF_EDGE && gy >= CLIFF_WATER_Y) return false;
+    if (G.mapId === 'forge' && gy > 400) return false;
+    if (cratePitAt(x) >= BURY_PX) return false;
+    if (Math.abs(groundAt(clamp(x - 8, 0, VW - 1)) - groundAt(clamp(x + 8, 0, VW - 1))) > 28) return false;
+    if (inWall(x, gy - 8) || inWall(x, gy - 18)) return false;
+    return true;
+  }
+
   function iceR(r, x) {
     if (!isFrostIce(x) || r <= 0) return r;
     return r * FROST_CRATER;
@@ -1010,6 +1049,7 @@
     u.x = nx;
     u.walkT = 0.12;
     ungroundIfAir(u);
+    tryPickCrates(u);
     if (!onIce(u)) u.slideVx = 0;
     return dx;
   }
@@ -2778,6 +2818,7 @@
     G.mode = 'end';
     G.phase = 'end';
     clearFruits(true);
+    clearCrates(true);
     audio.chargeStop();
     const turns = G.turns;
     if (pd && fd) {
@@ -3251,6 +3292,246 @@
     }
   }
 
+  function crateModeOk() {
+    if (G.kind === 'drill') return false;
+    if (G.kind !== 'hall' && G.kind !== 'core' && G.kind !== 'seat' && G.kind !== 'duo' && G.kind !== 'quad') return false;
+    return true;
+  }
+
+  function crateLate() {
+    return !!G.sudden;
+  }
+
+  function liveCrateCount() {
+    return (G.crates && G.crates.length) ? G.crates.length : 0;
+  }
+
+  function rollCrateKind(r) {
+    r = r == null ? Math.random() : r;
+    if (r < CRATE_ITEM_P) return 'item';
+    if (r < CRATE_ITEM_P + CRATE_RAGE_P) return 'rage';
+    return 'gold';
+  }
+
+  function crateBlocked(x) {
+    if (!crateGroundOk(x)) return true;
+    const gy = groundAt(x);
+    const bodies = allUnits();
+    for (let bi = 0; bi < bodies.length; bi++) {
+      const u = bodies[bi];
+      if (!u || u.hp <= 0) continue;
+      if (hypot(x - u.x, gy - u.r - u.y) < 48) return true;
+    }
+    const list = G.crates;
+    if (list) {
+      for (let i = 0; i < list.length; i++) {
+        if (Math.abs(x - list[i].x) < 56) return true;
+      }
+    }
+    return false;
+  }
+
+  function pickCrateSpot() {
+    for (let i = 0; i < 48; i++) {
+      const x = rand(48, VW - 48);
+      if (!crateBlocked(x)) return { x: x, y: groundAt(x) };
+    }
+    for (let x = 80; x < VW - 80; x += 24) {
+      if (!crateBlocked(x)) return { x: x, y: groundAt(x) };
+    }
+    return null;
+  }
+
+  function spawnCrateAt(x) {
+    if (!G.crates) G.crates = [];
+    const gy = groundAt(x) - CRATE_R;
+    const snap = !!REDUCE;
+    G.crates.push({
+      x: x,
+      y: snap ? gy : 22,
+      vy: 0,
+      r: CRATE_R,
+      bounce: snap ? 0 : 1,
+      landY: gy
+    });
+    if (!snap) {
+      burst(x, 28, WOOD, REDUCE ? 2 : 6, 40, 0.18);
+    }
+    return G.crates[G.crates.length - 1];
+  }
+
+  function maybeDropCrate(force) {
+    G.crates = G.crates || [];
+    if (!crateModeOk()) return null;
+    if ((G.turns | 0) < 1) return null;
+    if (G.crates.length >= CRATE_MAX) return null;
+    if (!force && Math.random() >= (crateLate() ? CRATE_SUDDEN_P : CRATE_P)) return null;
+    const p = pickCrateSpot();
+    if (!p) return null;
+    return spawnCrateAt(p.x);
+  }
+
+  function clearCrates(puff) {
+    const list = G.crates;
+    if (list && puff) {
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        burst(c.x, c.y, WOOD, REDUCE ? 3 : 6, 40, 0.16);
+      }
+    }
+    if (list) list.length = 0;
+  }
+
+  function grantCrate(owner, kind) {
+    if (!owner || owner.stake) return null;
+    if (!owner.items) owner.items = { leap: 0, warp: 0, neon: 0, drum: 0, nixi: 0, veil: 0 };
+    if (kind === 'gold') {
+      addRage(owner, CRATE_GOLD_RAGE);
+      return { kind: 'gold', toast: CRATE_GOLD_NAME };
+    }
+    if (kind === 'item') {
+      const open = [];
+      for (let i = 0; i < ITEM_KEYS.length; i++) {
+        const k = ITEM_KEYS[i];
+        if ((owner.items[k] || 0) < fruitCap(k)) open.push(k);
+      }
+      if (open.length) {
+        const k = open[irand(0, open.length - 1)];
+        owner.items[k] = (owner.items[k] || 0) + 1;
+        return { kind: 'item', toast: CRATE_NAME + ' · 术', id: k, name: ITEM_NAME[k] };
+      }
+      kind = 'rage';
+    }
+    addRage(owner, CRATE_RAGE);
+    return { kind: 'rage', toast: CRATE_NAME + ' · 怒' };
+  }
+
+  function collectCrate(idx, owner) {
+    const list = G.crates;
+    if (!list || idx < 0 || idx >= list.length) return;
+    const c = list[idx];
+    list.splice(idx, 1);
+    burst(c.x, c.y, WOOD, REDUCE ? 6 : 14, 120, 0.36);
+    burst(c.x, c.y, GOLD, REDUCE ? 3 : 7, 80, 0.22);
+    ringAt(c.x, c.y, WOOD, 22);
+    audio.ensure();
+    audio.beep(240, 0.07, 'square', 0.03, 180);
+    audio.beep(420, 0.08, 'triangle', 0.024, 720);
+    const got = grantCrate(owner, rollCrateKind());
+    if (got && got.kind === 'gold') {
+      toast(CRATE_GOLD_NAME, false, true);
+      floatText(c.x, c.y - 14, '+' + CRATE_GOLD_RAGE, GOLD, false);
+    } else if (got && got.kind === 'rage') {
+      toast(CRATE_NAME + ' · 怒', false, true);
+      floatText(c.x, c.y - 14, '+' + CRATE_RAGE, GOLD, false);
+    } else if (got && got.kind === 'item') {
+      toast(CRATE_NAME + ' · 术', false, false);
+      floatText(c.x, c.y - 14, got.name || '术', HOT, false);
+    } else {
+      toast(CRATE_NAME, false, false);
+    }
+    syncHud();
+  }
+
+  function crateAt(x, y) {
+    const list = G.crates;
+    if (!list || !list.length) return null;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (hypot(x - c.x, y - c.y) <= c.r + 5) return c;
+    }
+    return null;
+  }
+
+  function blastCrates(x, y, splash, owner) {
+    const list = G.crates;
+    if (!list || !list.length) return;
+    const r = splash || 0;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const c = list[i];
+      const d = hypot(x - c.x, y - c.y);
+      if (d <= r || d <= c.r + 5) collectCrate(i, owner);
+    }
+  }
+
+  function tryPickCrates(u) {
+    if (!u || u.hp <= 0) return;
+    const list = G.crates;
+    if (!list || !list.length) return;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const c = list[i];
+      if (hypot(u.x - c.x, u.y - c.y) <= (u.r || UNIT_R) + c.r) collectCrate(i, u);
+    }
+  }
+
+  function tickCrates(dt) {
+    const list = G.crates;
+    if (!list || !list.length) return;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const c = list[i];
+      if (isDeathVoid(c.x) || groundAt(c.x) >= VH - 12) {
+        burst(c.x, c.y, WOOD, REDUCE ? 3 : 6, 40, 0.16);
+        list.splice(i, 1);
+        continue;
+      }
+      const gy = groundAt(c.x) - c.r;
+      c.landY = gy;
+      if (REDUCE) {
+        c.y = gy;
+        c.vy = 0;
+        c.bounce = 0;
+        continue;
+      }
+      if (c.y < gy - 0.4) {
+        c.vy += GRAV * dt;
+        c.y += c.vy * dt;
+        if (c.y >= gy) {
+          c.y = gy;
+          if (c.bounce > 0 && c.vy > 50) {
+            c.vy = -c.vy * 0.34;
+            c.bounce -= 1;
+          } else {
+            c.vy = 0;
+            c.bounce = 0;
+          }
+        }
+      } else {
+        c.y = gy;
+        if (c.vy > 0) c.vy = 0;
+      }
+    }
+    eachUnit(tryPickCrates);
+  }
+
+  function crateWalkBias(from, walkTo, best) {
+    const list = G.crates;
+    if (!from || !list || !list.length) return walkTo;
+    const foe = otherUnit(from);
+    if (!foe || foe.hp <= 0) return walkTo;
+    if ((from.hp || 0) < 40) return walkTo;
+    if (best && best.score >= 10000) return walkTo;
+    if (foe.hp <= 24 && best && best.score >= 4800) return walkTo;
+    let crate = null;
+    let cd = 1e9;
+    for (let i = 0; i < list.length; i++) {
+      const d = Math.abs(list[i].x - from.x);
+      if (d < cd) {
+        cd = d;
+        crate = list[i];
+      }
+    }
+    if (!crate) return walkTo;
+    const fd = Math.abs(foe.x - from.x);
+    if (!(cd < fd)) return walkTo;
+    const dir = crate.x >= from.x ? 1 : -1;
+    let nx = clamp((walkTo == null ? from.x : walkTo) + dir * CRATE_WALK, 28, VW - 28);
+    if (isDeathVoid(nx)) return walkTo;
+    if (wallBlocksWalk(nx, groundAt(nx) - (from.r || UNIT_R), from.r || UNIT_R)) return walkTo;
+    if (G.sudden && (nx < G.safeL + 16 || nx > G.safeR - 16)) return walkTo;
+    if (Math.abs(nx - from.x) > WALK_PX) nx = from.x + Math.sign(nx - from.x) * WALK_PX;
+    return nx;
+  }
+
   function explode(x, y, wep, owner, fromHit, shot, opts) {
     opts = opts || {};
     if (shot === undefined) shot = G.shot;
@@ -3275,6 +3556,7 @@
         snapMoon(pop.x, pop.r, wep);
         punchCover(pop.x, pop.y, pop.r, wep);
         if (applyBlast(pop.x, pop.y, wep, owner, wasUlt)) hit = true;
+        blastCrates(pop.x, pop.y, wep.splash, owner);
         burst(pop.x, pop.y, hit ? HOT : DIRT, hit ? 12 : 8, 160, 0.4);
         ringAt(pop.x, pop.y, HOT, pop.r * 1.5);
       }
@@ -3298,6 +3580,7 @@
         }
       }
       hit = applyBlast(x, y, wep, owner, wasUlt) || hit;
+      blastCrates(x, y, wep.splash, owner);
       const rgb = wep.id === 8 ? MINE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : (hit ? unitRgb(owner) : DIRT)));
       burst(x, y, rgb, hit ? 28 : 16, hit ? 260 : 180, 0.55);
       burst(x, y, wep.id === 8 ? MINE : (wep.id === 7 ? PEARL : (wep.id === 6 ? FIRE : GOLD)), hit ? 10 : 4, 140, 0.35);
@@ -3519,6 +3802,11 @@
       explode(clamp(s.x, 2, VW - 2), Math.min(s.y, VH - 4), s.wep, s.owner, false, s);
       return;
     }
+    if (crateAt(s.x, s.y)) {
+      if (isMineWep(s.wep)) explode(s.x, s.y, mineHitWep(s.wep), s.owner, false, s);
+      else explode(s.x, s.y, s.wep, s.owner, false, s);
+      return;
+    }
     const u = unitAt(s.x, s.y, s.owner);
     if (u) {
       if (isMineWep(s.wep)) explode(s.x, s.y, mineHitWep(s.wep), s.owner, true, s);
@@ -3642,6 +3930,7 @@
       if (L.u.grounded) L.u.y = groundAt(L.u.x) - L.u.r;
       G.busy = null;
       G.leap = null;
+      tryPickCrates(L.u);
       if (G.phase === 'aim') { /* stay aim */ }
     }
   }
@@ -3678,6 +3967,7 @@
     u.vy = 0;
     u.fall = 0;
     ungroundIfAir(u);
+    tryPickCrates(u);
     G.busy = null;
     toast('影挪', false, true);
     audio.ensure();
@@ -3812,6 +4102,7 @@
   function continueAfterAction() {
     const actor = curUnit();
     tickVeils(actor);
+    maybeDropCrate();
     if (G.kind === 'drill') beginTurn('p');
     else if (isSquad()) {
       applyActDelay(actor);
@@ -4154,6 +4445,7 @@
     }
     from.x = ox;
     from.y = oy;
+    walkTo = crateWalkBias(from, walkTo, best);
     return { best: best, walkTo: walkTo };
   }
 
@@ -4460,6 +4752,7 @@
         u.face = dir;
         u.walkT = 0.1;
         ungroundIfAir(u);
+        tryPickCrates(u);
       } else {
         AI.stage = 2;
         AI.wait = 0.12;
@@ -4520,6 +4813,7 @@
     u.face = dir;
     u.walkT = 0.12;
     ungroundIfAir(u);
+    tryPickCrates(u);
   }
 
   function aimPlayer(dt) {
@@ -4605,6 +4899,7 @@
     G.safeR = VW - 1;
     G.slowMo = 0;
     G.fruits = [];
+    G.crates = [];
     G.veils = [];
     G.lastHit = null;
     G.coachN = 0;
@@ -4842,6 +5137,7 @@
       if (G.stormT >= G.stormNext) strikeStorm();
     }
     tickMines(dt);
+    tickCrates(dt);
 
     if (G.phase === 'frozenWait') {
       G.frozenT -= dt;
@@ -6034,6 +6330,46 @@
     }
   }
 
+  function drawCrates(g) {
+    const list = G.crates;
+    if (!list || !list.length) return;
+    if (G.mode !== 'play' && G.mode !== 'end') return;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (!c) continue;
+      const hw = 8;
+      const hh = 7;
+      const x = c.x;
+      const y = c.y;
+      g.save();
+      g.shadowColor = rgba(WOOD, REDUCE ? 0.2 : 0.4);
+      g.shadowBlur = REDUCE ? 4 : 10;
+      g.fillStyle = rgba(WOOD, 0.96);
+      g.fillRect(x - hw, y - hh, hw * 2, hh * 2);
+      g.shadowBlur = 0;
+      g.strokeStyle = rgba(WOOD_DK, 0.95);
+      g.lineWidth = 1.4;
+      g.strokeRect(x - hw + 0.5, y - hh + 0.5, hw * 2 - 1, hh * 2 - 1);
+      g.beginPath();
+      g.moveTo(x - hw + 1, y - hh + 4.5);
+      g.lineTo(x + hw - 1, y - hh + 4.5);
+      g.moveTo(x - hw + 1, y);
+      g.lineTo(x + hw - 1, y);
+      g.moveTo(x, y - hh + 4.5);
+      g.lineTo(x, y + hh - 1);
+      g.stroke();
+      g.strokeStyle = rgba(GOLD, 0.45);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x - 3.2, y - hh + 1.4);
+      g.lineTo(x + 3.2, y - hh + 1.4);
+      g.stroke();
+      g.fillStyle = rgba(WOOD_DK, 0.7);
+      g.fillRect(x - 1.2, y - hh - 2.4, 2.4, 2.6);
+      g.restore();
+    }
+  }
+
   function drawChargeBar(g, u) {
     if (!(G.phase === 'charge' && curUnit() === u)) return;
     const w = 52;
@@ -6319,6 +6655,7 @@
     drawPredict(ctx);
     drawWarpAim(ctx);
     drawFruits(ctx);
+    drawCrates(ctx);
 
     eachUnit(function (u) {
       if (u.hp <= 0) return;
@@ -7902,6 +8239,124 @@
     ok('silk still after 霜泽', typeof silkCount === 'function' && silkCount(0) === 0);
     ok('雷泽 still after 霜泽', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune'));
     ok('g vk v28', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+    G.walls = [];
+    G.kind = 'hall';
+    G.mode = 'play';
+    G.phase = 'aim';
+    G.sudden = false;
+    G.turns = 0;
+    G.turn = 'p';
+    G.crates = [];
+    G.fruits = [];
+    G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p', items: freshItems(), rage: 10, stam: 100 };
+    G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', items: freshItems(), rage: 10, stam: 100, ang: 115 };
+    G.p2 = null; G.f2 = null;
+    ok('crate names locked', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣');
+    ok('crate table 50/35/15', CRATE_ITEM_P === 0.5 && CRATE_RAGE_P === 0.35 && CRATE_GOLD_P === 0.15 && Math.abs(CRATE_ITEM_P + CRATE_RAGE_P + CRATE_GOLD_P - 1) < 1e-9);
+    ok('crate rage nums', CRATE_RAGE === 18 && CRATE_GOLD_RAGE === 28 && CRATE_MAX === 2 && CRATE_R === 9);
+    ok('crate roll 术', rollCrateKind(0.49) === 'item');
+    ok('crate roll 怒', rollCrateKind(0.50) === 'rage' && rollCrateKind(0.84) === 'rage');
+    ok('crate roll 金匣', rollCrateKind(0.85) === 'gold');
+    ok('first turn no crate', maybeDropCrate(true) == null && liveCrateCount() === 0);
+    G.turns = 2;
+    const drop1 = maybeDropCrate(true);
+    ok('crate drops on dirt', !!drop1 && crateGroundOk(drop1.x) && liveCrateCount() === 1);
+    G.crates = [];
+    spawnCrateAt(220);
+    spawnCrateAt(420);
+    ok('crate cap 2', liveCrateCount() === 2);
+    maybeDropCrate(true);
+    ok('crate cap holds', liveCrateCount() === 2);
+    G.mapId = 'frost';
+    G.H = buildHeight('frost');
+    ok('crate not ice', crateGroundOk(480) === false && crateGroundOk(FROST_PX) === true);
+    G.mapId = 'forge';
+    G.H = buildHeight('forge');
+    ok('crate not lava/void', crateGroundOk(270) === false && crateGroundOk(148) === true);
+    G.mapId = 'isles';
+    G.H = buildHeight('isles');
+    ok('crate not void gap', crateGroundOk(330) === false && crateGroundOk(160) === true);
+    G.mapId = 'moon';
+    G.H = buildHeight('moon');
+    ok('crate not moon pit', crateGroundOk(MOON_CX) === false && crateGroundOk(MOON_PX) === true);
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+    G.walls = [];
+    const pitX = 400;
+    carve(pitX, G.H[pitX], 48);
+    ok('crate not pit', crateGroundOk(pitX) === false);
+    G.H = buildHeight('plain');
+    G.kind = 'drill';
+    G.turns = 4;
+    G.crates = [];
+    ok('drill no crate', crateModeOk() === false && maybeDropCrate(true) == null);
+    G.kind = 'hall';
+    G.turns = 3;
+    ok('hall can crate', crateModeOk() === true);
+    const bagI = { items: { leap: 2, warp: 1, neon: 2, drum: 1, nixi: 1, veil: 1 }, rage: 10, stake: false };
+    const gi = grantCrate(bagI, 'item');
+    ok('crate grant 术', gi && gi.kind === 'item' && gi.toast === '堂匣 · 术' && bagI.items[gi.id] === ITEM_MAX[gi.id] + 1);
+    const bagR = { items: freshItems(), rage: 40, stake: false };
+    const gr = grantCrate(bagR, 'rage');
+    ok('crate grant 怒 +18', gr && gr.kind === 'rage' && gr.toast === '堂匣 · 怒' && bagR.rage === 58);
+    const bagG = { items: freshItems(), rage: 40, stake: false };
+    const gg = grantCrate(bagG, 'gold');
+    ok('crate grant 金匣 +28', gg && gg.kind === 'gold' && gg.toast === '金匣' && bagG.rage === 68);
+    const bagHeld = { items: { leap: 3, warp: 2, neon: 3, drum: 2, nixi: 1, veil: 1 }, rage: 10, stake: false };
+    const gf = grantCrate(bagHeld, 'item');
+    ok('crate 术 full → 怒', gf && gf.kind === 'rage' && bagHeld.rage === 28);
+    G.kind = 'seat';
+    ok('seat can crate', crateModeOk() === true);
+    G.kind = 'duo';
+    ok('duo can crate', crateModeOk() === true);
+    G.kind = 'quad';
+    ok('quad can crate', crateModeOk() === true);
+    G.kind = 'core';
+    ok('core can crate', crateModeOk() === true);
+    G.kind = 'hall';
+    G.mapId = 'plain';
+    G.H = buildHeight('plain');
+    G.walls = [];
+    G.p = { x: 200, y: G.H[200] - 14, r: 14, hp: 80, max: 100, side: 'p', id: 'p' };
+    G.f = { x: 700, y: G.H[700] - 14, r: 14, hp: 80, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    G.crates = [{ x: 640, y: G.H[640] - 9, r: 9, vy: 0, bounce: 0 }];
+    const biasWalk = crateWalkBias(G.f, G.f.x, { score: 1800 });
+    ok('AI extra walk to nearer crate', biasWalk < G.f.x && Math.abs(G.f.x - biasWalk - CRATE_WALK) < 2, Math.round(biasWalk));
+    const biasKill = crateWalkBias(G.f, G.f.x, { score: 12000 });
+    ok('AI never skip kill for crate', biasKill === G.f.x);
+    G.f.hp = 22;
+    const biasHp = crateWalkBias(G.f, G.f.x, { score: 1800 });
+    ok('AI crate only if HP safe', biasHp === G.f.x);
+    G.f.hp = 80;
+    G.crates = [{ x: 100, y: G.H[100] - 9, r: 9, vy: 0, bounce: 0 }];
+    const biasFar = crateWalkBias(G.f, G.f.x, { score: 1800 });
+    ok('AI crate must be nearer than foe', biasFar === G.f.x);
+    G.crates = [];
+    G.p = { x: 400, y: G.H[400] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p', items: freshItems(), rage: 0 };
+    G.crates = [{ x: 400, y: G.H[400] - 14, r: 9, vy: 0, bounce: 0 }];
+    tryPickCrates(G.p);
+    ok('walk pickup crate', liveCrateCount() === 0);
+    G.crates = [{ x: 480, y: G.H[480] - 9, r: 9, vy: 0, bounce: 0 }];
+    blastCrates(480, G.H[480], 36, G.p);
+    ok('splash breaks crate', liveCrateCount() === 0);
+    G.crates = [];
+    spawnCrateAt(200);
+    ok('REDUCE still spawns', liveCrateCount() === 1);
+    G.crates = [];
+    G.sudden = true;
+    ok('crate late is 殿塌', crateLate() === true && CRATE_SUDDEN_P > CRATE_P);
+    G.sudden = false;
+    ok('no 9th wep', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('maps still 16 after 堂匣', MAP_IDS.length === 16 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门' && MAP_NAME.frost === '霜泽');
+    ok('locked names after 堂匣', MAP_NAME.cliff === '断崖' && STORM_NAME === '雷泽' && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('ghost K still after 堂匣', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('silk still after 堂匣', typeof silkCount === 'function' && silkCount(0) === 0);
+    ok('no banned crate words', CRATE_NAME.indexOf('传送') < 0 && CRATE_NAME.indexOf('飞行') < 0 && CRATE_GOLD_NAME.indexOf('三叉戟') < 0 && CRATE_GOLD_NAME.indexOf('激怒') < 0);
+    ok('g vk v29', GRAV === 260 && VK === 420 && WIND_K === 2.05);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
