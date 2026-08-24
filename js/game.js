@@ -82,6 +82,10 @@
   const BAG_X3_SPREAD = 8;
   const BAG_CRATE_P = 0.50;
   const BAG_CRATE_W = { x2: 3, x3: 2, p1: 2, p2: 3, p3: 3, p5: 2, heal: 1 };
+  const GOLD_BAG_NAME = '金匣袋';
+  const GOLD_BAG_P = 0.40;
+  const GOLD_BAG_W = { x2: 4, x3: 2, p1: 2, p2: 2, p3: 3, p5: 4, heal: 1 };
+  const GOLD_BAG_TOAST_T = 0.85;
   const BAG_FIRE_NAME = '袋火';
   const BAG_FIRE_LEN = 12;
   const BAG_FIRE_PLUS_P = 0.32;
@@ -615,6 +619,7 @@
   let hidden = false;
   let addTok = 0;
   let toastTok = 0;
+  const toastQ = [];
   let kickTok = 0;
   let terrainDirty = true;
   let terrainCv = null;
@@ -1190,9 +1195,10 @@
       craterAdd: mods.craterAdd || 0
     };
   }
-  function pickCrateBagId(r) {
+  function pickCrateBagId(r, weights) {
+    const W = weights || BAG_CRATE_W;
     let total = 0;
-    for (let i = 0; i < BAG_KEYS.length; i++) total += BAG_CRATE_W[BAG_KEYS[i]] || 0;
+    for (let i = 0; i < BAG_KEYS.length; i++) total += W[BAG_KEYS[i]] || 0;
     if (total <= 0) return BAG_KEYS[irand(0, BAG_KEYS.length - 1)];
     let t = r == null ? Math.random() : r;
     if (!(t >= 0)) t = 0;
@@ -1200,22 +1206,26 @@
     t *= total;
     for (let i = 0; i < BAG_KEYS.length; i++) {
       const k = BAG_KEYS[i];
-      t -= BAG_CRATE_W[k] || 0;
+      t -= W[k] || 0;
       if (t < 0) return k;
     }
     return BAG_KEYS[BAG_KEYS.length - 1];
   }
-  function grantBagItem(owner, id) {
+  function grantBagItem(owner, id, prefix, weights) {
     if (!owner || owner.stake) return null;
     ensureBag(owner);
-    const k = id && BAG_NAME[id] ? id : pickCrateBagId();
+    const k = id && BAG_NAME[id] ? id : pickCrateBagId(null, weights);
     owner.bag[k] = (owner.bag[k] || 0) + 1;
-    return { kind: 'bag', toast: CRATE_NAME + ' · ' + BAG_NAME[k], id: k, name: BAG_NAME[k], tint: BAG_TINT[k] };
+    const head = prefix || CRATE_NAME;
+    return { kind: 'bag', toast: head + ' · ' + BAG_NAME[k], id: k, name: BAG_NAME[k], tint: BAG_TINT[k] };
   }
   function maybeBagCrate(kind, r) {
     if (kind === 'gold') return kind;
     if ((r == null ? Math.random() : r) < BAG_CRATE_P) return 'bag';
     return kind;
+  }
+  function maybeGoldBag(r) {
+    return (r == null ? Math.random() : r) < GOLD_BAG_P;
   }
   function consumeBagOnFire(u) {
     const mods = { dmgMul: 1, splashMul: 1, craterMul: 1, extra: 0, fork: false, xMul: 1, plusMul: 1, shellMul: 1 };
@@ -3479,9 +3489,9 @@
   };
 
 
-  function toast(msg, warn, gold, tint) {
+  function showToast(msg, warn, gold, tint, dur) {
     const tiny = gold === 'tiny';
-    G.toastT = tiny ? 1.15 : 1.4;
+    G.toastT = dur != null ? dur : (tiny ? 1.15 : 1.4);
     toastTok += 1;
     if (!toastEl) return;
     toastEl.textContent = msg;
@@ -3498,7 +3508,17 @@
     toastEl.classList.remove('hidden');
   }
 
+  function toast(msg, warn, gold, tint, dur) {
+    toastQ.length = 0;
+    showToast(msg, warn, gold, tint, dur);
+  }
+
+  function queueToast(msg, warn, gold, tint, dur) {
+    toastQ.push({ msg: msg, warn: warn, gold: gold, tint: tint, dur: dur });
+  }
+
   function toastPass(side) {
+    toastQ.length = 0;
     const mag = side === 'f';
     G.toastT = 2.6;
     toastTok += 1;
@@ -5001,13 +5021,18 @@
     if (list) list.length = 0;
   }
 
-  function grantCrate(owner, kind) {
+  function grantCrate(owner, kind, goldBagR) {
     if (!owner || owner.stake) return null;
     if (!owner.items) owner.items = { leap: 0, warp: 0, neon: 0, drum: 0, nixi: 0, veil: 0 };
     ensureBag(owner);
     if (kind === 'gold') {
       addRage(owner, CRATE_GOLD_RAGE);
-      return { kind: 'gold', toast: CRATE_GOLD_NAME };
+      const got = { kind: 'gold', toast: CRATE_GOLD_NAME };
+      if (maybeGoldBag(goldBagR)) {
+        const extra = grantBagItem(owner, null, CRATE_GOLD_NAME, GOLD_BAG_W);
+        if (extra) got.bag = extra;
+      }
+      return got;
     }
     if (kind === 'bag') return grantBagItem(owner);
     if (kind === 'item') {
@@ -5040,8 +5065,13 @@
     audio.beep(420, 0.08, 'triangle', 0.024, 720);
     const got = grantCrate(owner, maybeBagCrate(rollCrateKind()));
     if (got && got.kind === 'gold') {
-      toast(CRATE_GOLD_NAME, false, true);
+      const dual = !!(got.bag && got.bag.id);
+      toast(CRATE_GOLD_NAME, false, true, null, dual ? GOLD_BAG_TOAST_T : undefined);
       floatText(c.x, c.y - 14, '+' + CRATE_GOLD_RAGE, GOLD, false);
+      if (dual) {
+        queueToast(got.bag.toast || (CRATE_GOLD_NAME + ' · ' + (got.bag.name || '袋')), false, false, BAG_TINT[got.bag.id], GOLD_BAG_TOAST_T);
+        floatText(c.x, c.y - 28, got.bag.name || '袋', GOLD, false);
+      }
     } else if (got && got.kind === 'rage') {
       toast(CRATE_NAME + ' · 怒', false, true);
       floatText(c.x, c.y - 14, '+' + CRATE_RAGE, GOLD, false);
@@ -6916,7 +6946,12 @@
     if (G.punch > 1) G.punch = 1 + (G.punch - 1) * Math.max(0, 1 - dt * 10);
     if (G.toastT > 0) {
       G.toastT -= dt;
-      if (G.toastT <= 0 && toastEl) toastEl.classList.add('hidden');
+      if (G.toastT <= 0) {
+        if (toastQ.length) {
+          const n = toastQ.shift();
+          showToast(n.msg, n.warn, n.gold, n.tint, n.dur);
+        } else if (toastEl) toastEl.classList.add('hidden');
+      }
     }
     let ck = 5.6;
     if (G.phase === 'fly') ck = 8.4;
@@ -11763,6 +11798,68 @@
     ok('no 9th wep after ×3 分裂', WEPS.length === 8);
     ok('g vk v48', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('stack math still after ×3 分裂', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
+
+    ok('金匣袋 name', GOLD_BAG_NAME === '金匣袋' && GOLD_BAG_P === 0.40 && GOLD_BAG_TOAST_T === 0.85);
+    ok('金匣袋 not a gun', WEPS.length === 8 && WEPS.every(function (w) { return w.name !== GOLD_BAG_NAME; }));
+    ok('maybeBagCrate gold stays gold', maybeBagCrate('gold') === 'gold' && maybeBagCrate('gold', 0) === 'gold' && maybeBagCrate('gold', 0.99) === 'gold');
+    ok('non-gold bag p 50 still', BAG_CRATE_P === 0.50 && maybeBagCrate('item', 0.49) === 'bag' && maybeBagCrate('item', 0.50) === 'item');
+    ok('gold always rage roll', maybeGoldBag(0) === true && maybeGoldBag(0.39) === true && maybeGoldBag(0.40) === false && maybeGoldBag(1) === false);
+    ok('gold pick prefer ×2 +5 +3', GOLD_BAG_W.x2 > GOLD_BAG_W.heal && GOLD_BAG_W.p5 > GOLD_BAG_W.heal && GOLD_BAG_W.p3 > GOLD_BAG_W.heal);
+    ok('gold pick ×2 +5 +3 top', GOLD_BAG_W.x2 >= GOLD_BAG_W.p3 && GOLD_BAG_W.p5 >= GOLD_BAG_W.p3 && GOLD_BAG_W.p3 > GOLD_BAG_W.x3 && GOLD_BAG_W.p3 > GOLD_BAG_W.p2 && GOLD_BAG_W.p3 > GOLD_BAG_W.p1);
+    const gwTot = GOLD_BAG_W.x2 + GOLD_BAG_W.x3 + GOLD_BAG_W.p1 + GOLD_BAG_W.p2 + GOLD_BAG_W.p3 + GOLD_BAG_W.p5 + GOLD_BAG_W.heal;
+    ok('gold pick ×2', pickCrateBagId(0, GOLD_BAG_W) === 'x2');
+    ok('gold pick +3', pickCrateBagId((GOLD_BAG_W.x2 + GOLD_BAG_W.x3 + GOLD_BAG_W.p1 + GOLD_BAG_W.p2 + 0.5) / gwTot, GOLD_BAG_W) === 'p3');
+    ok('gold pick +5', pickCrateBagId((GOLD_BAG_W.x2 + GOLD_BAG_W.x3 + GOLD_BAG_W.p1 + GOLD_BAG_W.p2 + GOLD_BAG_W.p3 + 0.5) / gwTot, GOLD_BAG_W) === 'p5');
+    ok('non-gold pick still ×2 +3 +2', BAG_CRATE_W.x2 > BAG_CRATE_W.heal && BAG_CRATE_W.p3 > BAG_CRATE_W.heal && BAG_CRATE_W.p2 > BAG_CRATE_W.heal);
+    const goldMiss = { items: freshItems(), bag: freshBag(), rage: 10, stake: false };
+    const gMiss = grantCrate(goldMiss, 'gold', 0.40);
+    ok('gold always rage miss bag', gMiss && gMiss.kind === 'gold' && gMiss.toast === '金匣' && !gMiss.bag && goldMiss.rage === 38);
+    const goldHit = { items: freshItems(), bag: freshBag(), rage: 10, stake: false };
+    const bagBefore = goldHit.bag.x2 + goldHit.bag.x3 + goldHit.bag.p1 + goldHit.bag.p2 + goldHit.bag.p3 + goldHit.bag.p5 + goldHit.bag.heal;
+    const gHit = grantCrate(goldHit, 'gold', 0.39);
+    const bagAfter = goldHit.bag.x2 + goldHit.bag.x3 + goldHit.bag.p1 + goldHit.bag.p2 + goldHit.bag.p3 + goldHit.bag.p5 + goldHit.bag.heal;
+    ok('gold 40 bag extra', gHit && gHit.kind === 'gold' && gHit.toast === '金匣' && gHit.bag && gHit.bag.kind === 'bag' && goldHit.rage === 38 && bagAfter === bagBefore + 1);
+    ok('gold bag toast 金匣 ·', gHit.bag.toast === CRATE_GOLD_NAME + ' · ' + BAG_NAME[gHit.bag.id] && gHit.bag.tint === BAG_TINT[gHit.bag.id]);
+    const gx2g = grantBagItem({ bag: freshBag(), armed: freshArmed(), stake: false }, 'x2', CRATE_GOLD_NAME);
+    ok('toast 金匣 · ×2', gx2g && gx2g.toast === '金匣 · ×2' && gx2g.tint === BAG_TINT.x2);
+    const gp5g = grantBagItem({ bag: freshBag(), armed: freshArmed(), stake: false }, 'p5', CRATE_GOLD_NAME);
+    ok('toast 金匣 · +5', gp5g && gp5g.toast === '金匣 · +5' && gp5g.tint === BAG_TINT.p5);
+    const gp3g = grantBagItem({ bag: freshBag(), armed: freshArmed(), stake: false }, 'p3', CRATE_GOLD_NAME);
+    ok('toast 金匣 · +3', gp3g && gp3g.toast === '金匣 · +3' && gp3g.tint === BAG_TINT.p3);
+    toast(CRATE_GOLD_NAME, false, true, null, GOLD_BAG_TOAST_T);
+    queueToast('金匣 · ×2', false, false, BAG_TINT.x2, GOLD_BAG_TOAST_T);
+    ok('gold dual queue', toastQ.length === 1 && toastQ[0].msg === '金匣 · ×2' && Math.abs(G.toastT - GOLD_BAG_TOAST_T) < 1e-9);
+    updateFx(GOLD_BAG_TOAST_T + 0.01);
+    ok('gold dual second toast', toastQ.length === 0 && Math.abs(G.toastT - GOLD_BAG_TOAST_T) < 1e-9);
+    toast('flush', false, false);
+    ok('toast flush queue', toastQ.length === 0);
+    ok('x3 three shells still', bagForkAngles(65).join(',') === '57,65,73' && bagExtraCount(x3u) === 0);
+    fireBagU({ x3: true, ang: 65, power: 70, wep: 0 });
+    ok('×3 fork still 3 simultaneous', G.shots && G.shots.length === 3 && (!G.queue || G.queue.length === 0));
+    fireBagU({ x2: true, ang: 65, power: 70, wep: 0, stam: 0 });
+    ok('0 stam still launches', G.shots && G.shots.length === 1 && (!G.queue || G.queue.length === 0));
+    ok('non-gold 堂匣 50 still', BAG_CRATE_P === 0.50);
+    ok('maps 21 still after 金匣袋', MAP_IDS.length === 21 && MAP_NAME.teeth === '齿岸' && MAP_NAME.cave === '洞顶');
+    ok('袋火 still after 金匣袋', BAG_FIRE_NAME === '袋火' && BAG_TINT.x3 === '#dc143c');
+    ok('落顶 still after 金匣袋', FALL_NAME === '落顶');
+    ok('no 9th wep after 金匣袋', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('no banned 金匣袋', GOLD_BAG_NAME.indexOf('传送') < 0 && GOLD_BAG_NAME.indexOf('飞行') < 0 && GOLD_BAG_NAME.indexOf('三叉戟') < 0 && GOLD_BAG_NAME.indexOf('激怒') < 0 && GOLD_BAG_NAME.indexOf('天使') < 0 && GOLD_BAG_NAME.indexOf('恶魔') < 0);
+    ok('g vk v49', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('stack math still after 金匣袋', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_MULTI_WAIT === 0.32 && BAG_KEYS.length === 7);
+
+    G.mode = fireSave.mode;
+    G.phase = fireSave.phase;
+    G.kind = fireSave.kind;
+    G.wep = fireSave.wep;
+    G.power = fireSave.power;
+    G.wind = fireSave.wind;
+    G.neonOn = fireSave.neonOn;
+    G.turns = fireSave.turns;
+    G.turn = fireSave.turn;
+    G.shot = fireSave.shot;
+    G.shots = fireSave.shots;
+    G.queue = fireSave.queue;
+    G.dual = fireSave.dual;
 
     G.mode = 'title';
     G.kind = 'hall';
