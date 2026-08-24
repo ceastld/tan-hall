@@ -992,6 +992,20 @@
   function bagShellMul(u) {
     return bagXMul(u) * bagPlusMul(u);
   }
+  function bagMulFmt(n) {
+    return (Math.round((Number(n) + 1e-12) * 100) / 100).toFixed(2);
+  }
+  function bagStackReadout(u) {
+    if (!anyBagArmed(u)) return '';
+    const extra = bagExtraCount(u);
+    const plus = bagPlusMul(u);
+    const shell = bagShellMul(u);
+    if (extra <= 0) {
+      const pct = Math.round((plus - 1) * 100);
+      return '+' + pct + '%';
+    }
+    return (extra + 1) + '发×' + bagMulFmt(shell);
+  }
   function bagExtraCount(u) {
     if (bagArmed(u, 'x3')) return 2;
     if (bagArmed(u, 'x2')) return 1;
@@ -3215,7 +3229,10 @@
     if (bagAimTag) {
       const aiming = G.mode === 'play' && (G.phase === 'aim' || G.phase === 'charge');
       const showBag = aiming && anyBagArmed(u);
+      const broke = showBag && !bagCanFire(u);
+      bagAimTag.textContent = showBag ? bagStackReadout(u) : '';
       bagAimTag.classList.toggle('gone', !showBag);
+      bagAimTag.classList.toggle('broke', broke);
       bagAimTag.setAttribute('aria-hidden', showBag ? 'false' : 'true');
     }
     const stam = u && u.stam != null ? u.stam : G.stam;
@@ -10400,6 +10417,17 @@
     ok('bagRgb crimson', bagRgb('x3')[0] === 220 && bagRgb('x3')[1] === 20 && bagRgb('x3')[2] === 60);
     ok('g vk v41', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('stack math still v40', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
+    ok('readout x2++5', bagStackReadout(x2p5) === '2发×1.35');
+    ok('readout x3', bagStackReadout(x3u) === '3发×0.60');
+    const p5only = { bag: { x2: 0, x3: 0, p1: 0, p2: 0, p3: 0, p5: 1, heal: 0 }, armed: { x2: false, x3: false, p1: false, p2: false, p3: false, p5: true, heal: false }, stam: 100 };
+    ok('readout +5', bagStackReadout(p5only) === '+50%');
+    const p12 = { bag: { p1: 1, p2: 1, p3: 0, p5: 0, x2: 0, x3: 0, heal: 0 }, armed: { p1: true, p2: true, p3: false, p5: false, x2: false, x3: false, heal: false }, stam: 100 };
+    ok('readout +1+2', bagStackReadout(p12) === '+30%');
+    ok('readout idle empty', bagStackReadout(idleU) === '');
+    ok('readout chip still', bagChipText(chipU) === '×2++2++3');
+    ok('readout 体不够 still', bagCanFire(poor) === false && bagFireCost(poor) === 80);
+    ok('g vk v42', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('stack math still v40 after readout', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
 
     G.mapId = 'plain';
     G.H = buildHeight('plain');
