@@ -249,6 +249,18 @@
   const ISLE_THICK = 44;
   const BURY_PX = 40;
   const HIT_STOP_DIRECT = 0.14;
+  const QUAKE_NAME = '余震';
+  const QUAKE_T = 0.28;
+  const QUAKE_R = 36;
+  const QUAKE_NEAR = 90;
+  const QUAKE_LEDGE = 28;
+  const QUAKE_SLIP_MIN = 8;
+  const QUAKE_SLIP_MAX = 14;
+  const QUAKE_SLIP_P = 0.5;
+  const QUAKE_CRUMB_MIN = 4;
+  const QUAKE_CRUMB_MAX = 7;
+  const QUAKE_SHAKE_MIN = 3;
+  const QUAKE_SHAKE_MAX = 5;
   const KILL_SLOW = 0.22;
   const KILL_HOLD = 0.40;
   const COACH_MSGS = ['看风', '65° 最远', '高抛埋人'];
@@ -482,7 +494,12 @@
     killRgb: GOLD,
     killHold: 0,
     killPend: 0,
-    killVictim: null
+    killVictim: null,
+    quakeT: 0,
+    quakeX: 0,
+    quakeY: 0,
+    quakeR: 0,
+    quakeMag: 0
   };
 
   const particles = [];
@@ -4103,6 +4120,7 @@
     if (!keepPhase && (!shot || shot.lead)) commitLastGhost(x, y);
     eachUnit(ungroundIfAir);
     eachUnit(refreshBury);
+    triggerQuake(x, y, wep, wep && wep.id === 4 ? QUAKE_R : crater);
     if (keepPhase) {
       if (G.mode === 'play') checkEnd();
       syncHud();
@@ -4693,6 +4711,72 @@
     if (!u) return false;
     const g0 = groundAt(u.x);
     return (groundAt(clamp(u.x - 36, 0, VW - 1)) - g0 > 28) || (groundAt(clamp(u.x + 36, 0, VW - 1)) - g0 > 28);
+  }
+
+  function dirtUnderFeet(u) {
+    if (!u) return 999;
+    const g0 = groundAt(u.x, u.y);
+    let solid = 0;
+    for (let dx = -UNIT_R; dx <= UNIT_R; dx++) {
+      const g = groundAt(clamp(u.x + dx, 0, VW - 1), u.y);
+      if (g <= g0 + 8) solid += 1;
+    }
+    return solid;
+  }
+
+  function quakeLedge(u) {
+    if (!u || u.hp <= 0 || !u.grounded || u.buried) return false;
+    if (thinLedge(u)) return true;
+    return dirtUnderFeet(u) < QUAKE_LEDGE;
+  }
+
+  function wantQuake(wep, crater) {
+    const id = wep && wep.id;
+    if (id === 1 || id === 4 || id === 8) return true;
+    return (crater || 0) >= QUAKE_R;
+  }
+
+  function quakeSlip(u, cx, force) {
+    if (!u || !quakeLedge(u)) return 0;
+    if (Math.abs(u.x - cx) > QUAKE_NEAR) return 0;
+    if (!force && Math.random() >= QUAKE_SLIP_P) return 0;
+    let dir = u.x < cx ? 1 : (u.x > cx ? -1 : 0);
+    if (!dir) {
+      const gl = groundAt(clamp(u.x - 20, 0, VW - 1), u.y);
+      const gr = groundAt(clamp(u.x + 20, 0, VW - 1), u.y);
+      dir = gr > gl + 1 ? 1 : (gl > gr + 1 ? -1 : (u.face || 1));
+    }
+    const dist = rand(QUAKE_SLIP_MIN, QUAKE_SLIP_MAX);
+    const nx = clamp(u.x + dir * dist, 22, VW - 22);
+    if (wallBlocksWalk(nx, u.y, u.r || UNIT_R)) return 0;
+    u.x = nx;
+    ungroundIfAir(u);
+    return dist;
+  }
+
+  function spawnQuakeCrumbs(cx, cy, crater) {
+    const n = REDUCE ? 2 : irand(QUAKE_CRUMB_MIN, QUAKE_CRUMB_MAX);
+    const r = Math.max(18, crater || QUAKE_R);
+    for (let i = 0; i < n; i++) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const px = clamp(cx + side * r * rand(0.86, 1.08) + rand(-6, 6), 4, VW - 4);
+      const gy = G.H ? groundAt(px) : cy;
+      spawnCrumbs(px, gy - rand(6, 16), 1);
+    }
+    return n;
+  }
+
+  function triggerQuake(x, y, wep, crater, opts) {
+    opts = opts || {};
+    if (!wantQuake(wep, crater) && !opts.force) return false;
+    G.quakeT = QUAKE_T;
+    G.quakeX = x;
+    G.quakeY = y;
+    G.quakeR = crater || QUAKE_R;
+    G.quakeMag = REDUCE ? 0 : rand(QUAKE_SHAKE_MIN, QUAKE_SHAKE_MAX);
+    spawnQuakeCrumbs(x, y, G.quakeR);
+    eachUnit(function (u) { quakeSlip(u, x, !!opts.force); });
+    return true;
   }
 
   let AI = { wait: 0, walked: false, ang: 65, pow: 70, wep: 0, stage: 0 };
@@ -5418,6 +5502,11 @@
     G.killHold = 0;
     G.killPend = 0;
     G.killVictim = null;
+    G.quakeT = 0;
+    G.quakeX = 0;
+    G.quakeY = 0;
+    G.quakeR = 0;
+    G.quakeMag = 0;
     G.ctrlSide = null;
     G.windSpinT = 0;
     G.nextWind = null;
@@ -5520,6 +5609,10 @@
 
 
   function updateFx(dt) {
+    if (G.quakeT > 0) {
+      G.quakeT = Math.max(0, G.quakeT - dt);
+      if (G.quakeT <= 0) G.quakeMag = 0;
+    }
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 18);
     if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 1.8);
     if (G.punch > 1) G.punch = 1 + (G.punch - 1) * Math.max(0, 1 - dt * 10);
@@ -7315,8 +7408,13 @@
     ctx.beginPath();
     ctx.rect(0, 0, VW, VH);
     ctx.clip();
-    const sx = G.shake && !REDUCE ? rand(-G.shake, G.shake) * 0.35 : 0;
-    const sy = G.shake && !REDUCE ? rand(-G.shake, G.shake) * 0.25 : 0;
+    let sx = G.shake && !REDUCE ? rand(-G.shake, G.shake) * 0.35 : 0;
+    let sy = G.shake && !REDUCE ? rand(-G.shake, G.shake) * 0.25 : 0;
+    if (G.quakeT > 0 && !REDUCE) {
+      const qm = G.quakeMag || 4;
+      sx += rand(-qm, qm);
+      sy += rand(-qm, qm) * 0.72;
+    }
     ctx.translate(VW * 0.5 + sx, VH * 0.5 + sy);
     ctx.scale(cam.z * (G.punch || 1), cam.z * (G.punch || 1));
     ctx.translate(-cam.x, -cam.y);
@@ -7394,6 +7492,22 @@
     }
 
     ctx.restore();
+    if (G.quakeT > 0 && !REDUCE) {
+      const k = clamp(G.quakeT / QUAKE_T, 0, 1);
+      const vw = VW * view.scale;
+      const vh = VH * view.scale;
+      const band = Math.max(5, 7 * view.scale);
+      ctx.fillStyle = 'rgba(92,68,48,' + (0.16 * k) + ')';
+      ctx.fillRect(view.ox, view.oy + vh - band, vw, band);
+      ctx.fillRect(view.ox, view.oy, band * 0.42, vh);
+      ctx.fillRect(view.ox + vw - band * 0.42, view.oy, band * 0.42, vh);
+      ctx.fillStyle = 'rgba(120,88,58,' + (0.28 * k) + ')';
+      for (let i = 0; i < 9; i++) {
+        const px = view.ox + ((i * 107 + G.t * 90) % vw);
+        const py = view.oy + vh - 3 - (i % 4) * 2.2;
+        ctx.fillRect(px, py, 2.1, 1.5);
+      }
+    }
     if (G.storm && !REDUCE && G.boltT > 0) {
       const k = clamp(G.boltT / STORM_BOLT_MIN, 0, 1);
       ctx.fillStyle = 'rgba(220,236,255,' + (0.18 + k * 0.38) + ')';
@@ -9324,6 +9438,56 @@
     G.mirror = null;
     G.mapId = 'plain';
     G.H = buildHeight('plain');
+
+    ok('余震 name', QUAKE_NAME === '余震' && QUAKE_T === 0.28 && QUAKE_R === 36 && QUAKE_NEAR === 90 && QUAKE_LEDGE === 28);
+    ok('余震 slip 8-14', QUAKE_SLIP_MIN === 8 && QUAKE_SLIP_MAX === 14 && QUAKE_SLIP_P === 0.5);
+    ok('余震 crumbs 4-7', QUAKE_CRUMB_MIN === 4 && QUAKE_CRUMB_MAX === 7 && QUAKE_SHAKE_MIN === 3 && QUAKE_SHAKE_MAX === 5);
+    ok('余震 no banned', QUAKE_NAME.indexOf('传送') < 0 && QUAKE_NAME.indexOf('飞行') < 0 && QUAKE_NAME.indexOf('三叉戟') < 0 && QUAKE_NAME.indexOf('激怒') < 0);
+    ok('quake skip 普通 30', wantQuake(WEPS[0], 30) === false);
+    ok('quake at 36', wantQuake(WEPS[0], 36) === true);
+    ok('quake 高爆 always', wantQuake(WEPS[1], 20) === true && WEPS[1].name === '高爆' && WEPS[1].crater === 48);
+    ok('quake 三裂 always', wantQuake(WEPS[3], 16) === true && WEPS[3].name === '三裂');
+    ok('quake 迟雷 always', wantQuake(WEPS[7], 10) === true && WEPS[7].name === '迟雷' && WEPS[7].crater === 34);
+    ok('quake not 霓火', wantQuake(WEPS[5], 20) === false && WEPS[5].name === '霓火');
+    G.H = buildHeight('plain');
+    G.mapId = 'plain';
+    G.p2 = null;
+    G.f2 = null;
+    G.walls = [];
+    G.mirror = null;
+    const qCx = 400;
+    carve(qCx, G.H[qCx], 48);
+    const rim = qCx + 52;
+    G.p = { x: rim, y: G.H[rim | 0] - 14, r: 14, hp: 100, grounded: true, vy: 0, fall: 0, buried: false, side: 'p', id: 'p', face: 1 };
+    G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100, grounded: true, vy: 0, fall: 0, buried: false, side: 'f', id: 'f', face: -1 };
+    ok('quake rim ledge', quakeLedge(G.p) === true, dirtUnderFeet(G.p) + '/' + thinLedge(G.p));
+    ok('quake foe far skip', Math.abs(G.f.x - qCx) > QUAKE_NEAR);
+    const xWas = G.p.x;
+    const slid = quakeSlip(G.p, qCx, true);
+    ok('quake slip toward hole', slid >= 8 && slid <= 14 && G.p.x < xWas && G.p.x >= xWas - 14.05, slid + ' ' + Math.round(G.p.x - xWas));
+    ok('quake slip not teleport', Math.abs(G.p.x - qCx) > 20 && Math.abs(G.p.x - xWas) <= 14.05);
+    crumbs.length = 0;
+    G.quakeT = 0.05;
+    const nCrumbs = spawnQuakeCrumbs(qCx, G.H[qCx], 48);
+    ok('quake crumbs count', nCrumbs >= 4 && nCrumbs <= 7 && crumbs.length === nCrumbs, nCrumbs + '/' + crumbs.length);
+    const armed = triggerQuake(qCx, G.H[qCx], WEPS[1], 48);
+    ok('quake one at a time refresh', armed === true && Math.abs(G.quakeT - QUAKE_T) < 0.001 && G.quakeMag >= 3 && G.quakeMag <= 5);
+    ok('direct stop still 140 after 余震', HIT_STOP_DIRECT === 0.14);
+    ok('maps still 18 after 余震', MAP_IDS.length === 18 && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台' && MAP_NAME.cliff === '断崖');
+    ok('叠珠 still 7 after 余震', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('迟雷 still 8 after 余震', WEPS[7] && WEPS[7].name === '迟雷' && WEPS[7].id === 8);
+    ok('ghost K still after 余震', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('silk still after 余震', typeof silkCount === 'function' && silkCount(0) === 0);
+    ok('时尽 still after 余震', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
+    ok('堂匣 still after 余震', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣');
+    ok('雷泽 still after 余震', STORM_NAME === '雷泽' && stormForced('vale') && stormForced('cliff') && stormForced('dune') && stormBanned('forge'));
+    ok('no 9th wep after 余震', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('g vk v33', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    G.quakeT = 0;
+    G.quakeMag = 0;
+    crumbs.length = 0;
+    G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', ang: 65 };
+    G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100, max: 100, side: 'f', ang: 115 };
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
