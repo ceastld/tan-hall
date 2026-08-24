@@ -298,6 +298,13 @@
   const CAVE_CRATER = 0.70;
   const CAVE_STORM_P = 0.20;
   const CAVE_HOLE = 8;
+  const FALL_NAME = '落顶';
+  const FALL_N_MIN = 2;
+  const FALL_N_MAX = 4;
+  const FALL_R = 4;
+  const FALL_ARM = 0.55;
+  const FALL_DMG = 3;
+  const FALL_LIFE = 1.6;
   const STORM_NAME = '雷泽';
   const STORM_P = 0.35;
   const STORM_MIN = 8;
@@ -570,7 +577,9 @@
     quakeX: 0,
     quakeY: 0,
     quakeR: 0,
-    quakeMag: 0
+    quakeMag: 0,
+    fallBlast: 0,
+    fallAte: null
   };
 
   const particles = [];
@@ -579,6 +588,7 @@
   const stars = [];
   const trail = [];
   const crumbs = [];
+  const falls = [];
 
   let hidden = false;
   let addTok = 0;
@@ -1535,8 +1545,105 @@
     if (any) {
       terrainDirty = true;
       rainCaveCrumbs(cx, cy);
+      spawnFallChips(cx, cy);
     }
     return any;
+  }
+
+  function beginFallBlast() {
+    G.fallBlast = (G.fallBlast || 0) + 1;
+    G.fallAte = {};
+  }
+
+  function wantFallChips() {
+    return !REDUCE && G.mapId === 'cave';
+  }
+
+  function fallKey(u) {
+    if (!u) return '';
+    return u.id || ((u.side || '') + ':' + (u.slot || 0));
+  }
+
+  function spawnFallChips(cx, cy, n) {
+    if (!wantFallChips()) return 0;
+    const count = n == null ? irand(FALL_N_MIN, FALL_N_MAX) : clamp(n | 0, FALL_N_MIN, FALL_N_MAX);
+    const y0 = Math.min(cy + 4, caveBotAt(cx) + 2);
+    const blast = G.fallBlast || 0;
+    for (let i = 0; i < count; i++) {
+      falls.push({
+        x: cx + rand(-12, 12),
+        y: y0 + rand(-4, 8),
+        vx: rand(-40, 40),
+        vy: rand(70, 180),
+        g: GRAV,
+        r: FALL_R,
+        rgb: STONE,
+        life: FALL_LIFE,
+        age: 0,
+        blast: blast
+      });
+    }
+    return count;
+  }
+
+  function hitFallChip(u) {
+    if (!u || u.hp <= 0) return false;
+    const k = fallKey(u);
+    if (!G.fallAte) G.fallAte = {};
+    if (k && G.fallAte[k]) return false;
+    if (k) G.fallAte[k] = 1;
+    const dmg = FALL_DMG * dmgMul();
+    const was = u.hp;
+    hurt(u, dmg, 'chip');
+    kick(3.1);
+    if (was > 0 && u.hp <= 0) {
+      G.killVictim = u;
+      armKillCam(u);
+      G.killVictim = null;
+      checkEnd();
+    }
+    return true;
+  }
+
+  function tickFalls(dt) {
+    if (!falls.length) return;
+    for (let i = falls.length - 1; i >= 0; i--) {
+      const q = falls[i];
+      q.age = (q.age || 0) + dt;
+      q.vy += GRAV * dt;
+      q.x += q.vx * dt;
+      q.y += q.vy * dt;
+      q.life -= dt;
+      let dead = q.life <= 0 || q.y > VH + 24 || q.x < -24 || q.x > VW + 24;
+      const gy = groundAt(q.x);
+      if (!dead && q.y >= gy) {
+        burst(q.x, gy, STONE, REDUCE ? 2 : 5, 55, 0.2);
+        dead = true;
+      }
+      if (!dead && q.age <= FALL_ARM) {
+        const list = allUnits();
+        for (let j = 0; j < list.length; j++) {
+          const u = list[j];
+          if (!u || u.hp <= 0) continue;
+          if (hypot(q.x - u.x, q.y - u.y) > FALL_R + (u.r || UNIT_R)) continue;
+          if (hitFallChip(u)) {
+            dead = true;
+            break;
+          }
+        }
+      }
+      if (dead) falls.splice(i, 1);
+    }
+  }
+
+  function drawFalls(g) {
+    for (let i = 0; i < falls.length; i++) {
+      const q = falls[i];
+      g.fillStyle = rgba(q.rgb || STONE, clamp(q.life / FALL_LIFE, 0.28, 0.95));
+      g.beginPath();
+      g.arc(q.x, q.y, q.r || FALL_R, 0, TAU);
+      g.fill();
+    }
   }
 
   function inCliffWater(u) {
@@ -4833,6 +4940,7 @@
     if (shot === undefined) shot = G.shot;
     const keepPhase = !!opts.keepPhase;
     G.killVictim = null;
+    beginFallBlast();
     let crater = wep.crater;
     const wasUlt = opts.ult != null ? !!opts.ult : !!(shot ? shot.ult : (owner && owner.ult));
     const ultMul = wasUlt ? 1.35 : 1;
@@ -6387,6 +6495,7 @@
     G.cave = G.mapId === 'cave' ? makeCaveRoof() : null;
     G.fires = [];
     crumbs.length = 0;
+    falls.length = 0;
     terrainDirty = true;
     G.p = makeUnit('p', { id: 'p', name: '岚丸', delay: 0, ord: 0, slot: 0 });
     G.f = makeUnit('f', { id: 'f', name: G.kind === 'drill' ? '石俑' : '烬丸', delay: isSquad() ? 8 : 0, ord: 1, slot: 0 });
@@ -6440,6 +6549,9 @@
     G.quakeY = 0;
     G.quakeR = 0;
     G.quakeMag = 0;
+    G.fallBlast = 0;
+    G.fallAte = null;
+    falls.length = 0;
     G.ctrlSide = null;
     G.windSpinT = 0;
     G.nextWind = null;
@@ -6675,6 +6787,7 @@
       if (G.stormT >= G.stormNext) strikeStorm();
     }
     tickMines(dt);
+    tickFalls(dt);
     tickCrates(dt);
 
     if (G.phase === 'frozenWait') {
@@ -8517,6 +8630,7 @@
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
+    drawFalls(ctx);
     drawGust(ctx);
     drawWindMotes(ctx);
     if (G.sudden) {
@@ -10977,6 +11091,109 @@
     ok('no 9th wep after 洞顶', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
     ok('g vk v44', GRAV === 260 && VK === 420 && WIND_K === 2.05);
     ok('stack math still v40 after 洞顶', BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_COST.x2 === 40 && BAG_COST.p5 === 40 && BAG_KEYS.length === 7);
+
+    ok('落顶 name', FALL_NAME === '落顶' && FALL_N_MIN === 2 && FALL_N_MAX === 4 && FALL_R === 4 && FALL_ARM === 0.55 && FALL_DMG === 3);
+    ok('落顶 no banned', FALL_NAME.indexOf('传送') < 0 && FALL_NAME.indexOf('飞行') < 0 && FALL_NAME.indexOf('三叉戟') < 0 && FALL_NAME.indexOf('激怒') < 0 && FALL_NAME.indexOf('天使') < 0 && FALL_NAME.indexOf('恶魔') < 0);
+    ok('落顶 not a gun', WEPS.length === 8 && WEPS.every(function (w) { return w.name !== FALL_NAME; }));
+    G.H = buildHeight('cave');
+    G.mapId = 'cave';
+    G.cave = makeCaveRoof();
+    G.kind = 'hall';
+    G.mode = 'play';
+    G.p2 = null; G.f2 = null;
+    G.p = { x: CAVE_PX, y: G.H[CAVE_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: CAVE_FX, y: G.H[CAVE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    falls.length = 0;
+    crumbs.length = 0;
+    beginFallBlast();
+    const fallCeilY = caveBotAt(CAVE_PX);
+    const fallAteCeil = carveCave(CAVE_PX, fallCeilY, 22);
+    ok('carveCave eats for 落顶', fallAteCeil === true);
+    ok('落顶 chips 2-4', falls.length >= FALL_N_MIN && falls.length <= FALL_N_MAX, falls.length);
+    ok('落顶 look STONE', falls.length > 0 && falls[0].rgb === STONE && falls[0].r === FALL_R && falls[0].g === GRAV);
+    const fallVx0 = falls[0].vx;
+    const fallVy0 = falls[0].vy;
+    G.wind = 8;
+    tickFalls(STEP);
+    ok('落顶 no wind', Math.abs(falls[0].vx - fallVx0) < 1e-9, falls[0].vx);
+    ok('落顶 gravity', falls[0].vy > fallVy0 + GRAV * STEP * 0.9, Math.round(falls[0].vy - fallVy0));
+    G.wind = 0;
+    falls.length = 0;
+    G.mapId = 'plain';
+    G.cave = null;
+    const fallPlainN = spawnFallChips(400, 200, 3);
+    ok('plain skip 落顶', fallPlainN === 0 && falls.length === 0);
+    G.mapId = 'cave';
+    G.cave = makeCaveRoof();
+    G.H = buildHeight('cave');
+    falls.length = 0;
+    carve(CAVE_PX, G.H[CAVE_PX], 30);
+    ok('floor crater no 落顶', falls.length === 0, falls.length);
+    G.H = buildHeight('cave');
+    G.cave = makeCaveRoof();
+    G.p = { x: CAVE_FANG_L, y: G.H[CAVE_FANG_L] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p', buried: false };
+    G.f = { x: CAVE_FX, y: G.H[CAVE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    function testChip(x, y, extra) {
+      const q = { x: x, y: y, vx: 0, vy: 0, g: GRAV, r: FALL_R, rgb: STONE, life: FALL_LIFE, age: 0, blast: G.fallBlast || 0 };
+      if (extra) {
+        const ks = Object.keys(extra);
+        for (let i = 0; i < ks.length; i++) q[ks[i]] = extra[ks[i]];
+      }
+      falls.push(q);
+      return q;
+    }
+    falls.length = 0;
+    beginFallBlast();
+    G.toastT = 0;
+    testChip(G.p.x, G.p.y);
+    testChip(G.p.x + 1, G.p.y);
+    testChip(G.p.x - 1, G.p.y);
+    ok('spawned on unit', falls.length === 3);
+    tickFalls(STEP);
+    ok('落顶 dmg 3', G.p.hp === 97, G.p.hp);
+    ok('落顶 one per blast', falls.length === 2);
+    tickFalls(STEP);
+    ok('落顶 second chip skipped', G.p.hp === 97 && falls.length === 2, G.p.hp + '/' + falls.length);
+    ok('落顶 no 埋了', G.p.buried !== true);
+    ok('落顶 no toast', G.toastT === 0, G.toastT);
+    const fallCoreSave = G.kind;
+    G.kind = 'core';
+    G.p.hp = 60;
+    beginFallBlast();
+    falls.length = 0;
+    testChip(G.p.x, G.p.y);
+    tickFalls(STEP);
+    ok('落顶 堂核 ×1.15', G.p.hp === 60 - Math.max(1, Math.round(FALL_DMG * 1.15)), G.p.hp);
+    G.kind = fallCoreSave;
+    G.p.hp = 100;
+    beginFallBlast();
+    falls.length = 0;
+    const hpBeforeLate = G.p.hp;
+    testChip(G.p.x, G.p.y, { age: FALL_ARM + 0.02 });
+    tickFalls(STEP);
+    ok('落顶 after 0.55 no dmg', G.p.hp === hpBeforeLate, G.p.hp);
+    falls.length = 0;
+    G.H = buildHeight('cave');
+    testChip(CAVE_PX, G.H[CAVE_PX] + 1, { vy: 40 });
+    tickFalls(STEP);
+    ok('落顶 die on dirt', falls.length === 0, falls.length);
+    G.p.hp = 100;
+    G.f.hp = 100;
+    G.p.x = CAVE_FANG_L;
+    G.p.y = G.H[CAVE_FANG_L] - 14;
+    falls.length = 0;
+    testChip(G.p.x, 80);
+    testChip(G.p.x + 8, 80);
+    ok('AI not aim chips', WEPS.length === 8 && pickAIWeapon(G.f) !== undefined && falls.length === 2);
+    ok('余震 still after 落顶', QUAKE_NAME === '余震' && HIT_STOP_DIRECT === 0.14 && wantQuake(WEPS[1], 20) === true);
+    ok('堂袋 still after 落顶', BAG_NAME.x2 === '×2' && bagStackReadout(x2p5) === '2发×1.35' && BAG_CRATE_P === 0.50);
+    ok('maps 20 after 落顶', MAP_IDS.length === 20 && MAP_NAME.cave === '洞顶' && MAP_NAME.well === '井口');
+    ok('no 9th wep after 落顶', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('g vk v45', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('reduce skip chips', wantFallChips() === (!REDUCE && G.mapId === 'cave'));
+    G.mode = 'title';
+    G.kind = 'hall';
+    falls.length = 0;
     G.cave = null;
     }
     G.mapId = 'plain';
