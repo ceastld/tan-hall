@@ -48,8 +48,8 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -146,6 +146,21 @@
   const DUNE_WALK = 0.55;
   const DUNE_CRATER = 1.25;
   const DUNE_WIND_EXTRA = 1;
+  const GATE_PX = 168;
+  const GATE_FX = 772;
+  const GATE_P2X = 204;
+  const GATE_F2X = 736;
+  const GATE_L_CX = 280;
+  const GATE_R_CX = 660;
+  const GATE_HW = 54;
+  const GATE_L0 = GATE_L_CX - GATE_HW;
+  const GATE_L1 = GATE_L_CX + GATE_HW;
+  const GATE_R0 = GATE_R_CX - GATE_HW;
+  const GATE_R1 = GATE_R_CX + GATE_HW;
+  const GATE_LEDGE_Y = 308;
+  const GATE_CROWN_Y = 258;
+  const GATE_PIT_Y = 476;
+  const GATE_CRATER = 0.72;
   const STORM_NAME = '雷泽';
   const STORM_P = 0.35;
   const STORM_MIN = 8;
@@ -815,6 +830,7 @@
     if (!u) return false;
     if (isDeathVoid(u.x)) return false;
     if (G.mapId === 'forge' || G.mapId === 'dune') return false;
+    if (G.mapId === 'gate' && isGateStoneX(u.x)) return false;
     if (inMoonWater(u) || inCliffWater(u)) return false;
     return true;
   }
@@ -822,6 +838,39 @@
   function sandR(r) {
     if (G.mapId !== 'dune' || r <= 0) return r;
     return r * DUNE_CRATER;
+  }
+
+  function isGateStoneX(x) {
+    if (G.mapId !== 'gate') return false;
+    const i = x | 0;
+    return (i >= GATE_L0 && i <= GATE_L1) || (i >= GATE_R0 && i <= GATE_R1);
+  }
+
+  function isGateCrown(x) {
+    if (G.mapId !== 'gate' || !G.H) return false;
+    const i = x | 0;
+    if (!isGateStoneX(i)) return false;
+    return G.H[i] < GATE_CROWN_Y + 36;
+  }
+
+  function isGateCorridor(x) {
+    if (G.mapId !== 'gate' || !G.H) return false;
+    const i = x | 0;
+    if (i <= GATE_L1 || i >= GATE_R0) return false;
+    return G.H[i] > GATE_CROWN_Y + 80;
+  }
+
+  function isGateLedge(x) {
+    if (G.mapId !== 'gate' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    if (isGateStoneX(i) || isGateCorridor(i)) return false;
+    return G.H[i] < GATE_LEDGE_Y + 36;
+  }
+
+  function stoneR(r, x) {
+    if (!isGateStoneX(x) || r <= 0) return r;
+    return r * GATE_CRATER;
   }
 
   function stormForced(id) {
@@ -1099,6 +1148,39 @@
       }
       padFlat(h, 88, 248, DUNE_CREST_Y);
       padFlat(h, 712, 872, DUNE_CREST_Y);
+    } else if (id === 'gate') {
+      for (let x = 0; x < VW; x++) {
+        h[x] = GATE_PIT_Y + Math.sin(x * 0.08) * 2.4 + Math.sin(x * 0.19) * 1.1;
+        const mid = 1 - clamp(Math.abs(x - 480) / 118, 0, 1);
+        h[x] += mid * mid * 8;
+      }
+      function gateBand(x0, x1, y, edge) {
+        for (let x = x0; x <= x1; x++) {
+          const er = Math.min(x - x0, x1 - x);
+          const ramp = clamp(er / Math.max(1, edge), 0, 1);
+          const sm = ramp * ramp * (3 - 2 * ramp);
+          const yy = y + Math.sin(x * 0.08) * 1.1 + Math.sin(x * 0.21) * 0.45;
+          h[x] = lerp(h[x], yy, sm);
+        }
+      }
+      function gateCol(x0, x1, y, edgeOut, edgeIn, inward) {
+        for (let x = x0; x <= x1; x++) {
+          const eOut = inward > 0 ? (x - x0) : (x1 - x);
+          const eIn = inward > 0 ? (x1 - x) : (x - x0);
+          const ramp = clamp(Math.min(eOut / Math.max(1, edgeOut), eIn / Math.max(1, edgeIn)), 0, 1);
+          const sm = ramp * ramp * (3 - 2 * ramp);
+          const yy = y + Math.sin(x * 0.07) * 0.8;
+          h[x] = lerp(h[x], yy, sm);
+        }
+      }
+      gateBand(20, GATE_L0 + 36, GATE_LEDGE_Y, 16);
+      gateBand(GATE_R1 - 36, 940, GATE_LEDGE_Y, 16);
+      gateCol(GATE_L0, GATE_L1, GATE_CROWN_Y, 18, 7, 1);
+      gateCol(GATE_R0, GATE_R1, GATE_CROWN_Y, 18, 7, -1);
+      padFlat(h, 88, 216, GATE_LEDGE_Y);
+      padFlat(h, 744, 872, GATE_LEDGE_Y);
+      padFlat(h, GATE_L_CX - 26, GATE_L_CX + 26, GATE_CROWN_Y);
+      padFlat(h, GATE_R_CX - 26, GATE_R_CX + 26, GATE_CROWN_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -1123,6 +1205,7 @@
     if (id === 'moon') return side === 'p' ? MOON_PX : MOON_FX;
     if (id === 'cliff') return side === 'p' ? CLIFF_PX : CLIFF_FX;
     if (id === 'dune') return side === 'p' ? DUNE_PX : DUNE_FX;
+    if (id === 'gate') return side === 'p' ? GATE_PX : GATE_FX;
     return side === 'p' ? 152 : 768;
   }
 
@@ -1131,6 +1214,7 @@
     if (G.mapId === 'moon' && slot) return side === 'p' ? MOON_P2X : MOON_F2X;
     if (G.mapId === 'cliff' && slot) return side === 'p' ? CLIFF_P2X : CLIFF_F2X;
     if (G.mapId === 'dune' && slot) return side === 'p' ? DUNE_P2X : DUNE_F2X;
+    if (G.mapId === 'gate' && slot) return side === 'p' ? GATE_P2X : GATE_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -2988,9 +3072,11 @@
     const ultMul = wasUlt ? 1.35 : 1;
     if (wasUlt) crater = Math.round(crater * 1.35);
     crater = Math.round(sandR(crater));
+    crater = Math.round(stoneR(crater, x));
     let hit = !!fromHit;
     if (wep.id === 4) {
-      const pops = carveCluster(x, y, ultMul * (G.mapId === 'dune' ? DUNE_CRATER : 1));
+      const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : 1);
+      const pops = carveCluster(x, y, ultMul * terrainMul);
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
         snapBridge(pop.x, pop.r, wep);
@@ -3568,6 +3654,8 @@
       if (G.mapId === 'cliff' && isCliffPlateau(foe.x)) return 1;
       if (G.mapId === 'cliff' && isCliffBeach(foe.x)) return 3;
       if (G.mapId === 'dune' && isDuneSaddle(foe.x)) return 1;
+      if (G.mapId === 'gate' && isGateCorridor(foe.x)) return 1;
+      if (G.mapId === 'gate' && isGateCrown(foe.x) && Math.abs(foe.x - from.x) > 6 * GRID) return 0;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -3615,6 +3703,19 @@
       if (feetX < 52) bury += 900;
     }
     if (G.mapId === 'dune' && isDuneSaddle(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
+    if (G.mapId === 'gate' && isGateCorridor(t.x)) {
+      const e = ang != null ? elev(ang) : 0;
+      if (e >= 78) score += 1600;
+      else if (e >= 70) score += 700;
+      if (wep.id === 1) score += 500;
+    }
+    if (G.mapId === 'gate' && isGateCrown(t.x)) {
+      const far = Math.abs(t.x - from.x) > 6 * GRID;
+      const e = ang != null ? elev(ang) : 0;
+      if (far && e >= 58 && e <= 72) score += 1400;
+      else if (!far && e >= 78) score += 1200;
+    }
+    if (G.mapId === 'gate' && isGateCorridor(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
     score += bury;
     return score;
   }
@@ -4483,8 +4584,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : G.mapId === 'gate' ? '#d8c8a8' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : G.mapId === 'gate' ? '#2a2218' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -4694,6 +4795,23 @@
       for (let x = 120; x <= 840; x += 4) g.lineTo(x, H[x] + 7 + Math.sin(x * 0.05) * 1.4);
       g.stroke();
     }
+    if (G.mapId === 'gate') {
+      g.fillStyle = 'rgba(16, 12, 20, 0.34)';
+      g.fillRect(GATE_L1, GATE_CROWN_Y + 8, GATE_R0 - GATE_L1, VH - GATE_CROWN_Y - 8);
+      g.strokeStyle = 'rgba(216, 196, 160, 0.42)';
+      g.lineWidth = 1.3;
+      g.beginPath();
+      g.moveTo(GATE_L0, H[GATE_L0]);
+      for (let x = GATE_L0; x <= GATE_L1; x++) g.lineTo(x, H[x]);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(GATE_R0, H[GATE_R0]);
+      for (let x = GATE_R0; x <= GATE_R1; x++) g.lineTo(x, H[x]);
+      g.stroke();
+      g.fillStyle = 'rgba(200, 180, 140, 0.12)';
+      g.fillRect(GATE_L0, GATE_CROWN_Y - 2, GATE_L1 - GATE_L0, 6);
+      g.fillRect(GATE_R0, GATE_CROWN_Y - 2, GATE_R1 - GATE_R0, 6);
+    }
     terrainDirty = false;
   }
 
@@ -4785,6 +4903,23 @@
       bowl.addColorStop(0, 'rgba(210,150,70,0.12)');
       bowl.addColorStop(1, 'rgba(210,150,70,0)');
       g.fillStyle = bowl;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'gate') {
+      const shade = g.createRadialGradient(480, 380, 20, 480, 430, 300);
+      shade.addColorStop(0, 'rgba(24,16,28,0.28)');
+      shade.addColorStop(1, 'rgba(24,16,28,0)');
+      g.fillStyle = shade;
+      g.fillRect(0, 0, VW, VH);
+      const stoneL = g.createRadialGradient(GATE_L_CX, GATE_CROWN_Y, 8, GATE_L_CX, GATE_CROWN_Y + 40, 140);
+      stoneL.addColorStop(0, 'rgba(216,196,160,0.12)');
+      stoneL.addColorStop(1, 'rgba(216,196,160,0)');
+      g.fillStyle = stoneL;
+      g.fillRect(0, 0, VW, VH);
+      const stoneR = g.createRadialGradient(GATE_R_CX, GATE_CROWN_Y, 8, GATE_R_CX, GATE_CROWN_Y + 40, 140);
+      stoneR.addColorStop(0, 'rgba(216,196,160,0.12)');
+      stoneR.addColorStop(1, 'rgba(216,196,160,0)');
+      g.fillStyle = stoneR;
       g.fillRect(0, 0, VW, VH);
     }
     for (let i = 0; i < stars.length; i++) {
@@ -5169,6 +5304,27 @@
       g.beginPath();
       g.ellipse(x, y, 16 + (i % 3) * 5, 3.4, 0, 0, TAU);
       g.fill();
+    }
+    g.restore();
+  }
+
+  function drawGate(g) {
+    if (G.mapId !== 'gate') return;
+    g.save();
+    const t = G.t;
+    for (let i = 0; i < 8; i++) {
+      const x = GATE_L1 + 16 + i * 28 + Math.sin(t * 0.55 + i) * 8;
+      const y = GATE_PIT_Y - 22 + Math.sin(t * 0.9 + i * 0.7) * 6;
+      g.fillStyle = 'rgba(32,22,40,' + (0.08 + 0.08 * Math.sin(t * 1.4 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 22 + (i % 3) * 6, 6, 0, 0, TAU);
+      g.fill();
+    }
+    for (let k = 0; k < 4; k++) {
+      const px = (k < 2 ? GATE_L_CX : GATE_R_CX) + (k % 2 ? 18 : -18);
+      const glow = 0.08 + 0.07 * (0.5 + 0.5 * Math.sin(t * 2.1 + k));
+      g.fillStyle = 'rgba(232,210,160,' + glow + ')';
+      g.fillRect(px, GATE_CROWN_Y + 10 + k * 16, 3, 9);
     }
     g.restore();
   }
@@ -5672,6 +5828,7 @@
     drawMoon(ctx);
     drawCliff(ctx);
     drawDune(ctx);
+    drawGate(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -6031,7 +6188,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps fourteen', MAP_IDS.length === 14 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps fifteen', MAP_IDS.length === 15 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -6566,7 +6723,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 14', MAP_IDS.length === 14 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13);
+    ok('随图 pool 15', MAP_IDS.length === 15 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13 && MAP_IDS.indexOf('gate') === 14);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -6810,7 +6967,7 @@
     G.ghostOn = true;
     ok('ghost match only', G.ghost == null);
     ok('g vk v20', GRAV === 260 && VK === 420);
-    ok('maps still 14 after ghost', MAP_IDS.length === 14 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after ghost', MAP_IDS.length === 15 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
     ok('断崖 name locked', MAP_NAME.cliff === '断崖' && MAP_IDS[12] === 'cliff');
     ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
@@ -6829,7 +6986,7 @@
     const silkPhys = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     const silkPhys2 = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     ok('silk no physics drift', Math.abs(silkPhys.x - silkPhys2.x) < 0.01 && Math.abs(silkPhys.y - silkPhys2.y) < 0.01);
-    ok('maps still 14 after silk', MAP_IDS.length === 14 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after silk', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after silk', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned silk', '风丝'.indexOf('传送') < 0 && '风丝'.indexOf('飞行') < 0 && '风丝'.indexOf('三叉戟') < 0 && '风丝'.indexOf('激怒') < 0);
     ok('g vk v22', GRAV === 260 && VK === 420);
@@ -6928,14 +7085,14 @@
     for (let i = 0; i < VW; i++) G.H[i] = 400;
     G.p = { x: 200, y: 386, r: 14, hp: 100, side: 'p', id: 'p' };
     ok('AI open not 叠珠', pickAIWeapon(G.f) !== 6);
-    ok('maps still 14 after 叠珠', MAP_IDS.length === 14 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
+    ok('maps still 14 after 叠珠', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after 叠珠', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('g vk v24', GRAV === 260 && VK === 420);
 
     ok('雷泽 name', STORM_NAME === '雷泽');
     ok('storm odds', STORM_P === 0.35 && STORM_MIN === 8 && STORM_MAX === 14 && STORM_WALK === 0.88);
     ok('storm bolt ms', STORM_BOLT_MIN === 0.08 && STORM_BOLT_MAX === 0.16);
-    ok('storm always vale/cliff/dune', stormForced('vale') && stormForced('cliff') && stormForced('dune') && !stormForced('plain') && !stormForced('forge'));
+    ok('storm always vale/cliff/dune', stormForced('vale') && stormForced('cliff') && stormForced('dune') && !stormForced('plain') && !stormForced('forge') && !stormForced('gate'));
     ok('storm never 熔台', stormBanned('forge') && !stormBanned('vale') && pickStorm('forge') === false);
     ok('storm forced maps', pickStorm('vale') === true && pickStorm('cliff') === true && pickStorm('dune') === true);
     ok('maps not renamed by 雷泽', MAP_NAME.vale === '风谷' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.forge === '熔台' && MAP_NAME.plain === '平原');
@@ -6972,10 +7129,103 @@
     ok('storm hud name stays', STORM_NAME === '雷泽' && MAP_NAME.vale === '风谷');
     G.storm = false;
     ok('叠珠 still 7 after 雷泽', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7 && WEPS.length === 7);
-    ok('maps still 14 after 雷泽', MAP_IDS.length === 14 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
+    ok('maps still 14 after 雷泽', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.vale === '风谷');
     ok('ghost K still after 雷泽', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned 雷泽', STORM_NAME.indexOf('传送') < 0 && STORM_NAME.indexOf('飞行') < 0 && STORM_NAME.indexOf('三叉戟') < 0 && STORM_NAME.indexOf('激怒') < 0);
     ok('g vk v25', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+
+    G.H = buildHeight('gate');
+    G.mapId = 'gate';
+    G.kind = 'hall';
+    G.storm = false;
+    G.walls = [];
+    ok('gate spawn', spawnX('gate', 'p') === GATE_PX && spawnX('gate', 'f') === GATE_FX);
+    ok('gate spawn on ledges', isGateLedge(GATE_PX) && isGateLedge(GATE_FX), Math.round(G.H[GATE_PX]) + '/' + Math.round(G.H[GATE_FX]));
+    ok('gate pillars at 280/660', isGateStoneX(GATE_L_CX) && isGateStoneX(GATE_R_CX) && isGateCrown(GATE_L_CX) && isGateCrown(GATE_R_CX), Math.round(G.H[GATE_L_CX]) + '/' + Math.round(G.H[GATE_R_CX]));
+    ok('gate crowns high', G.H[GATE_L_CX] < GATE_LEDGE_Y - 20 && G.H[GATE_R_CX] < GATE_LEDGE_Y - 20, Math.round(G.H[GATE_L_CX]));
+    ok('gate corridor pit', isGateCorridor(480) && G.H[480] > G.H[GATE_L_CX] + 120, Math.round(G.H[480] - G.H[GATE_L_CX]));
+    ok('gate no void', !isDeathVoid(GATE_PX) && !isDeathVoid(GATE_FX) && !isDeathVoid(480) && !isDeathVoid(GATE_L_CX));
+    ok('gate crater 0.72', GATE_CRATER === 0.72);
+    ok('gate spawn not stone', !isGateStoneX(GATE_PX) && !isGateStoneX(GATE_FX));
+    const gpx = spawnX('gate', 'p');
+    const gpy = G.H[gpx | 0] - UNIT_R;
+    const gth30 = 30 * Math.PI / 180;
+    const gs30 = traceShot(gpx + Math.cos(gth30) * 18, gpy - 4 - Math.sin(gth30) * 18, 30, 70, 0, WEPS[0], G.H, null);
+    ok('gate 30 thread', gs30.x > GATE_L1 && gs30.x < GATE_FX && !gs30.air, Math.round(gs30.x));
+    const gth65 = 65 * Math.PI / 180;
+    const gs65 = traceShot(gpx + Math.cos(gth65) * 18, gpy - 4 - Math.sin(gth65) * 18, 65, 62, 0, WEPS[0], G.H, null);
+    ok('gate 65 clip lip', isGateStoneX(gs65.x) && gs65.x > 480 && !gs65.air, Math.round(gs65.x));
+    const gLip = 220;
+    const gey = G.H[gLip | 0] - UNIT_R;
+    const ggrids = Math.round((GATE_L_CX - gLip) / GRID);
+    const g90 = 90 - ggrids;
+    const gth90 = g90 * Math.PI / 180;
+    const gs90 = traceShot(gLip + Math.cos(gth90) * 18, gey - 4 - Math.sin(gth90) * 18, g90, 95, 0, WEPS[0], G.H, null);
+    ok('gate 90 dunk', isGateCrown(gs90.x) && !gs90.air, Math.round(gs90.x) + ' a' + g90);
+    const gcrownU = { x: GATE_L_CX, y: G.H[GATE_L_CX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    const gledgeU = { x: GATE_PX, y: G.H[GATE_PX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    ok('gate crown walk full', Math.abs(walkSpd(gcrownU) - 90) < 0.01, walkSpd(gcrownU));
+    ok('gate ledge walk full', Math.abs(walkSpd(gledgeU) - 78) < 0.01, walkSpd(gledgeU));
+    G.storm = true;
+    ok('gate crown dry in 雷泽', !onGrass(gcrownU) && Math.abs(walkSpd(gcrownU) - 90) < 0.01, walkSpd(gcrownU));
+    ok('gate ledge wet grass', onGrass(gledgeU) && Math.abs(walkSpd(gledgeU) - 78 * STORM_WALK) < 0.01, walkSpd(gledgeU));
+    G.storm = false;
+    const flatG = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) flatG[i] = 400;
+    G.H = flatG;
+    G.mapId = 'plain';
+    carve(500, 400, 30);
+    const dirtDepth = G.H[500] - 400;
+    G.mapId = 'gate';
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    carve(GATE_L_CX, 400, stoneR(30, GATE_L_CX));
+    const stoneDepth = G.H[GATE_L_CX] - 400;
+    ok('gate stone crater ~0.72', stoneDepth < dirtDepth * 0.85 && Math.abs(stoneDepth / dirtDepth - GATE_CRATER) < 0.08, Math.round(stoneDepth) + '/' + Math.round(dirtDepth));
+    G.H = buildHeight('gate');
+    G.mapId = 'gate';
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    carve(168, 400, stoneR(30, 168));
+    const gateDirtDepth = G.H[168] - 400;
+    ok('gate dirt crater normal', Math.abs(gateDirtDepth - dirtDepth) < 0.5, Math.round(gateDirtDepth));
+    G.H = buildHeight('gate');
+    G.mapId = 'gate';
+    G.kind = 'hall';
+    G.wind = 0;
+    G.ai = 1;
+    G.p = { x: 480, y: G.H[480] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: GATE_FX, y: G.H[GATE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    ok('gate AI corridor 高爆', isGateCorridor(G.p.x) && pickAIWeapon(G.f) === 1);
+    const gimp = { x: 480, y: G.H[480], t: 1, hit: null };
+    const gsc90 = scoreOne(gimp, WEPS[1], G.f, G.p, 88);
+    const gsc30 = scoreOne(gimp, WEPS[1], G.f, G.p, 30);
+    ok('gate AI prefer dunk', gsc90 > gsc30 + 400, Math.round(gsc90) + '>' + Math.round(gsc30));
+    G.p = { x: GATE_L_CX, y: G.H[GATE_L_CX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: GATE_R_CX, y: G.H[GATE_R_CX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    ok('gate AI far crown 普通', isGateCrown(G.f.x) && pickAIWeapon(G.p) === 0);
+    const gimpC = { x: GATE_R_CX, y: G.H[GATE_R_CX], t: 1, hit: null };
+    const gsc65 = scoreOne(gimpC, WEPS[0], G.p, G.f, 65);
+    const gscLow = scoreOne(gimpC, WEPS[0], G.p, G.f, 30);
+    ok('gate AI prefer 65 on far crown', gsc65 > gscLow + 400, Math.round(gsc65) + '>' + Math.round(gscLow));
+    G.kind = 'duo';
+    const gdx0 = spawnAt('p', 0);
+    const gdx1 = spawnAt('p', 1);
+    const gdr0 = spawnAt('f', 0);
+    const gdr1 = spawnAt('f', 1);
+    ok('gate duo extras ledge', isGateLedge(gdx0) && isGateLedge(gdx1) && isGateLedge(gdr0) && isGateLedge(gdr1), gdx1 + '/' + gdr1);
+    ok('gate duo tops', gdx0 === GATE_PX && gdr0 === GATE_FX);
+    ok('gate duo extras along', Math.abs(gdx1 - gdx0) >= 20 && Math.abs(gdr1 - gdr0) >= 20, Math.round(Math.abs(gdx1 - gdx0)));
+    ok('gate duo not in gate', !isGateCorridor(gdx1) && !isGateCorridor(gdr1) && !isGateStoneX(gdx1) && !isGateStoneX(gdr1));
+    ok('gate duo not void', !isDeathVoid(gdx0) && !isDeathVoid(gdx1) && !isDeathVoid(gdr0) && !isDeathVoid(gdr1));
+    G.kind = 'hall';
+    ok('gate storm roll not forced', !stormForced('gate') && !stormBanned('gate') && STORM_P === 0.35);
+    ok('石门 name locked', MAP_NAME.gate === '石门' && MAP_IDS[14] === 'gate');
+    ok('no banned gate', MAP_NAME.gate.indexOf('传送') < 0 && MAP_NAME.gate.indexOf('飞行') < 0 && MAP_NAME.gate.indexOf('三叉戟') < 0 && MAP_NAME.gate.indexOf('激怒') < 0);
+    ok('maps 15 with 石门', MAP_IDS.length === 15 && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊' && MAP_NAME.gate === '石门');
+    ok('叠珠 still 7 after 石门', WEPS[6] && WEPS[6].name === '叠珠' && WEPS[6].id === 7);
+    ok('ghost K still after 石门', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
+    ok('silk still after 石门', typeof silkCount === 'function' && silkCount(0) === 0);
+    ok('g vk v26', GRAV === 260 && VK === 420 && WIND_K === 2.05);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
