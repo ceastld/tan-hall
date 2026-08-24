@@ -1433,15 +1433,13 @@ canvas {
   pointer-events: none;
 }
 
-.bag-chip-xun { color: #5ff6ff; }
-.bag-chip-chen { color: #ff79d0; }
-.bag-chip-zhong { color: #e2b46a; }
-.bag-chip-boot { color: #5dffd2; }
-.bag-chip-ward { color: #ffe36b; }
+.bag-chip-x2 { color: #ffe36b; }
+.bag-chip-x3 { color: #ff6b6b; }
+.bag-chip-p1 { color: #fff3c2; }
+.bag-chip-p2 { color: #ff9a3d; }
+.bag-chip-p3 { color: #ff4d3d; }
+.bag-chip-p5 { color: #ffe36b; }
 .bag-chip-heal { color: #5dffb2; }
-.bag-chip-keen { color: #ffd08a; }
-.bag-chip-tide { color: #7af8e8; }
-.bag-chip-clear { color: #fff3c2; }
 
 .item-dock-rail {
   display: flex;

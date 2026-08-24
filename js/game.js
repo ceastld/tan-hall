@@ -28,7 +28,7 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条 · K 残影';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 堂袋 - = [ ] \\ ; \' , . · 4三裂 5霓轨 6霓火 7叠珠 8迟雷 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 堂袋 - = [ ] \\ ; \' · 4三裂 5霓轨 6霓火 7叠珠 8迟雷 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅 · K残影';
   const MINI_W = 160;
   const MINI_H = 48;
@@ -63,25 +63,25 @@
   const CRATE_RAGE = 18;
   const CRATE_GOLD_RAGE = 28;
   const CRATE_WALK = 36;
-  const BAG_NAME = { xun: '巽符', chen: '沉符', zhong: '重石', boot: '轻靴', ward: '护符', heal: '回春', keen: '锐角', tide: '潮符', clear: '霁符' };
-  const BAG_SHORT = { xun: '巽', chen: '沉', zhong: '重', boot: '轻', ward: '护', heal: '回', keen: '锐', tide: '潮', clear: '霁' };
-  const BAG_TINT = { xun: '#5ff6ff', chen: '#ff79d0', zhong: '#e2b46a', boot: '#5dffd2', ward: '#ffe36b', heal: '#5dffb2', keen: '#ffd08a', tide: '#7af8e8', clear: '#fff3c2' };
-  const BAG_KEYS = ['xun', 'chen', 'zhong', 'boot', 'ward', 'heal', 'keen', 'tide', 'clear'];
+  const BAG_NAME = { x2: '×2', x3: '×3', p1: '+1', p2: '+2', p3: '+3', p5: '+5', heal: '回春' };
+  const BAG_SHORT = { x2: '×2', x3: '×3', p1: '+1', p2: '+2', p3: '+3', p5: '+5', heal: '回' };
+  const BAG_TINT = { x2: '#ffe36b', x3: '#ff6b6b', p1: '#fff3c2', p2: '#ff9a3d', p3: '#ff4d3d', p5: '#ffe36b', heal: '#5dffb2' };
+  const BAG_KEYS = ['x2', 'x3', 'p1', 'p2', 'p3', 'p5', 'heal'];
   const BAG_START = 2;
   const BAG_DRILL = 3;
-  const BAG_BOOT = 36;
   const BAG_HEAL = 14;
-  const BAG_WARD = 16;
-  const BAG_KEEN = 4;
-  const BAG_WIND = 2;
-  const BAG_SPLASH = 1.14;
-  const BAG_CRATER = 1.16;
-  const BAG_TIDE_CRATER = 4;
-  const BAG_TIDE_PUSH = 10;
-  const BAG_CLEAR = 0.5;
+  const BAG_COST = { x2: 40, x3: 40, p1: 20, p2: 20, p3: 25, p5: 40, heal: 15 };
+  const BAG_X2_MUL = 0.90;
+  const BAG_X3_MUL = 0.60;
+  const BAG_P1 = 0.10;
+  const BAG_P2 = 0.20;
+  const BAG_P3 = 0.30;
+  const BAG_P5 = 0.50;
+  const BAG_MULTI_WAIT = 0.32;
+  const BAG_MULTI_JIT = 1;
   const BAG_CRATE_P = 0.35;
-  const BAG_KEY_MAP = { '-': 'xun', '_': 'xun', '=': 'chen', '+': 'chen', '[': 'zhong', '{': 'zhong', ']': 'boot', '}': 'boot', '\\': 'ward', '|': 'ward', ';': 'heal', ':': 'heal', "'": 'keen', '"': 'keen', ',': 'tide', '<': 'tide', '.': 'clear', '>': 'clear' };
-  const BAG_CODE_MAP = { Minus: 'xun', Equal: 'chen', BracketLeft: 'zhong', BracketRight: 'boot', Backslash: 'ward', IntlBackslash: 'ward', Semicolon: 'heal', Quote: 'keen', Comma: 'tide', Period: 'clear' };
+  const BAG_KEY_MAP = { '-': 'x2', '_': 'x2', '=': 'x3', '+': 'x3', '[': 'p1', '{': 'p1', ']': 'p2', '}': 'p2', '\\': 'p3', '|': 'p3', ';': 'p5', ':': 'p5', "'": 'heal', '"': 'heal' };
+  const BAG_CODE_MAP = { Minus: 'x2', Equal: 'x3', BracketLeft: 'p1', BracketRight: 'p2', Backslash: 'p3', IntlBackslash: 'p3', Semicolon: 'p5', Quote: 'heal' };
   const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊', well: '井口' };
   const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud', 'mirror', 'well'];
   const WALL_MAXH = 160;
@@ -488,6 +488,8 @@
     shot: null,
     shots: [],
     dual: null,
+    queue: [],
+    salvoT: 0,
     mines: [],
     charging: false,
     stam: STAM_MAX,
@@ -733,8 +735,7 @@
       crater: wep.crater,
       spd: wep.spd,
       craterMul: wep.craterMul,
-      craterAdd: wep.craterAdd || 0,
-      tidePush: !!wep.tidePush
+      craterAdd: wep.craterAdd || 0
     };
   }
   function liveMineOf(side) {
@@ -755,8 +756,7 @@
       crater: wep.crater * DUAL_BLAST,
       spd: wep.spd,
       craterMul: wep.craterMul,
-      craterAdd: wep.craterAdd || 0,
-      tidePush: !!wep.tidePush
+      craterAdd: wep.craterAdd || 0
     };
   }
   function matchWouldEnd() {
@@ -768,6 +768,7 @@
     if (G.mode !== 'play') return false;
     if (matchWouldEnd()) return false;
     if (G.shots && G.shots.length) return true;
+    if (G.queue && G.queue.length) return true;
     if (G.dual && !G.dual.spawned) return true;
     return false;
   }
@@ -805,6 +806,7 @@
       ult: !!opts.ult,
       lead: !!opts.lead,
       follow: !!opts.follow,
+      extra: !!opts.extra,
       wind: opts.wind != null ? opts.wind : G.wind,
       windMul: opts.windMul != null ? opts.windMul : 1,
       iceSkip: false,
@@ -873,11 +875,11 @@
   function bagCount() { return G.kind === 'drill' ? BAG_DRILL : BAG_START; }
   function freshBag() {
     const n = bagCount();
-    return { xun: n, chen: n, zhong: n, boot: n, ward: n, heal: n, keen: n, tide: n, clear: n };
+    return { x2: n, x3: n, p1: n, p2: n, p3: n, p5: n, heal: n };
   }
-  function zeroBag() { return { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 0, clear: 0 }; }
+  function zeroBag() { return { x2: 0, x3: 0, p1: 0, p2: 0, p3: 0, p5: 0, heal: 0 }; }
   function freshArmed() {
-    return { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: false, clear: false };
+    return { x2: false, x3: false, p1: false, p2: false, p3: false, p5: false, heal: false };
   }
   function ensureBag(u) {
     if (!u) return;
@@ -923,54 +925,77 @@
     if (e.key && BAG_KEY_MAP[e.key]) return BAG_KEY_MAP[e.key];
     return null;
   }
-  function pullToward65(ang) {
-    const e0 = elev(ang);
-    let e1 = e0;
-    if (e0 < 65) e1 = Math.min(65, e0 + BAG_KEEN);
-    else if (e0 > 65) e1 = Math.max(65, e0 - BAG_KEEN);
-    if (ang <= 90) return e1;
-    return 180 - e1;
+  function bagPlusMul(u) {
+    let m = 1;
+    if (bagArmed(u, 'p1')) m += BAG_P1;
+    if (bagArmed(u, 'p2')) m += BAG_P2;
+    if (bagArmed(u, 'p3')) m += BAG_P3;
+    if (bagArmed(u, 'p5')) m += BAG_P5;
+    return m;
   }
-  function shotFacing(u) {
-    if (!u) return 1;
-    if (u.ang > 90) return -1;
-    if (u.ang < 90) return 1;
-    return facingOf(u);
+  function bagXMul(u) {
+    if (bagArmed(u, 'x2')) return BAG_X2_MUL;
+    if (bagArmed(u, 'x3')) return BAG_X3_MUL;
+    return 1;
   }
-  function bagShotWind(u, wind) {
-    wind = wind == null ? G.wind : wind;
-    if (bagArmed(u, 'xun')) return (wind | 0) + BAG_WIND * shotFacing(u);
-    return wind | 0;
+  function bagShellMul(u) {
+    return bagXMul(u) * bagPlusMul(u);
   }
-  function bagWindMul(u) {
-    return bagArmed(u, 'clear') ? BAG_CLEAR : 1;
+  function bagExtraCount(u) {
+    if (bagArmed(u, 'x3')) return 2;
+    if (bagArmed(u, 'x2')) return 1;
+    return 0;
+  }
+  function bagFireCost(u) {
+    let c = 0;
+    if (!u) return 0;
+    for (let i = 0; i < BAG_KEYS.length; i++) {
+      const k = BAG_KEYS[i];
+      if (k === 'heal') continue;
+      if (bagArmed(u, k)) c += BAG_COST[k] || 0;
+    }
+    return c;
+  }
+  function bagCanFire(u) {
+    return bagFireCost(u) <= ((u && u.stam) || 0);
+  }
+  function disarmBagToAfford(u) {
+    if (!u) return;
+    ensureBag(u);
+    const order = ['p5', 'x3', 'x2', 'p3', 'p2', 'p1'];
+    while (bagFireCost(u) > (u.stam || 0)) {
+      let dropped = false;
+      for (let i = 0; i < order.length; i++) {
+        if (u.armed[order[i]]) {
+          u.armed[order[i]] = false;
+          dropped = true;
+          break;
+        }
+      }
+      if (!dropped) break;
+    }
+  }
+  function exclusiveBag(u, id) {
+    if (!u || !u.armed) return;
+    if (id === 'x2') u.armed.x3 = false;
+    if (id === 'x3') u.armed.x2 = false;
   }
   function bagWep(wep, mods) {
     wep = wep || WEPS[0];
     mods = mods || {};
-    const sm = mods.splashMul || 1;
-    const cm = mods.craterMul || 1;
+    const dmg = mods.dmgMul != null ? mods.dmgMul : 1;
+    const sm = mods.splashMul != null ? mods.splashMul : 1;
+    const cm = mods.craterMul != null ? mods.craterMul : 1;
     return {
       id: wep.id,
       name: wep.name,
-      direct: wep.direct,
+      direct: wep.direct * dmg,
       splash: wep.splash * sm,
       crater: wep.crater * cm,
       spd: wep.spd,
       craterMul: cm,
-      craterAdd: mods.craterAdd || 0,
-      tidePush: !!mods.tide
+      craterAdd: mods.craterAdd || 0
     };
-  }
-  function applyBootWalk(u, on) {
-    if (!u) return;
-    if (on) {
-      G.walk += BAG_BOOT;
-      u.stam = (u.stam || 0) + BAG_BOOT;
-    } else {
-      G.walk = Math.max(0, G.walk - BAG_BOOT);
-      u.stam = Math.max(0, (u.stam || 0) - BAG_BOOT);
-    }
   }
   function grantBagItem(owner, id) {
     if (!owner || owner.stake) return null;
@@ -985,75 +1010,47 @@
     return kind;
   }
   function consumeBagOnFire(u) {
-    const mods = { splashMul: 1, craterMul: 1, craterAdd: 0, windAdd: 0, windMul: 1, keen: false, ward: false, tide: false };
+    const mods = { dmgMul: 1, splashMul: 1, craterMul: 1, extra: 0, xMul: 1, plusMul: 1, shellMul: 1 };
     if (!u) return mods;
     ensureBag(u);
+    const plus = bagPlusMul(u);
+    const xMul = bagXMul(u);
+    const extra = bagExtraCount(u);
+    const cost = bagFireCost(u);
     const names = [];
-    if (bagArmed(u, 'xun')) {
-      mods.windAdd = BAG_WIND * shotFacing(u);
-      u.bag.xun -= 1;
-      names.push(BAG_NAME.xun);
-      if (u.bag.xun <= 0) u.armed.xun = false;
+    mods.plusMul = plus;
+    mods.xMul = xMul;
+    mods.shellMul = xMul * plus;
+    mods.dmgMul = mods.shellMul;
+    mods.splashMul = xMul;
+    mods.craterMul = xMul;
+    mods.extra = extra;
+    function eat(id) {
+      if (!bagArmed(u, id)) return;
+      u.bag[id] = (u.bag[id] | 0) - 1;
+      names.push(BAG_NAME[id]);
+      if (u.bag[id] <= 0) u.armed[id] = false;
     }
-    if (bagArmed(u, 'chen')) {
-      mods.splashMul = BAG_SPLASH;
-      u.bag.chen -= 1;
-      names.push(BAG_NAME.chen);
-      if (u.bag.chen <= 0) u.armed.chen = false;
-    }
-    if (bagArmed(u, 'zhong')) {
-      mods.craterMul = BAG_CRATER;
-      u.bag.zhong -= 1;
-      names.push(BAG_NAME.zhong);
-      if (u.bag.zhong <= 0) u.armed.zhong = false;
-    }
-    if (bagArmed(u, 'boot')) {
-      u.bag.boot -= 1;
-      names.push(BAG_NAME.boot);
-      if (u.bag.boot <= 0) u.armed.boot = false;
-    }
-    if (bagArmed(u, 'ward')) {
-      mods.ward = true;
-      u.bag.ward -= 1;
-      names.push(BAG_NAME.ward);
-      if (u.bag.ward <= 0) u.armed.ward = false;
-    }
-    if (bagArmed(u, 'keen')) {
-      mods.keen = true;
-      u.bag.keen -= 1;
-      names.push(BAG_NAME.keen);
-      if (u.bag.keen <= 0) u.armed.keen = false;
-    }
-    if (bagArmed(u, 'tide')) {
-      mods.craterAdd = BAG_TIDE_CRATER;
-      mods.tide = true;
-      u.bag.tide -= 1;
-      names.push(BAG_NAME.tide);
-      if (u.bag.tide <= 0) u.armed.tide = false;
-    }
-    if (bagArmed(u, 'clear')) {
-      mods.windMul = BAG_CLEAR;
-      u.bag.clear -= 1;
-      names.push(BAG_NAME.clear);
-      if (u.bag.clear <= 0) u.armed.clear = false;
-    }
-    if (mods.ward) u.wardOnce = true;
+    eat('x2');
+    eat('x3');
+    eat('p1');
+    eat('p2');
+    eat('p3');
+    eat('p5');
+    if (cost > 0) u.stam = Math.max(0, (u.stam || 0) - cost);
     if (names.length) toast(names.join(' · '), false, true);
     return mods;
   }
   function consumeBagOnSkip(u) {
-    if (!u) return;
-    ensureBag(u);
-    if (bagArmed(u, 'boot')) {
-      u.bag.boot = Math.max(0, (u.bag.boot | 0) - 1);
-      if (u.bag.boot <= 0) u.armed.boot = false;
-    }
+    return u;
   }
   function useHeal(u) {
     if (!u || G.phase !== 'aim' || G.busy) return false;
     ensureBag(u);
     if ((u.bag.heal | 0) <= 0) { if (isHuman(u)) toastDeny('空袋'); return false; }
+    if ((u.stam || 0) < BAG_COST.heal) { if (isHuman(u)) toastDeny('体不够'); return false; }
     u.bag.heal -= 1;
+    u.stam = Math.max(0, (u.stam || 0) - BAG_COST.heal);
     u.hp = Math.min(u.max || u.hp, (u.hp || 0) + BAG_HEAL);
     toast('回春 +14', false, true);
     floatText(u.x, u.y - 24, '+14', [93, 255, 178], false);
@@ -1069,6 +1066,7 @@
     ensureBag(u);
     if ((u.bag[id] | 0) <= 0) return false;
     u.armed[id] = true;
+    exclusiveBag(u, id);
     return true;
   }
   function toggleBag(id) {
@@ -1088,7 +1086,7 @@
     if (id === 'heal') return useHeal(u);
     const on = !u.armed[id];
     u.armed[id] = on;
-    if (id === 'boot') applyBootWalk(u, on);
+    if (on) exclusiveBag(u, id);
     audio.ensure();
     audio.beep(on ? 380 : 220, 0.05, 'square', 0.018, on ? 620 : 140);
     syncHud();
@@ -1099,7 +1097,6 @@
     u.items = freshItems();
     u.bag = freshBag();
     u.armed = freshArmed();
-    u.wardOnce = false;
   }
   function noteLastHit(shooter, victim) {
     if (!shooter || !victim || shooter === victim) return;
@@ -2462,8 +2459,7 @@
       ghost: null,
       items: freshItems(),
       bag: freshBag(),
-      armed: freshArmed(),
-      wardOnce: false
+      armed: freshArmed()
     };
     u.y = groundAt(u.x) - u.r;
     return u;
@@ -3620,11 +3616,6 @@
         if (spl > dmg) dmg = spl;
       }
       if (ultOn) dmg *= 1.6;
-      if (dmg >= 1 && u.wardOnce && u !== shooter) {
-        dmg = Math.max(0, dmg - BAG_WARD);
-        u.wardOnce = false;
-        floatText(u.x, u.y - 18, BAG_NAME.ward, GOLD, false);
-      }
       if (dmg >= 1) {
         const dealt = hurt(u, dmg, 'blast');
         if (dealt > 0 && u !== shooter) {
@@ -3633,9 +3624,6 @@
           if (shooter && !shooter.stake) addRage(shooter, Math.floor(dealt * 0.45));
           if (wep && wep.id === 3 && u !== shooter) u.frozen = 1;
         }
-      }
-      if (wep && wep.tidePush && d < wep.splash && u.hp > 0 && !u._tidePushed) {
-        if (tidePushToward(u, x)) u._tidePushed = true;
       }
     }
     return any;
@@ -3824,6 +3812,8 @@
     G.shot = null;
     G.shots = [];
     G.dual = null;
+    G.queue = [];
+    G.salvoT = 0;
     G.neonOn = false;
     G.actDelay = { skip: false, wepId: 0, ult: false };
     trail.length = 0;
@@ -3833,10 +3823,6 @@
       if (G.kind === 'drill') resetItems(u);
       if (u.wep != null) G.wep = u.wep;
       ensureBag(u);
-      if (bagArmed(u, 'boot')) {
-        G.walk += BAG_BOOT;
-        u.stam += BAG_BOOT;
-      }
     }
     G.stam = u ? u.stam : STAM_MAX;
     rollWind();
@@ -3957,6 +3943,11 @@
   function startCharge() {
     if (G.mode !== 'play' || G.phase !== 'aim' || !humanTurn()) return;
     if (G.busy) return;
+    const actor = curUnit();
+    if (actor && !bagCanFire(actor)) {
+      toastDeny('体不够');
+      return;
+    }
     G.phase = 'charge';
     G.charging = true;
     G.power = TAP_POW;
@@ -3973,16 +3964,26 @@
 
   function fire(u) {
     if (!u || G.phase === 'fly') return;
+    if (!bagCanFire(u)) {
+      if (isHuman(u)) {
+        toastDeny('体不够');
+        G.phase = 'aim';
+        G.charging = false;
+        audio.chargeStop();
+        syncHud();
+        return;
+      }
+      disarmBagToAfford(u);
+    }
     const mods = consumeBagOnFire(u);
-    let ang = u.ang;
-    if (mods.keen) ang = pullToward65(ang);
+    const ang = u.ang;
     const wep = bagWep(wepOf(), mods);
     const th = ang * Math.PI / 180;
     const nose = 18;
     const sx = u.x + Math.cos(th) * nose;
     const sy = u.y - 4 - Math.sin(th) * nose;
-    const shotWind = (G.wind | 0) + (mods.windAdd || 0);
-    const windMul = mods.windMul != null ? mods.windMul : 1;
+    const shotWind = G.wind | 0;
+    const windMul = 1;
     if (G.neonOn) {
       if (u.items && u.items.neon > 0) u.items.neon -= 1;
       G.neonOn = false;
@@ -3991,20 +3992,34 @@
     const shell = makeShell(sx, sy, ang, G.power, wep, u, { ult: !!u.ult, lead: true, wind: shotWind, windMul: windMul });
     G.shot = shell;
     G.shots = [shell];
-    G.dual = isDualWep(wep) ? {
-      wait: DUAL_WAIT,
-      spawned: false,
+    G.queue = [];
+    G.salvoT = 0;
+    const extra = mods.extra || 0;
+    const dual = isDualWep(wep);
+    if (dual) {
+      G.queue.push({
+        at: DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
+        jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul
+      });
+    }
+    for (let i = 1; i <= extra; i++) {
+      const at = i * BAG_MULTI_WAIT;
+      G.queue.push({
+        at: at, lead: true, extra: true, ang: ang, power: G.power, wep: wep,
+        jitter: BAG_MULTI_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul
+      });
+      if (dual) {
+        G.queue.push({
+          at: at + DUAL_WAIT, follow: true, ang: ang, power: G.power * DUAL_POW, wep: dualFollowWep(wep),
+          jitter: DUAL_JIT, owner: u, sx: sx, sy: sy, ult: !!u.ult, wind: shotWind, windMul: windMul
+        });
+      }
+    }
+    G.dual = (extra > 0 || dual) ? {
+      spawned: G.queue.length === 0,
       owner: u,
-      ang: ang,
-      power: G.power,
-      wep: wep,
-      sx: sx,
-      sy: sy,
-      ult: !!u.ult,
       hit: false,
-      comboDone: false,
-      wind: shotWind,
-      windMul: windMul
+      comboDone: false
     } : null;
     G.ghostPend = { x: sx, y: sy, ang: ang, power: Math.round(G.power), wepId: wep.id, wind: shotWind, points: [{ x: sx, y: sy, a: 1 }] };
     trail.length = 0;
@@ -4044,33 +4059,70 @@
     syncHud();
   }
 
-  function spawnDualFollow() {
-    const d = G.dual;
-    if (!d || d.spawned) return;
-    d.spawned = true;
+  function nextQueueIdx() {
+    const q = G.queue;
+    if (!q || !q.length) return -1;
+    let best = 0;
+    for (let i = 1; i < q.length; i++) {
+      if (q[i].at < q[best].at) best = i;
+    }
+    return best;
+  }
+
+  function spawnFromQueue(next) {
+    if (!next) return;
+    if (G.dual) G.dual.spawned = !(G.queue && G.queue.length);
     if (matchWouldEnd() || G.mode !== 'play' || G.phase === 'end') {
       if (!G.shots || !G.shots.length) finishFly();
       return;
     }
-    const jit = rand(-DUAL_JIT, DUAL_JIT);
-    const ang = clamp(d.ang + jit, 0, 180);
-    const pow = d.power * DUAL_POW;
-    const wep2 = dualFollowWep(d.wep);
-    const shell = makeShell(d.sx, d.sy, ang, pow, wep2, d.owner, { ult: !!d.ult, follow: true, wind: d.wind, windMul: d.windMul != null ? d.windMul : 1 });
+    const jit = next.jitter ? rand(-next.jitter, next.jitter) : 0;
+    const ang = clamp(next.ang + jit, 0, 180);
+    const wep2 = next.wep;
+    const shell = makeShell(next.sx, next.sy, ang, next.power, wep2, next.owner, {
+      ult: !!next.ult,
+      lead: !!next.lead,
+      follow: !!next.follow,
+      extra: !!next.extra,
+      wind: next.wind,
+      windMul: next.windMul != null ? next.windMul : 1
+    });
     if (!G.shots) G.shots = [];
     G.shots.push(shell);
     G.shot = shell;
     G.phase = 'fly';
     audio.fire(wep2);
-    audio.beep(420, 0.07, 'sine', 0.028, 760);
-    burst(d.sx, d.sy, d.ult ? GOLD : PEARL, 6, 70, 0.22);
+    audio.beep(next.follow ? 420 : 360, 0.07, 'sine', 0.028, next.follow ? 760 : 640);
+    burst(next.sx, next.sy, next.ult ? GOLD : (next.follow ? PEARL : (wep2 && wep2.id === 7 ? PEARL : GOLD)), 6, 70, 0.22);
     syncHud();
+  }
+
+  function tickQueue(dt) {
+    if (!G.queue || !G.queue.length) {
+      if (G.dual) G.dual.spawned = true;
+      return;
+    }
+    G.salvoT = (G.salvoT || 0) + dt;
+    while (G.queue && G.queue.length) {
+      const i = nextQueueIdx();
+      if (i < 0 || G.queue[i].at > G.salvoT) break;
+      const next = G.queue.splice(i, 1)[0];
+      spawnFromQueue(next);
+      if (G.phase === 'end' || G.mode !== 'play') break;
+    }
+    if (G.dual) G.dual.spawned = !(G.queue && G.queue.length);
+  }
+
+  function spawnDualFollow() {
+    tickQueue(0);
   }
 
   function finishFly() {
     const owner = (G.dual && G.dual.owner) || (G.shot && G.shot.owner) || curUnit();
     if (owner && owner.ult) owner.ult = false;
     G.dual = null;
+    G.queue = [];
+    G.salvoT = 0;
     G.shots = [];
     G.shot = null;
     trail.length = 0;
@@ -4534,7 +4586,7 @@
     dirtBurst(x, y, hit ? 14 : 20);
     audio.boom(hit, wep, wasUlt);
     setCamImpact(x, y, !!fromHit);
-    if (wasUlt && (!shot || shot.lead || !G.dual)) {
+    if (wasUlt && (!shot || (shot.lead && !shot.extra) || !G.dual)) {
       floatText(x, y - 48, '殿破', GOLD, true);
       screenFlash(GOLD, 0.45);
       hitStop(0.12);
@@ -4585,7 +4637,6 @@
     if (!keepPhase && (!shot || shot.lead)) commitLastGhost(x, y);
     eachUnit(ungroundIfAir);
     eachUnit(refreshBury);
-    eachUnit(function (u) { if (u) u._tidePushed = false; });
     triggerQuake(x, y, wep, wep && wep.id === 4 ? QUAKE_R : crater);
     if (keepPhase) {
       if (G.mode === 'play') checkEnd();
@@ -4812,10 +4863,7 @@
   }
 
   function stepShot(dt) {
-    if (G.dual && !G.dual.spawned) {
-      G.dual.wait -= dt;
-      if (G.dual.wait <= 0) spawnDualFollow();
-    }
+    tickQueue(dt);
     if (G.phase !== 'fly') return;
     const list = G.shots && G.shots.length ? G.shots.slice() : (G.shot ? [G.shot] : []);
     for (let i = 0; i < list.length; i++) {
@@ -4828,6 +4876,7 @@
     if (G.phase === 'fly') {
       const live = (G.shots && G.shots[0]) || G.shot;
       if (live) setCamShot(live);
+      else if (G.queue && G.queue.length && G.queue[0].owner) setCamShooter(G.queue[0].owner);
       else if (G.dual && !G.dual.spawned && G.dual.owner) setCamShooter(G.dual.owner);
     }
   }
@@ -5180,23 +5229,6 @@
     if (!u) return false;
     const g0 = groundAt(u.x);
     return (groundAt(clamp(u.x - 36, 0, VW - 1)) - g0 > 28) || (groundAt(clamp(u.x + 36, 0, VW - 1)) - g0 > 28);
-  }
-
-  function tidePushToward(u, cx) {
-    if (!u || u.hp <= 0) return 0;
-    if (!thinLedge(u)) return 0;
-    let dir = u.x < cx ? 1 : (u.x > cx ? -1 : 0);
-    if (!dir) {
-      const gl = groundAt(clamp(u.x - 20, 0, VW - 1), u.y);
-      const gr = groundAt(clamp(u.x + 20, 0, VW - 1), u.y);
-      dir = gr > gl + 1 ? 1 : (gl > gr + 1 ? -1 : (u.face || 1));
-    }
-    const nx = clamp(u.x + dir * BAG_TIDE_PUSH, 22, VW - 22);
-    if (wallBlocksWalk(nx, u.y, u.r || UNIT_R)) return 0;
-    u.x = nx;
-    ungroundIfAir(u);
-    burst(u.x, u.y + (u.r || 14), [46, 232, 214], REDUCE ? 3 : 7, 55, 0.18);
-    return BAG_TIDE_PUSH;
   }
 
   function dirtUnderFeet(u) {
@@ -5702,31 +5734,22 @@
       if (lead || breakRage || ledge) plan.neon = true;
     }
     ensureBag(from);
-    if ((from.hp || 0) < 40 && (from.bag.heal | 0) > 0) {
-      if (aiHard() || (!aiEasy()) || Math.random() < 0.08) plan.heal = true;
+    if ((from.hp || 0) < 40 && (from.bag.heal | 0) > 0 && (from.stam || 0) >= BAG_COST.heal) {
+      if (aiHard() || (!aiEasy() && Math.random() < 0.45) || Math.random() < 0.08) plan.heal = true;
     }
     if (!aiEasy()) {
       const hard = aiHard();
       const wepIdx = G.wep;
-      if ((wepIdx === 1 || wepIdx === 3) && (from.bag.chen | 0) + (from.bag.zhong | 0) > 0) {
-        if (hard || Math.random() < 0.5) {
-          if ((from.bag.chen | 0) > 0) plan.bag.push('chen');
-          if ((from.bag.zhong | 0) > 0) plan.bag.push('zhong');
-        }
-      }
       const mark2 = otherUnit(from) || G.p;
-      const longShot = mark2 && Math.abs((from.x || 0) - (mark2.x || 0)) >= 8 * GRID;
-      if (longShot && Math.abs(G.wind) < 3 && (from.bag.xun | 0) > 0 && (hard || Math.random() < 0.5)) {
-        plan.bag.push('xun');
-      }
-      if ((from.hp || 0) < 45 && (from.bag.ward | 0) > 0 && (hard || true)) {
-        plan.bag.push('ward');
-      }
-      if (hard && longShot && Math.abs(G.wind) >= 6 && (from.bag.clear | 0) > 0) {
-        plan.bag.push('clear');
-      }
-      if (hard && mark2 && thinLedge(mark2) && (from.bag.tide | 0) > 0) {
-        plan.bag.push('tide');
+      const dist = mark2 ? Math.abs((from.x || 0) - (mark2.x || 0)) : 999;
+      const close = dist < 6 * GRID;
+      const exposed = mark2 && pitDepth(mark2) < BURY_PX;
+      if (hard && wepIdx === 1 && exposed) {
+        if (close && (from.bag.x3 | 0) > 0) plan.bag.push('x3');
+        else if ((from.bag.x2 | 0) > 0) plan.bag.push('x2');
+        if ((from.bag.p3 | 0) > 0) plan.bag.push('p3');
+      } else if (!hard && wepIdx === 1 && exposed && (from.bag.x2 | 0) > 0 && Math.random() < 0.28) {
+        plan.bag.push('x2');
       }
     }
     const rageReady = (from.rage >= 100) || (plan.drum && from.rage + 50 >= 100) ? 100 : (from.rage || 0);
@@ -5737,13 +5760,6 @@
       syncWeps();
       moved = planAIMove(from);
       best = moved.best;
-    }
-    if (plan.bag && plan.bag.indexOf('clear') >= 0) {
-      const oldW = G.wind;
-      G.wind = oldW * BAG_CLEAR;
-      moved = planAIMove(from);
-      best = moved.best;
-      G.wind = oldW;
     }
     const fogK = veilAimMul(mark);
     const jit = aiJitterBase();
@@ -5780,11 +5796,6 @@
       if (AI.wait > 0) return;
       const plan = AI.plan || {};
       if (plan.heal) { useHeal(u); plan.heal = false; AI.wait = 0.16; return; }
-      if (plan.bag && plan.bag.length) {
-        for (let i = 0; i < plan.bag.length; i++) armBagSilent(u, plan.bag[i]);
-        plan.bag = [];
-        syncHud();
-      }
       if (plan.drum) { useDrum(u); plan.drum = false; AI.wait = 0.18; return; }
       if (plan.warp) {
         G.warpX = plan.warp;
@@ -5905,6 +5916,18 @@
       return;
     }
     if (AI.stage === 2) {
+      const plan = AI.plan || {};
+      if (plan.bag && plan.bag.length) {
+        let cost = 0;
+        for (let i = 0; i < plan.bag.length; i++) {
+          const id = plan.bag[i];
+          const c = BAG_COST[id] || 0;
+          if (((u.stam || 0) - cost) < c) continue;
+          if (armBagSilent(u, id)) cost += c;
+        }
+        plan.bag = [];
+        syncHud();
+      }
       const da = AI.ang - u.ang;
       if (Math.abs(da) > 0.6) {
         u.ang += Math.sign(da) * Math.min(Math.abs(da), 70 * dt);
@@ -6026,6 +6049,8 @@
     G.shot = null;
     G.shots = [];
     G.dual = null;
+    G.queue = [];
+    G.salvoT = 0;
     G.mines = [];
     G.combo = 0;
     G.turns = 0;
@@ -7896,8 +7921,7 @@
     const pts = [];
     if (!u) return { points: pts, len: 0 };
     const wep = wepOf();
-    let ang = u.ang;
-    if (bagArmed(u, 'keen')) ang = pullToward65(ang);
+    const ang = u.ang;
     const th = ang * Math.PI / 180;
     let x = u.x + Math.cos(th) * 18;
     let y = u.y - 4 - Math.sin(th) * 18;
@@ -7905,8 +7929,8 @@
     let vx = Math.cos(th) * spd;
     let vy = -Math.sin(th) * spd;
     const dt = 1 / 60;
-    const predWind = bagShotWind(u, G.wind);
-    const predMul = bagWindMul(u);
+    const predWind = G.wind | 0;
+    const predMul = 1;
     pts.push({ x: x, y: y });
     let len = 0;
     let t = 0;
@@ -10242,47 +10266,46 @@
     G.busy = null;
     G.walk = WALK_PX;
     const bagHall = freshBag();
-    ok('bag start 2', bagHall.xun === 2 && bagHall.chen === 2 && bagHall.zhong === 2 && bagHall.boot === 2 && bagHall.ward === 2 && bagHall.heal === 2 && bagHall.keen === 2 && bagHall.tide === 2 && bagHall.clear === 2);
+    ok('bag start 2', bagHall.x2 === 2 && bagHall.x3 === 2 && bagHall.p1 === 2 && bagHall.p2 === 2 && bagHall.p3 === 2 && bagHall.p5 === 2 && bagHall.heal === 2);
     G.kind = 'drill';
     const bagDrill = freshBag();
-    ok('bag drill 3', bagDrill.xun === 3 && bagDrill.heal === 3 && bagDrill.keen === 3 && bagDrill.tide === 3 && bagDrill.clear === 3);
+    ok('bag drill 3', bagDrill.x2 === 3 && bagDrill.x3 === 3 && bagDrill.p5 === 3 && bagDrill.heal === 3);
     G.kind = 'hall';
-    ok('bag names locked', BAG_NAME.xun === '巽符' && BAG_NAME.chen === '沉符' && BAG_NAME.zhong === '重石' && BAG_NAME.boot === '轻靴' && BAG_NAME.ward === '护符' && BAG_NAME.heal === '回春' && BAG_NAME.keen === '锐角' && BAG_NAME.tide === '潮符' && BAG_NAME.clear === '霁符');
-    ok('bag keys 9', BAG_KEYS.length === 9 && BAG_KEYS[0] === 'xun' && BAG_KEYS[6] === 'keen' && BAG_KEYS[7] === 'tide' && BAG_KEYS[8] === 'clear');
-    ok('bag nums', BAG_BOOT === 36 && BAG_HEAL === 14 && BAG_WARD === 16 && BAG_KEEN === 4 && BAG_WIND === 2 && BAG_SPLASH === 1.14 && BAG_CRATER === 1.16 && BAG_TIDE_CRATER === 4 && BAG_TIDE_PUSH === 10 && BAG_CLEAR === 0.5 && BAG_CRATE_P === 0.35);
-    ok('keen pull 70→66', pullToward65(70) === 66);
-    ok('keen pull 50→54', pullToward65(50) === 54);
-    ok('keen pull 65 stays', pullToward65(65) === 65);
-    ok('keen pull 115 stays', pullToward65(115) === 115);
-    ok('keen pull 120→116', pullToward65(120) === 116);
-    const xu = { ang: 65, face: 1, bag: { xun: 2, chen: 2, zhong: 2, boot: 2, ward: 2, heal: 2, keen: 2 }, armed: { xun: true, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false }, hp: 80, max: 100, x: 160, y: 400, stam: 100 };
-    ok('xun wind +2 right', bagShotWind(xu, 3) === 5);
-    xu.ang = 120;
-    ok('xun wind +2 left', bagShotWind(xu, 3) === 1);
-    xu.ang = 65;
-    const stacked = { ang: 70, face: 1, bag: { xun: 2, chen: 1, zhong: 1, boot: 1, ward: 1, heal: 2, keen: 1, tide: 1, clear: 1 }, armed: { xun: true, chen: true, zhong: true, boot: true, ward: true, heal: false, keen: true, tide: true, clear: true }, hp: 80, max: 100, x: 160, y: 400, stam: 100, wardOnce: false };
+    ok('bag names locked', BAG_NAME.x2 === '×2' && BAG_NAME.x3 === '×3' && BAG_NAME.p1 === '+1' && BAG_NAME.p2 === '+2' && BAG_NAME.p3 === '+3' && BAG_NAME.p5 === '+5' && BAG_NAME.heal === '回春');
+    ok('bag keys 7', BAG_KEYS.length === 7 && BAG_KEYS[0] === 'x2' && BAG_KEYS[1] === 'x3' && BAG_KEYS[5] === 'p5' && BAG_KEYS[6] === 'heal');
+    ok('bag nums', BAG_HEAL === 14 && BAG_COST.x2 === 40 && BAG_COST.x3 === 40 && BAG_COST.p1 === 20 && BAG_COST.p2 === 20 && BAG_COST.p3 === 25 && BAG_COST.p5 === 40 && BAG_COST.heal === 15 && BAG_X2_MUL === 0.90 && BAG_X3_MUL === 0.60 && BAG_MULTI_WAIT === 0.32 && BAG_MULTI_JIT === 1 && BAG_CRATE_P === 0.35);
+    const plusU = { bag: { x2: 1, x3: 0, p1: 1, p2: 1, p3: 1, p5: 1, heal: 0 }, armed: { x2: false, x3: false, p1: true, p2: true, p3: true, p5: true, heal: false }, stam: 100 };
+    ok('plus add', Math.abs(bagPlusMul(plusU) - 2.1) < 1e-9);
+    const x2p5 = { bag: { x2: 1, x3: 0, p1: 0, p2: 0, p3: 0, p5: 1, heal: 0 }, armed: { x2: true, x3: false, p1: false, p2: false, p3: false, p5: true, heal: false }, stam: 100 };
+    ok('x2++5 shell 1.35', Math.abs(bagShellMul(x2p5) - 0.9 * 1.5) < 1e-9);
+    ok('x2++5 total 2.7', Math.abs(2 * bagShellMul(x2p5) - 2.7) < 1e-9);
+    ok('x2 extra 1', bagExtraCount(x2p5) === 1);
+    const x3u = { bag: { x2: 1, x3: 1, p1: 0, p2: 0, p3: 0, p5: 0, heal: 0 }, armed: { x2: false, x3: true, p1: false, p2: false, p3: false, p5: false, heal: false }, stam: 100 };
+    ok('x3 extra 2 mul 0.6', bagExtraCount(x3u) === 2 && bagXMul(x3u) === 0.60);
+    ok('x2++5 cost 80', bagFireCost(x2p5) === 80 && bagCanFire(x2p5) === true);
+    const poor = { bag: { x2: 1, p5: 1 }, armed: { x2: true, p5: true }, stam: 79 };
+    ok('body block', bagCanFire(poor) === false && bagFireCost(poor) === 80);
+    const stacked = { bag: { x2: 2, x3: 2, p1: 1, p2: 1, p3: 1, p5: 1, heal: 2 }, armed: { x2: true, x3: false, p1: false, p2: true, p3: true, p5: false, heal: false }, hp: 80, max: 100, x: 160, y: 400, stam: 100 };
+    ok('chip ×2++2++3', bagChipText(stacked) === '×2++2++3');
     const sm = consumeBagOnFire(stacked);
-    ok('stack mods', sm.splashMul === 1.14 && sm.craterMul === 1.16 && sm.windAdd === 2 && sm.keen === true && sm.ward === true && sm.tide === true && sm.craterAdd === 4 && sm.windMul === 0.5);
-    ok('stack consume 1', stacked.bag.xun === 1 && stacked.bag.chen === 0 && stacked.bag.zhong === 0 && stacked.bag.boot === 0 && stacked.bag.ward === 0 && stacked.bag.keen === 0 && stacked.bag.heal === 2 && stacked.bag.tide === 0 && stacked.bag.clear === 0);
-    ok('stack wardOnce', stacked.wardOnce === true);
-    ok('empty cannot keep arm', stacked.armed.chen === false && stacked.armed.xun === true);
+    ok('stack shell', Math.abs(sm.shellMul - 0.9 * 1.5) < 1e-9 && sm.extra === 1 && sm.xMul === 0.9 && Math.abs(sm.plusMul - 1.5) < 1e-9);
+    ok('stack consume 1', stacked.bag.x2 === 1 && stacked.bag.p2 === 0 && stacked.bag.p3 === 0 && stacked.bag.heal === 2 && stacked.bag.p5 === 1);
+    ok('stack stam 40+20+25', stacked.stam === 15);
+    ok('empty cannot keep arm', stacked.armed.p2 === false && stacked.armed.x2 === true);
     const bw = bagWep(WEPS[0], sm);
-    ok('bag wep splash crater', Math.abs(bw.splash - 36 * 1.14) < 1e-9 && Math.abs(bw.crater - 30 * 1.16) < 1e-9);
-    ok('bag wep tide clear', bw.craterAdd === 4 && bw.tidePush === true);
+    ok('bag wep dmg splash crater', Math.abs(bw.direct - 32 * 0.9 * 1.5) < 1e-9 && Math.abs(bw.splash - 36 * 0.9) < 1e-9 && Math.abs(bw.crater - 30 * 0.9) < 1e-9);
     const emptyU = { bag: zeroBag(), armed: freshArmed(), hp: 50, max: 100, x: 100, y: 400, stam: 100 };
-    ok('empty no arm', armBagSilent(emptyU, 'xun') === false && emptyU.armed.xun === false);
+    ok('empty no arm', armBagSilent(emptyU, 'x2') === false && emptyU.armed.x2 === false);
+    const ex = { bag: { x2: 1, x3: 1, p1: 0, p2: 0, p3: 0, p5: 0, heal: 0 }, armed: freshArmed(), stam: 100 };
+    ok('arm x2', armBagSilent(ex, 'x2') === true && ex.armed.x2 === true);
+    ok('x2 x3 exclusive', armBagSilent(ex, 'x3') === true && ex.armed.x3 === true && ex.armed.x2 === false);
     G.phase = 'aim';
     G.busy = null;
-    const hu = { bag: { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 2, keen: 0 }, armed: freshArmed(), hp: 90, max: 100, x: 152, y: 400, stam: 100 };
-    ok('heal +14', useHeal(hu) === true && hu.hp === 100 && hu.bag.heal === 1);
-    ok('heal cap', useHeal(hu) === true && hu.hp === 100 && hu.bag.heal === 0);
-    const wu = { hp: 80, max: 100, x: 400, y: 400, r: 14, side: 'f', id: 'f', wardOnce: true };
-    const su = { hp: 100, max: 100, x: 152, y: 400, r: 14, side: 'p', id: 'p', rage: 0 };
-    G.p = su; G.f = wu; G.p2 = null; G.f2 = null;
-    const hitWard = applyBlast(400, 400, WEPS[0], su, false);
-    ok('ward -16 once', hitWard === true && wu.hp === 80 - (32 - 16) && wu.wardOnce === false, wu.hp);
-    const hit2 = applyBlast(400, 400, WEPS[0], su, false);
-    ok('ward only once', wu.hp === 80 - 16 - 32, wu.hp);
+    const hu = { bag: { x2: 0, x3: 0, p1: 0, p2: 0, p3: 0, p5: 0, heal: 2 }, armed: freshArmed(), hp: 90, max: 100, x: 152, y: 400, stam: 100 };
+    ok('heal +14 cost 15', useHeal(hu) === true && hu.hp === 100 && hu.bag.heal === 1 && hu.stam === 85);
+    ok('heal cap', useHeal(hu) === true && hu.hp === 100 && hu.bag.heal === 0 && hu.stam === 70);
+    const broke = { bag: { x2: 0, x3: 0, p1: 0, p2: 0, p3: 0, p5: 0, heal: 1 }, armed: freshArmed(), hp: 50, max: 100, x: 152, y: 400, stam: 10 };
+    ok('heal 体不够', useHeal(broke) === false && broke.bag.heal === 1 && broke.hp === 50);
     ok('crate bag instead of 术', maybeBagCrate('item', 0.34) === 'bag');
     ok('crate bag miss 术', maybeBagCrate('item', 0.35) === 'item');
     ok('crate bag instead of 怒', maybeBagCrate('rage', 0.0) === 'bag');
@@ -10293,47 +10316,30 @@
     ok('crate bag toast 堂匣 · 名', gb && gb.toast === CRATE_NAME + ' · ' + BAG_NAME[gb.id]);
     const bagGold2 = grantCrate({ items: freshItems(), bag: freshBag(), rage: 40, stake: false }, 'gold');
     ok('crate gold still 金匣', bagGold2 && bagGold2.kind === 'gold' && bagGold2.toast === '金匣');
-    ok('hotkeys map 9', bagIdFromKey({ key: '-', code: 'Minus' }) === 'xun' && bagIdFromKey({ key: '=', code: 'Equal' }) === 'chen' && bagIdFromKey({ key: '[', code: 'BracketLeft' }) === 'zhong' && bagIdFromKey({ key: ']', code: 'BracketRight' }) === 'boot' && bagIdFromKey({ key: '\\', code: 'Backslash' }) === 'ward' && bagIdFromKey({ key: ';', code: 'Semicolon' }) === 'heal' && bagIdFromKey({ key: "'", code: 'Quote' }) === 'keen' && bagIdFromKey({ key: ',', code: 'Comma' }) === 'tide' && bagIdFromKey({ key: '.', code: 'Period' }) === 'clear');
+    ok('hotkeys map 7', bagIdFromKey({ key: '-', code: 'Minus' }) === 'x2' && bagIdFromKey({ key: '=', code: 'Equal' }) === 'x3' && bagIdFromKey({ key: '[', code: 'BracketLeft' }) === 'p1' && bagIdFromKey({ key: ']', code: 'BracketRight' }) === 'p2' && bagIdFromKey({ key: '\\', code: 'Backslash' }) === 'p3' && bagIdFromKey({ key: ';', code: 'Semicolon' }) === 'p5' && bagIdFromKey({ key: "'", code: 'Quote' }) === 'heal');
+    ok('hotkeys no old ,.', bagIdFromKey({ key: ',', code: 'Comma' }) == null && bagIdFromKey({ key: '.', code: 'Period' }) == null);
     ok('hotkeys no steal 1-8', bagIdFromKey({ key: '1', code: 'Digit1' }) == null && bagIdFromKey({ key: '8', code: 'Digit8' }) == null);
     ok('hotkeys no steal QECVBGFX', bagIdFromKey({ key: 'q', code: 'KeyQ' }) == null && bagIdFromKey({ key: 'e', code: 'KeyE' }) == null && bagIdFromKey({ key: 'c', code: 'KeyC' }) == null && bagIdFromKey({ key: 'v', code: 'KeyV' }) == null && bagIdFromKey({ key: 'b', code: 'KeyB' }) == null && bagIdFromKey({ key: 'g', code: 'KeyG' }) == null && bagIdFromKey({ key: 'f', code: 'KeyF' }) == null && bagIdFromKey({ key: 'x', code: 'KeyX' }) == null);
-    G.walk = WALK_PX;
-    const bu = { stam: STAM_MAX, bag: { boot: 2 }, armed: { boot: false } };
-    applyBootWalk(bu, true);
-    ok('boot walk +36', G.walk === WALK_PX + BAG_BOOT && bu.stam === STAM_MAX + BAG_BOOT);
-    applyBootWalk(bu, false);
-    ok('boot disarm refund', G.walk === WALK_PX && bu.stam === STAM_MAX);
     ok('no 9th wep after 堂袋', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('叠珠 stays weapon', WEPS[6].id === 7 && BAG_KEYS.indexOf('x2') >= 0 && WEPS[6].name !== BAG_NAME.x2);
     ok('maps 19 after 堂袋', MAP_IDS.length === 19 && MAP_NAME.well === '井口' && MAP_NAME.mirror === '镜廊' && MAP_NAME.cloud === '云台');
     ok('skills stay QECVBGFX', ITEM_NAME.leap === '飞步' && ITEM_NAME.warp === '影挪' && ITEM_NAME.neon === '霓弹' && ITEM_NAME.drum === '鼓息' && ITEM_NAME.nixi === '逆息' && ITEM_NAME.veil === '障幕');
     ok('堂匣 still after 堂袋', CRATE_NAME === '堂匣' && CRATE_GOLD_NAME === '金匣');
     ok('时尽 still after 堂袋', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
     ok('余震 still after 堂袋', QUAKE_NAME === '余震' && HIT_STOP_DIRECT === 0.14);
     ok('井口 still after 堂袋', MAP_NAME.well === '井口' && MAP_IDS[18] === 'well');
-    ok('no banned bag words', BAG_NAME.xun.indexOf('传送') < 0 && BAG_NAME.boot.indexOf('飞行') < 0 && BAG_NAME.keen.indexOf('三叉戟') < 0 && BAG_NAME.ward.indexOf('激怒') < 0 && BAG_NAME.heal.indexOf('天使') < 0 && BAG_NAME.chen.indexOf('恶魔') < 0 && BAG_NAME.tide.indexOf('传送') < 0 && BAG_NAME.clear.indexOf('飞行') < 0 && BAG_NAME.tide.indexOf('天使') < 0 && BAG_NAME.clear.indexOf('恶魔') < 0);
-    ok('g vk v36', GRAV === 260 && VK === 420 && WIND_K === 2.05);
-    ok('bag short 巽沉重潮霁', BAG_SHORT.xun === '巽' && BAG_SHORT.chen === '沉' && BAG_SHORT.zhong === '重' && BAG_SHORT.boot === '轻' && BAG_SHORT.ward === '护' && BAG_SHORT.heal === '回' && BAG_SHORT.keen === '锐' && BAG_SHORT.tide === '潮' && BAG_SHORT.clear === '霁');
-    const chipU = { bag: { xun: 1, chen: 1, zhong: 1, boot: 0, ward: 0, heal: 0, keen: 0, tide: 0, clear: 0 }, armed: { xun: true, chen: true, zhong: true, boot: false, ward: false, heal: false, keen: false, tide: false, clear: false } };
-    ok('chip 巽+沉+重', bagChipText(chipU) === '巽+沉+重');
-    const chipTide = { bag: { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 1, clear: 1 }, armed: { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: true, clear: true } };
-    ok('chip 潮+霁', bagChipText(chipTide) === '潮+霁');
+    ok('no banned bag words', BAG_NAME.x2.indexOf('传送') < 0 && BAG_NAME.x3.indexOf('飞行') < 0 && BAG_NAME.p1.indexOf('三叉戟') < 0 && BAG_NAME.p5.indexOf('激怒') < 0 && BAG_NAME.heal.indexOf('天使') < 0 && BAG_NAME.p3.indexOf('恶魔') < 0);
+    ok('g vk v40', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('bag short glyphs', BAG_SHORT.x2 === '×2' && BAG_SHORT.x3 === '×3' && BAG_SHORT.p1 === '+1' && BAG_SHORT.p2 === '+2' && BAG_SHORT.p3 === '+3' && BAG_SHORT.p5 === '+5' && BAG_SHORT.heal === '回');
+    const chipU = { bag: { x2: 1, x3: 0, p1: 0, p2: 1, p3: 1, p5: 0, heal: 0 }, armed: { x2: true, x3: false, p1: false, p2: true, p3: true, p5: false, heal: false } };
+    ok('chip ×2++2++3', bagChipText(chipU) === '×2++2++3');
     ok('any armed true', anyBagArmed(chipU) === true);
     const idleU = { bag: freshBag(), armed: freshArmed() };
     ok('any armed false', anyBagArmed(idleU) === false);
-    ok('bag tints 9', !!BAG_TINT.xun && !!BAG_TINT.chen && !!BAG_TINT.zhong && !!BAG_TINT.boot && !!BAG_TINT.ward && !!BAG_TINT.heal && !!BAG_TINT.keen && !!BAG_TINT.tide && !!BAG_TINT.clear);
-    ok('bag 9 v38', BAG_KEYS.length === 9 && WEPS.length === 8);
-    ok('maps 19 after polish', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
-    ok('g vk v37', GRAV === 260 && VK === 420 && WIND_K === 2.05);
-    ok('clear windMul armed', bagWindMul({ bag: { clear: 1 }, armed: { clear: true } }) === 0.5);
-    ok('clear windMul idle', bagWindMul(idleU) === 1);
-    const tideOnly = { ang: 65, face: 1, bag: { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 2, clear: 0 }, armed: { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: true, clear: false } };
-    const tm = consumeBagOnFire(tideOnly);
-    ok('tide consume', tm.tide === true && tm.craterAdd === 4 && tideOnly.bag.tide === 1 && tideOnly.armed.tide === true);
-    const clearOnly = { ang: 65, face: 1, bag: { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 0, clear: 2 }, armed: { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: false, clear: true } };
-    const cm = consumeBagOnFire(clearOnly);
-    ok('clear consume', cm.windMul === 0.5 && clearOnly.bag.clear === 1);
-    ok('g vk v38', GRAV === 260 && VK === 420 && WIND_K === 2.05);
-    ok('no 9th wep after v38', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
-    ok('maps 19 after v38', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
+    ok('bag tints 7', !!BAG_TINT.x2 && !!BAG_TINT.x3 && !!BAG_TINT.p1 && !!BAG_TINT.p2 && !!BAG_TINT.p3 && !!BAG_TINT.p5 && !!BAG_TINT.heal);
+    ok('bag 7 v40', BAG_KEYS.length === 7 && WEPS.length === 8);
+    ok('maps 19 after v40', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
+    ok('no 9th wep after v40', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
 
     G.mapId = 'plain';
     G.H = buildHeight('plain');
@@ -10341,12 +10347,7 @@
     G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100, max: 100, side: 'f', ang: 115 };
     carve(450, G.H[450], 40);
     const ledgeU = { x: 400, y: G.H[400] - 14, r: 14, hp: 100, grounded: true, face: 1 };
-    ok('tide ledge', thinLedge(ledgeU) === true);
-    const ox = ledgeU.x;
-    const pushed = tidePushToward(ledgeU, 450);
-    ok('tide push +10 toward hole', pushed === 10 && ledgeU.x === ox + 10, ledgeU.x);
-    const solidU = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, grounded: true, face: 1 };
-    ok('tide no push thick', tidePushToward(solidU, 200) === 0 && solidU.x === 152);
+    ok('thin ledge still', thinLedge(ledgeU) === true);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);

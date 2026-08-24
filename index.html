@@ -132,7 +132,7 @@
           <p class="kicker" id="ov-kicker">TAN HALL</p>
           <h1 id="ov-title">弹堂</h1>
           <p class="lead" id="ov-lead">看风，拉满或点射，把对面从石殿上轰下去。</p>
-          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条 · K 残影 · 堂袋 - = [ ] \ ; ' , .</p>
+          <p class="ops" id="ov-ops">← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条 · K 残影 · 堂袋 - = [ ] \ ; '</p>
           <div class="maps" id="ov-maps">
             <button type="button" data-map="plain" class="on" id="map-plain">平原</button>
             <button type="button" data-map="canyon" id="map-canyon">峡谷</button>
@@ -210,116 +210,125 @@
     <div id="item-dock" class="item-dock gone" aria-label="堂袋">
       <div id="bag-chips" class="bag-chips gone" aria-hidden="true"></div>
       <div class="item-dock-rail">
-        <button type="button" class="bag-slot" data-bag="xun" title="- 巽符">
+        <button type="button" class="bag-slot" data-bag="x2" title="- ×2">
           <span class="bag-ico" aria-hidden="true">
             <span class="bag-sparks"><i></i><i></i><i></i></span>
             <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-xun" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-xun)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#0a3c44"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#062428"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#7af7ff" opacity=".22"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#2ad4e0" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".42"/>
-                <path d="M11.2 19.2c.2-7.4 7-12.6 14.8-11.4 7 1.2 11.2 7 10.4 13.4-1.1 7.8-8.4 12.2-15.8 11 7-1.2 11.2-7 10.2-13.2-1.1-6.6-6.8-10.2-12.8-8.6-4.6 1.2-7 5.6-6.8 8.8z" fill="#0aa8b8"/>
-                <path d="M13.8 18.8c.2-5.6 5.6-9.4 11.4-8.4 5.4 1 8.6 5.4 7.8 10.2-1 6-6.6 9.4-12.2 8.4 5.4-1 8.6-5.4 7.6-10.2-1-5-5.2-7.6-9.8-6.4-3.4.9-5.4 4.1-4.8 6.4z" fill="#5ff6ff"/>
-                <path d="M16.6 18.6c.2-3.3 3.4-5.6 6.8-5 3.1.6 5 3.1 4.5 6-.6 3.5-3.9 5.6-7.2 5 3.1-.6 5-3.1 4.4-5.8-.5-2.7-2.9-4.1-5.6-3.5-1.8.4-2.9 2.1-2.9 3.3z" fill="#d9ffff"/>
-                <circle cx="20.4" cy="19" r="1.9" fill="#f7ffff"/>
-              </g>
-            </svg>
-          </span>
-          <span class="bag-name">巽符</span>
-          <b class="bag-n" id="n-xun">2</b>
-        </button>
-        <button type="button" class="bag-slot" data-bag="chen" title="= 沉符">
-          <span class="bag-ico" aria-hidden="true">
-            <span class="bag-sparks"><i></i><i></i><i></i></span>
-            <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-chen" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-chen)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#4a1038"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#2a0820"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ff9ad4" opacity=".2"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#ff3db8" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".38"/>
-                <path d="M20 6.2l2.4 8.6 8.8-3.4-5.4 7.4 8.6 2.6-8.6 2.5 5.6 7.2-8.8-3.2-2.6 8.6-2.4-8.6-8.8 3.2 5.4-7.2-8.6-2.6 8.6-2.5-5.6-7.2 8.8 3.4z" fill="#ff3db8"/>
-                <path d="M20 11.2l1.5 5.6 5.8-2.1-3.5 4.8 5.6 1.7-5.6 1.6 3.6 4.7-5.8-2-1.6 5.6-1.5-5.6-5.8 2 3.5-4.7-5.6-1.7 5.6-1.6-3.6-4.8 5.8 2.1z" fill="#ff79d0"/>
-                <circle cx="20" cy="20" r="4.4" fill="#ffd0ec"/>
-                <circle cx="20" cy="20" r="2.1" fill="#fff"/>
-              </g>
-            </svg>
-          </span>
-          <span class="bag-name">沉符</span>
-          <b class="bag-n" id="n-chen">2</b>
-        </button>
-        <button type="button" class="bag-slot" data-bag="zhong" title="[ 重石">
-          <span class="bag-ico" aria-hidden="true">
-            <span class="bag-sparks"><i></i><i></i><i></i></span>
-            <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-zhong" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-zhong)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a2810"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#24180a"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#e2b46a" opacity=".18"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#c48432" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".32"/>
-                <path d="M9.4 22.4l4.2-12 8.6-3.4 10.6 5.4 2.6 10.8-6.6 7.6-13 .8z" fill="#6a4018"/>
-                <path d="M13.6 12.2l8-3 9.2 4.6 1.5 8.4-5 3.6-9.6-1.8z" fill="#c48432"/>
-                <path d="M16.2 13.4l4.8-1.7 4.4 2.3-1.5 3.8-5.2.6z" fill="#f3e0b0"/>
-                <path d="M11 23.2l3.8 6.6 10.8.6 4.8-5.2-3.2-2.3-9.8.8z" fill="#8a5a22"/>
-                <ellipse cx="17.4" cy="17.4" rx="1.9" ry="1.15" fill="#fff3d6"/>
-              </g>
-            </svg>
-          </span>
-          <span class="bag-name">重石</span>
-          <b class="bag-n" id="n-zhong">2</b>
-        </button>
-        <button type="button" class="bag-slot" data-bag="boot" title="] 轻靴">
-          <span class="bag-ico" aria-hidden="true">
-            <span class="bag-sparks"><i></i><i></i><i></i></span>
-            <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-boot" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-boot)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#0a3a34"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#062824"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#5dffd2" opacity=".18"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#2ad4b8" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".4"/>
-                <path d="M13 6.8h8.6c1.6 0 2.6 1.2 2.6 2.6v9.6c3.4.5 8 2.1 10.1 4.8 1.6 1.9 1.1 4.8-1.7 5.6l-19.2 1.1c-2.9.2-5.6-1.9-5.8-4.8L6.8 13.2c-.3-2.2 1.3-4.2 3.6-4.4z" fill="#0b5c52"/>
-                <path d="M14.2 8.2h6.8c.8 0 1.4.6 1.4 1.4v9l-9.8-1.5.5-7.8c0-.6.5-1.1 1.1-1.1z" fill="#5dffd2"/>
-                <path d="M9.4 24.6l18.4-1c1.6-.1 2.1-1.6 1.2-2.7-1.9-2.1-5.8-3.4-8.7-3.8L9.6 18.6z" fill="#128a7a"/>
-                <path d="M15.2 10.4h4.8v1.6h-4.8zM14.9 14h5.4v1.5h-5.4z" fill="#c8fff2"/>
-                <path d="M8.2 27h21.4c.8 0 1.4.5 1.4 1.3s-.6 1.3-1.4 1.3H8.2c-.8 0-1.4-.5-1.4-1.3s.6-1.3 1.4-1.3z" fill="#7af0dc"/>
-              </g>
-            </svg>
-          </span>
-          <span class="bag-name">轻靴</span>
-          <b class="bag-n" id="n-boot">2</b>
-        </button>
-        <button type="button" class="bag-slot" data-bag="ward" title="\ 护符">
-          <span class="bag-ico" aria-hidden="true">
-            <span class="bag-sparks"><i></i><i></i><i></i></span>
-            <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-ward" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-ward)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a3008"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#2a2208"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ffe36b" opacity=".2"/>
+              <defs><filter id="bag-ds-x2" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
+              <g filter="url(#bag-ds-x2)">
+                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a2808"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#241808"/>
+                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ffe36b" opacity=".22"/>
                 <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#c9a227" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".4"/>
-                <path d="M20 5.2l13.2 4.1v10.6c0 8-5.5 13.8-13.2 16.1C9.5 33.7 4.4 27.9 4.4 19.9V9.3z" fill="#8a6a18"/>
-                <path d="M20 7.4l10.6 3.2v9c0 6.5-4.4 11.4-10.6 13.4-6.2-2-10.6-6.9-10.6-13.4v-9z" fill="#ffe36b"/>
-                <path d="M20 9.8l7 2v6.6c0 4.5-2.9 7.8-7 9.2-4.1-1.4-7-4.7-7-9.2v-6.6z" fill="#fff3c2"/>
-                <path d="M20 12.4v13.6c3.1-1 5.1-3.5 5.1-6.8v-5.1z" fill="#e8c44a"/>
-                <path d="M20 13.6l-3.1 2.7 3.1 6.8 3.1-6.8z" fill="#7a5a10"/>
-                <path d="M20 15l-1.7 1.5 1.7 3.7 1.7-3.7z" fill="#fff8dc"/>
+                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".42"/>
+                <circle cx="13.6" cy="23.2" r="6.4" fill="#a87a18"/>
+                <circle cx="13.6" cy="23.2" r="4" fill="#ffe36b"/>
+                <circle cx="26.2" cy="21.6" r="6.4" fill="#c9a227"/>
+                <circle cx="26.2" cy="21.6" r="4" fill="#fff3c2"/>
+                <text x="20" y="16.2" text-anchor="middle" font-size="13.5" font-weight="900" font-family="Segoe UI, PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" stroke="#2a1804" stroke-width="2.8" fill="#ffe36b" paint-order="stroke fill">×2</text>
               </g>
             </svg>
           </span>
-          <span class="bag-name">护符</span>
-          <b class="bag-n" id="n-ward">2</b>
+          <span class="bag-name">×2</span>
+          <b class="bag-n" id="n-x2">2</b>
         </button>
-        <button type="button" class="bag-slot" data-bag="heal" title="; 回春">
+        <button type="button" class="bag-slot" data-bag="x3" title="= ×3">
+          <span class="bag-ico" aria-hidden="true">
+            <span class="bag-sparks"><i></i><i></i><i></i></span>
+            <svg viewBox="0 0 40 40" width="36" height="36">
+              <defs><filter id="bag-ds-x3" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
+              <g filter="url(#bag-ds-x3)">
+                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#4a1014"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#2a080c"/>
+                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ff6b6b" opacity=".22"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#ff3d4a" stroke-width="1.25"/>
+                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".38"/>
+                <circle cx="11.4" cy="24.2" r="5.2" fill="#a81828"/>
+                <circle cx="11.4" cy="24.2" r="3.1" fill="#ff6b6b"/>
+                <circle cx="20" cy="22.4" r="5.4" fill="#d42838"/>
+                <circle cx="20" cy="22.4" r="3.2" fill="#ff9aa0"/>
+                <circle cx="28.6" cy="24" r="5.2" fill="#a81828"/>
+                <circle cx="28.6" cy="24" r="3.1" fill="#ffd0d4"/>
+                <text x="20" y="16.2" text-anchor="middle" font-size="13.5" font-weight="900" font-family="Segoe UI, PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" stroke="#2a0408" stroke-width="2.8" fill="#ff8a90" paint-order="stroke fill">×3</text>
+              </g>
+            </svg>
+          </span>
+          <span class="bag-name">×3</span>
+          <b class="bag-n" id="n-x3">2</b>
+        </button>
+        <button type="button" class="bag-slot" data-bag="p1" title="[ +1">
+          <span class="bag-ico" aria-hidden="true">
+            <span class="bag-sparks"><i></i><i></i><i></i></span>
+            <svg viewBox="0 0 40 40" width="36" height="36">
+              <defs><filter id="bag-ds-p1" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
+              <g filter="url(#bag-ds-p1)">
+                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a3410"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#2a2408"/>
+                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#fff3c2" opacity=".22"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#e8d48a" stroke-width="1.25"/>
+                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".42"/>
+                <text x="20" y="26.8" text-anchor="middle" font-size="17.5" font-weight="900" font-family="Segoe UI, PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" stroke="#2a2208" stroke-width="3" fill="#fff3c2" paint-order="stroke fill">+1</text>
+              </g>
+            </svg>
+          </span>
+          <span class="bag-name">+1</span>
+          <b class="bag-n" id="n-p1">2</b>
+        </button>
+        <button type="button" class="bag-slot" data-bag="p2" title="] +2">
+          <span class="bag-ico" aria-hidden="true">
+            <span class="bag-sparks"><i></i><i></i><i></i></span>
+            <svg viewBox="0 0 40 40" width="36" height="36">
+              <defs><filter id="bag-ds-p2" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
+              <g filter="url(#bag-ds-p2)">
+                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a2208"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#241408"/>
+                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ffb06a" opacity=".22"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#ff9a3d" stroke-width="1.25"/>
+                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".4"/>
+                <text x="20" y="26.8" text-anchor="middle" font-size="17.5" font-weight="900" font-family="Segoe UI, PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" stroke="#2a1204" stroke-width="3" fill="#ffb06a" paint-order="stroke fill">+2</text>
+              </g>
+            </svg>
+          </span>
+          <span class="bag-name">+2</span>
+          <b class="bag-n" id="n-p2">2</b>
+        </button>
+        <button type="button" class="bag-slot" data-bag="p3" title="\ +3">
+          <span class="bag-ico" aria-hidden="true">
+            <span class="bag-sparks"><i></i><i></i><i></i></span>
+            <svg viewBox="0 0 40 40" width="36" height="36">
+              <defs><filter id="bag-ds-p3" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
+              <g filter="url(#bag-ds-p3)">
+                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a1010"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#240808"/>
+                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ff7a6a" opacity=".22"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#ff4d3d" stroke-width="1.25"/>
+                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".38"/>
+                <text x="20" y="26.8" text-anchor="middle" font-size="17.5" font-weight="900" font-family="Segoe UI, PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" stroke="#2a0808" stroke-width="3" fill="#ff7a6a" paint-order="stroke fill">+3</text>
+              </g>
+            </svg>
+          </span>
+          <span class="bag-name">+3</span>
+          <b class="bag-n" id="n-p3">2</b>
+        </button>
+        <button type="button" class="bag-slot" data-bag="p5" title="; +5">
+          <span class="bag-ico" aria-hidden="true">
+            <span class="bag-sparks"><i></i><i></i><i></i></span>
+            <svg viewBox="0 0 40 40" width="36" height="36">
+              <defs><filter id="bag-ds-p5" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
+              <g filter="url(#bag-ds-p5)">
+                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a2808"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#221808"/>
+                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ffe36b" opacity=".22"/>
+                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#e8c44a" stroke-width="1.25"/>
+                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".42"/>
+                <text x="20" y="26.8" text-anchor="middle" font-size="17.5" font-weight="900" font-family="Segoe UI, PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" stroke="#2a1804" stroke-width="3" fill="#ffe36b" paint-order="stroke fill">+5</text>
+              </g>
+            </svg>
+          </span>
+          <span class="bag-name">+5</span>
+          <b class="bag-n" id="n-p5">2</b>
+        </button>
+        <button type="button" class="bag-slot" data-bag="heal" title="' 回春">
           <span class="bag-ico" aria-hidden="true">
             <span class="bag-sparks"><i></i><i></i><i></i></span>
             <svg viewBox="0 0 40 40" width="36" height="36">
@@ -341,77 +350,7 @@
           <span class="bag-name">回春</span>
           <b class="bag-n" id="n-heal">2</b>
         </button>
-        <button type="button" class="bag-slot" data-bag="keen" title="' 锐角">
-          <span class="bag-ico" aria-hidden="true">
-            <span class="bag-sparks"><i></i><i></i><i></i></span>
-            <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-keen" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-keen)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a2808"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#221808"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#ffd08a" opacity=".2"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#e8c44a" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".4"/>
-                <path d="M20 6l14.8 14.6h-7.4L20 13.2l-7.4 7.4H5.2z" fill="#c9a227"/>
-                <path d="M20 12.4l12.2 12h-6.4L20 18.2l-5.8 6.2H7.8z" fill="#ffe36b"/>
-                <path d="M20 18.4l9.4 9.2h-5.3L20 23.2l-4.1 4.4H10.6z" fill="#fff3c2"/>
-                <path d="M20 8l-2.2 2.2h4.4z" fill="#fff8dc"/>
-              </g>
-            </svg>
-          </span>
-          <span class="bag-name">锐角</span>
-          <b class="bag-n" id="n-keen">2</b>
-        </button>
-        <button type="button" class="bag-slot" data-bag="tide" title=", 潮符">
-          <span class="bag-ico" aria-hidden="true">
-            <span class="bag-sparks"><i></i><i></i><i></i></span>
-            <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-tide" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-tide)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#0a4440"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#062e2c"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#7af8e8" opacity=".22"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#2ad4c8" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".42"/>
-                <path d="M7.2 23.6c3.4-5 7-5 10.4 0 3.4 5 7 5 10.4 0 2.6-3.8 5.2-4.6 6.2-2.4v10.4H7.2z" fill="#0e6e68"/>
-                <path d="M7.2 26.2c3.2-4.4 6.8-4.4 10 0 3.2 4.4 6.8 4.4 10 0 3.2-4.4 6.4-4.2 7.4-1.8v9.2H7.2z" fill="#14c8b8"/>
-                <path d="M8 29c2.8-3.6 6-3.6 8.8 0 2.8 3.6 6 3.6 8.8 0 2.4-3 4.8-3.4 7.2-1.6v6.2H8z" fill="#7af8e8"/>
-                <path d="M9 18.2c2.6-3.8 5.6-3.8 8.2 0" fill="none" stroke="#c8fff8" stroke-width="1.55" stroke-linecap="round"/>
-                <path d="M19.2 16.4c2.6-3.6 5.6-3.6 8.2 0" fill="none" stroke="#e8fffc" stroke-width="1.35" stroke-linecap="round"/>
-                <circle cx="14.6" cy="17.6" r="1.15" fill="#f7ffff"/>
-              </g>
-            </svg>
-          </span>
-          <span class="bag-name">潮符</span>
-          <b class="bag-n" id="n-tide">2</b>
-        </button>
-        <button type="button" class="bag-slot" data-bag="clear" title=". 霁符">
-          <span class="bag-ico" aria-hidden="true">
-            <span class="bag-sparks"><i></i><i></i><i></i></span>
-            <svg viewBox="0 0 40 40" width="36" height="36">
-              <defs><filter id="bag-ds-clear" x="-18%" y="-12%" width="136%" height="145%"><feDropShadow dx="0" dy="1.3" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/></filter></defs>
-              <g filter="url(#bag-ds-clear)">
-                <rect x="1" y="1" width="37.2" height="37.2" rx="8.2" fill="#3a3410"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="#2a240c"/>
-                <path d="M9.2 3.6h18.2c4.2 0 7.4 2.8 7.4 6.6V12L5.4 31.2V10.2c0-3.8 3.2-6.6 7.4-6.6z" fill="#fff3c2" opacity=".22"/>
-                <rect x="3.1" y="2.9" width="33.2" height="33.2" rx="6.4" fill="none" stroke="#e8d48a" stroke-width="1.25"/>
-                <path d="M7.4 6.4c.6-1.8 2.2-2.8 4.2-2.8h9.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" opacity=".42"/>
-                <path d="M20 7.2l1.1 3.6 3.7-1-2.2 3.2 3.6 1.2-3.6 1.1 2.3 3.1-3.7-.9-1.2 3.6-1.1-3.6-3.7.9 2.2-3.1-3.6-1.1 3.6-1.2-2.3-3.2 3.7 1z" fill="#c9a227"/>
-                <circle cx="20" cy="16.6" r="6.2" fill="#e8c44a"/>
-                <circle cx="20" cy="16.6" r="4.2" fill="#ffe36b"/>
-                <circle cx="20" cy="16.6" r="2" fill="#fff8dc"/>
-                <path d="M6.6 26.4c2.6-2.2 5.4-1.4 7.6.6 1.8-3.2 6.2-4.4 9.4-1.6 2.4-2.2 6.4-1.8 8.8.8 1.4-1 3.2-.6 3.8.6v7.4H6.6z" fill="#8a7a58"/>
-                <path d="M8.2 28.2c2.2-1.8 4.6-1.2 6.4.6 1.6-2.6 5.2-3.6 7.8-1.2 2-1.8 5.4-1.4 7.4.6 1.2-.8 2.6-.4 3.1.6v5H8.2z" fill="#d8d0b0"/>
-                <path d="M16.4 24.8l3.6-4.8 3.6 4.8z" fill="#fff8dc"/>
-                <path d="M18.4 26.2l1.6-2.2 1.6 2.2z" fill="#ffe36b"/>
-              </g>
-            </svg>
-          </span>
-          <span class="bag-name">霁符</span>
-          <b class="bag-n" id="n-clear">2</b>
-        </button>
       </div>
-    </div>
 
     <footer class="hint" id="hint">走位 · 拉角 · 空格蓄力松手打 · 65° 最远 · 90° 落脚边 · 读风</footer>
   </div>
