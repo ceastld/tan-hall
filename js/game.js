@@ -28,7 +28,7 @@
   const BEST_KEY = 'playbox-tan-tang-best';
   const MUTE_KEY = 'playbox-tan-tang-mute';
   const OPS = '← → 走 · ↑ ↓ 角 · 空格/Z 蓄力 · 1 弹堂 · 2 堂核 · 3 演习场 · 4 对坐 · 5 对堂 · 6 堂座 · R 重开 · M 静音 · H 辅助 · N 地条 · K 残影';
-  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 堂袋 - = [ ] \\ ; \' · 4三裂 5霓轨 6霓火 7叠珠 8迟雷 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
+  const OPS_PLAY = 'Q飞步 E影挪 C霓弹 V鼓息 B逆息 G障幕 F殿破 X过 · 堂袋 - = [ ] \\ ; \' , . · 4三裂 5霓轨 6霓火 7叠珠 8迟雷 · 65°查表 · Tab尺 · N地条 · H辅 · K残影';
   const OPS_DRILL = '演习 · 表随距离变 · 空格仍能打木桩 · N地条 · H辅 · K残影';
   const MINI_W = 160;
   const MINI_H = 48;
@@ -63,10 +63,10 @@
   const CRATE_RAGE = 18;
   const CRATE_GOLD_RAGE = 28;
   const CRATE_WALK = 36;
-  const BAG_NAME = { xun: '巽符', chen: '沉符', zhong: '重石', boot: '轻靴', ward: '护符', heal: '回春', keen: '锐角' };
-  const BAG_SHORT = { xun: '巽', chen: '沉', zhong: '重', boot: '轻', ward: '护', heal: '回', keen: '锐' };
-  const BAG_TINT = { xun: '#5ff6ff', chen: '#ff79d0', zhong: '#e2b46a', boot: '#5dffd2', ward: '#ffe36b', heal: '#5dffb2', keen: '#ffd08a' };
-  const BAG_KEYS = ['xun', 'chen', 'zhong', 'boot', 'ward', 'heal', 'keen'];
+  const BAG_NAME = { xun: '巽符', chen: '沉符', zhong: '重石', boot: '轻靴', ward: '护符', heal: '回春', keen: '锐角', tide: '潮符', clear: '霁符' };
+  const BAG_SHORT = { xun: '巽', chen: '沉', zhong: '重', boot: '轻', ward: '护', heal: '回', keen: '锐', tide: '潮', clear: '霁' };
+  const BAG_TINT = { xun: '#5ff6ff', chen: '#ff79d0', zhong: '#e2b46a', boot: '#5dffd2', ward: '#ffe36b', heal: '#5dffb2', keen: '#ffd08a', tide: '#7af8e8', clear: '#fff3c2' };
+  const BAG_KEYS = ['xun', 'chen', 'zhong', 'boot', 'ward', 'heal', 'keen', 'tide', 'clear'];
   const BAG_START = 2;
   const BAG_DRILL = 3;
   const BAG_BOOT = 36;
@@ -76,9 +76,12 @@
   const BAG_WIND = 2;
   const BAG_SPLASH = 1.14;
   const BAG_CRATER = 1.16;
+  const BAG_TIDE_CRATER = 4;
+  const BAG_TIDE_PUSH = 10;
+  const BAG_CLEAR = 0.5;
   const BAG_CRATE_P = 0.35;
-  const BAG_KEY_MAP = { '-': 'xun', '_': 'xun', '=': 'chen', '+': 'chen', '[': 'zhong', '{': 'zhong', ']': 'boot', '}': 'boot', '\\': 'ward', '|': 'ward', ';': 'heal', ':': 'heal', "'": 'keen', '"': 'keen' };
-  const BAG_CODE_MAP = { Minus: 'xun', Equal: 'chen', BracketLeft: 'zhong', BracketRight: 'boot', Backslash: 'ward', IntlBackslash: 'ward', Semicolon: 'heal', Quote: 'keen' };
+  const BAG_KEY_MAP = { '-': 'xun', '_': 'xun', '=': 'chen', '+': 'chen', '[': 'zhong', '{': 'zhong', ']': 'boot', '}': 'boot', '\\': 'ward', '|': 'ward', ';': 'heal', ':': 'heal', "'": 'keen', '"': 'keen', ',': 'tide', '<': 'tide', '.': 'clear', '>': 'clear' };
+  const BAG_CODE_MAP = { Minus: 'xun', Equal: 'chen', BracketLeft: 'zhong', BracketRight: 'boot', Backslash: 'ward', IntlBackslash: 'ward', Semicolon: 'heal', Quote: 'keen', Comma: 'tide', Period: 'clear' };
   const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊', gate: '石门', frost: '霜泽', cloud: '云台', mirror: '镜廊', well: '井口' };
   const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune', 'gate', 'frost', 'cloud', 'mirror', 'well'];
   const WALL_MAXH = 160;
@@ -728,7 +731,10 @@
       direct: wep.direct,
       splash: wep.splash * MINE_HIT,
       crater: wep.crater,
-      spd: wep.spd
+      spd: wep.spd,
+      craterMul: wep.craterMul,
+      craterAdd: wep.craterAdd || 0,
+      tidePush: !!wep.tidePush
     };
   }
   function liveMineOf(side) {
@@ -747,7 +753,10 @@
       direct: wep.direct,
       splash: wep.splash * DUAL_BLAST,
       crater: wep.crater * DUAL_BLAST,
-      spd: wep.spd
+      spd: wep.spd,
+      craterMul: wep.craterMul,
+      craterAdd: wep.craterAdd || 0,
+      tidePush: !!wep.tidePush
     };
   }
   function matchWouldEnd() {
@@ -797,6 +806,7 @@
       lead: !!opts.lead,
       follow: !!opts.follow,
       wind: opts.wind != null ? opts.wind : G.wind,
+      windMul: opts.windMul != null ? opts.windMul : 1,
       iceSkip: false,
       trail: [{ x: sx, y: sy, a: 1 }]
     };
@@ -863,11 +873,11 @@
   function bagCount() { return G.kind === 'drill' ? BAG_DRILL : BAG_START; }
   function freshBag() {
     const n = bagCount();
-    return { xun: n, chen: n, zhong: n, boot: n, ward: n, heal: n, keen: n };
+    return { xun: n, chen: n, zhong: n, boot: n, ward: n, heal: n, keen: n, tide: n, clear: n };
   }
-  function zeroBag() { return { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0 }; }
+  function zeroBag() { return { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 0, clear: 0 }; }
   function freshArmed() {
-    return { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false };
+    return { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: false, clear: false };
   }
   function ensureBag(u) {
     if (!u) return;
@@ -932,6 +942,9 @@
     if (bagArmed(u, 'xun')) return (wind | 0) + BAG_WIND * shotFacing(u);
     return wind | 0;
   }
+  function bagWindMul(u) {
+    return bagArmed(u, 'clear') ? BAG_CLEAR : 1;
+  }
   function bagWep(wep, mods) {
     wep = wep || WEPS[0];
     mods = mods || {};
@@ -944,7 +957,9 @@
       splash: wep.splash * sm,
       crater: wep.crater * cm,
       spd: wep.spd,
-      craterMul: cm
+      craterMul: cm,
+      craterAdd: mods.craterAdd || 0,
+      tidePush: !!mods.tide
     };
   }
   function applyBootWalk(u, on) {
@@ -970,7 +985,7 @@
     return kind;
   }
   function consumeBagOnFire(u) {
-    const mods = { splashMul: 1, craterMul: 1, windAdd: 0, keen: false, ward: false };
+    const mods = { splashMul: 1, craterMul: 1, craterAdd: 0, windAdd: 0, windMul: 1, keen: false, ward: false, tide: false };
     if (!u) return mods;
     ensureBag(u);
     const names = [];
@@ -1008,6 +1023,19 @@
       u.bag.keen -= 1;
       names.push(BAG_NAME.keen);
       if (u.bag.keen <= 0) u.armed.keen = false;
+    }
+    if (bagArmed(u, 'tide')) {
+      mods.craterAdd = BAG_TIDE_CRATER;
+      mods.tide = true;
+      u.bag.tide -= 1;
+      names.push(BAG_NAME.tide);
+      if (u.bag.tide <= 0) u.armed.tide = false;
+    }
+    if (bagArmed(u, 'clear')) {
+      mods.windMul = BAG_CLEAR;
+      u.bag.clear -= 1;
+      names.push(BAG_NAME.clear);
+      if (u.bag.clear <= 0) u.armed.clear = false;
     }
     if (mods.ward) u.wardOnce = true;
     if (names.length) toast(names.join(' · '), false, true);
@@ -2558,13 +2586,14 @@
     if (any) terrainDirty = true;
   }
 
-  function carveCluster(cx, cy, mul) {
+  function carveCluster(cx, cy, mul, add) {
     const hits = [];
+    const extra = add || 0;
     for (let i = 0; i < CLUSTER.length; i++) {
       const pop = CLUSTER[i];
       const px = clamp(cx + pop.dx, 4, VW - 4);
       const py = groundAt(cx) + pop.dy;
-      const r = Math.round(pop.r * (mul || 1));
+      const r = Math.round(pop.r * (mul || 1)) + extra;
       carve(px, py, r);
       hits.push({ x: px, y: py, r: r });
     }
@@ -3605,6 +3634,9 @@
           if (wep && wep.id === 3 && u !== shooter) u.frozen = 1;
         }
       }
+      if (wep && wep.tidePush && d < wep.splash && u.hp > 0 && !u._tidePushed) {
+        if (tidePushToward(u, x)) u._tidePushed = true;
+      }
     }
     return any;
   }
@@ -3950,12 +3982,13 @@
     const sx = u.x + Math.cos(th) * nose;
     const sy = u.y - 4 - Math.sin(th) * nose;
     const shotWind = (G.wind | 0) + (mods.windAdd || 0);
+    const windMul = mods.windMul != null ? mods.windMul : 1;
     if (G.neonOn) {
       if (u.items && u.items.neon > 0) u.items.neon -= 1;
       G.neonOn = false;
     }
     G.actDelay = { skip: false, wepId: wep.id, ult: !!u.ult };
-    const shell = makeShell(sx, sy, ang, G.power, wep, u, { ult: !!u.ult, lead: true, wind: shotWind });
+    const shell = makeShell(sx, sy, ang, G.power, wep, u, { ult: !!u.ult, lead: true, wind: shotWind, windMul: windMul });
     G.shot = shell;
     G.shots = [shell];
     G.dual = isDualWep(wep) ? {
@@ -3970,7 +4003,8 @@
       ult: !!u.ult,
       hit: false,
       comboDone: false,
-      wind: shotWind
+      wind: shotWind,
+      windMul: windMul
     } : null;
     G.ghostPend = { x: sx, y: sy, ang: ang, power: Math.round(G.power), wepId: wep.id, wind: shotWind, points: [{ x: sx, y: sy, a: 1 }] };
     trail.length = 0;
@@ -4022,7 +4056,7 @@
     const ang = clamp(d.ang + jit, 0, 180);
     const pow = d.power * DUAL_POW;
     const wep2 = dualFollowWep(d.wep);
-    const shell = makeShell(d.sx, d.sy, ang, pow, wep2, d.owner, { ult: !!d.ult, follow: true, wind: d.wind });
+    const shell = makeShell(d.sx, d.sy, ang, pow, wep2, d.owner, { ult: !!d.ult, follow: true, wind: d.wind, windMul: d.windMul != null ? d.windMul : 1 });
     if (!G.shots) G.shots = [];
     G.shots.push(shell);
     G.shot = shell;
@@ -4453,10 +4487,11 @@
     crater = Math.round(iceR(crater, x));
     crater = Math.round(mirrorR(crater, x));
     crater = Math.round(wellR(crater, x));
+    crater = (crater || 0) + (wep.craterAdd || 0);
     let hit = !!fromHit;
     if (wep.id === 4) {
       const terrainMul = G.mapId === 'dune' ? DUNE_CRATER : (isGateStoneX(x) ? GATE_CRATER : (isFrostIce(x) ? FROST_CRATER : (isMirrorStoneX(x) ? MIRROR_CRATER : (isWellLipX(x) ? WELL_LIP_CRATER : (isWellMudX(x) ? WELL_MUD_CRATER : 1)))));
-      const pops = carveCluster(x, y, ultMul * terrainMul * (wep.craterMul || 1));
+      const pops = carveCluster(x, y, ultMul * terrainMul * (wep.craterMul || 1), wep.craterAdd || 0);
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
         snapBridge(pop.x, pop.r, wep);
@@ -4550,6 +4585,7 @@
     if (!keepPhase && (!shot || shot.lead)) commitLastGhost(x, y);
     eachUnit(ungroundIfAir);
     eachUnit(refreshBury);
+    eachUnit(function (u) { if (u) u._tidePushed = false; });
     triggerQuake(x, y, wep, wep && wep.id === 4 ? QUAKE_R : crater);
     if (keepPhase) {
       if (G.mode === 'play') checkEnd();
@@ -4693,7 +4729,8 @@
   function stepOneShot(s, dt) {
     if (!s) return;
     const sw = s.wind != null ? s.wind : G.wind;
-    s.vx += sw * windKAt(s.wep, s.life) * dt;
+    const wm = s.windMul != null ? s.windMul : 1;
+    s.vx += sw * windKAt(s.wep, s.life) * wm * dt;
     s.vy += (GRAV + gustAy(s.x)) * dt;
     const ox = s.x;
     const oy = s.y;
@@ -5143,6 +5180,23 @@
     if (!u) return false;
     const g0 = groundAt(u.x);
     return (groundAt(clamp(u.x - 36, 0, VW - 1)) - g0 > 28) || (groundAt(clamp(u.x + 36, 0, VW - 1)) - g0 > 28);
+  }
+
+  function tidePushToward(u, cx) {
+    if (!u || u.hp <= 0) return 0;
+    if (!thinLedge(u)) return 0;
+    let dir = u.x < cx ? 1 : (u.x > cx ? -1 : 0);
+    if (!dir) {
+      const gl = groundAt(clamp(u.x - 20, 0, VW - 1), u.y);
+      const gr = groundAt(clamp(u.x + 20, 0, VW - 1), u.y);
+      dir = gr > gl + 1 ? 1 : (gl > gr + 1 ? -1 : (u.face || 1));
+    }
+    const nx = clamp(u.x + dir * BAG_TIDE_PUSH, 22, VW - 22);
+    if (wallBlocksWalk(nx, u.y, u.r || UNIT_R)) return 0;
+    u.x = nx;
+    ungroundIfAir(u);
+    burst(u.x, u.y + (u.r || 14), [46, 232, 214], REDUCE ? 3 : 7, 55, 0.18);
+    return BAG_TIDE_PUSH;
   }
 
   function dirtUnderFeet(u) {
@@ -5668,6 +5722,12 @@
       if ((from.hp || 0) < 45 && (from.bag.ward | 0) > 0 && (hard || true)) {
         plan.bag.push('ward');
       }
+      if (hard && longShot && Math.abs(G.wind) >= 6 && (from.bag.clear | 0) > 0) {
+        plan.bag.push('clear');
+      }
+      if (hard && mark2 && thinLedge(mark2) && (from.bag.tide | 0) > 0) {
+        plan.bag.push('tide');
+      }
     }
     const rageReady = (from.rage >= 100) || (plan.drum && from.rage + 50 >= 100) ? 100 : (from.rage || 0);
     if (aiWantUlt(from, best.score, rageReady)) plan.ult = true;
@@ -5677,6 +5737,13 @@
       syncWeps();
       moved = planAIMove(from);
       best = moved.best;
+    }
+    if (plan.bag && plan.bag.indexOf('clear') >= 0) {
+      const oldW = G.wind;
+      G.wind = oldW * BAG_CLEAR;
+      moved = planAIMove(from);
+      best = moved.best;
+      G.wind = oldW;
     }
     const fogK = veilAimMul(mark);
     const jit = aiJitterBase();
@@ -7839,12 +7906,13 @@
     let vy = -Math.sin(th) * spd;
     const dt = 1 / 60;
     const predWind = bagShotWind(u, G.wind);
+    const predMul = bagWindMul(u);
     pts.push({ x: x, y: y });
     let len = 0;
     let t = 0;
     let sBounce = false;
     for (let i = 0; i < 420; i++) {
-      vx += predWind * windKAt(wep, t) * dt;
+      vx += predWind * windKAt(wep, t) * predMul * dt;
       vy += (GRAV + gustAy(x)) * dt;
       const nx = x + vx * dt;
       const ny = y + vy * dt;
@@ -10174,14 +10242,14 @@
     G.busy = null;
     G.walk = WALK_PX;
     const bagHall = freshBag();
-    ok('bag start 2', bagHall.xun === 2 && bagHall.chen === 2 && bagHall.zhong === 2 && bagHall.boot === 2 && bagHall.ward === 2 && bagHall.heal === 2 && bagHall.keen === 2);
+    ok('bag start 2', bagHall.xun === 2 && bagHall.chen === 2 && bagHall.zhong === 2 && bagHall.boot === 2 && bagHall.ward === 2 && bagHall.heal === 2 && bagHall.keen === 2 && bagHall.tide === 2 && bagHall.clear === 2);
     G.kind = 'drill';
     const bagDrill = freshBag();
-    ok('bag drill 3', bagDrill.xun === 3 && bagDrill.heal === 3 && bagDrill.keen === 3);
+    ok('bag drill 3', bagDrill.xun === 3 && bagDrill.heal === 3 && bagDrill.keen === 3 && bagDrill.tide === 3 && bagDrill.clear === 3);
     G.kind = 'hall';
-    ok('bag names locked', BAG_NAME.xun === '巽符' && BAG_NAME.chen === '沉符' && BAG_NAME.zhong === '重石' && BAG_NAME.boot === '轻靴' && BAG_NAME.ward === '护符' && BAG_NAME.heal === '回春' && BAG_NAME.keen === '锐角');
-    ok('bag keys 7', BAG_KEYS.length === 7 && BAG_KEYS[0] === 'xun' && BAG_KEYS[6] === 'keen');
-    ok('bag nums', BAG_BOOT === 36 && BAG_HEAL === 14 && BAG_WARD === 16 && BAG_KEEN === 4 && BAG_WIND === 2 && BAG_SPLASH === 1.14 && BAG_CRATER === 1.16 && BAG_CRATE_P === 0.35);
+    ok('bag names locked', BAG_NAME.xun === '巽符' && BAG_NAME.chen === '沉符' && BAG_NAME.zhong === '重石' && BAG_NAME.boot === '轻靴' && BAG_NAME.ward === '护符' && BAG_NAME.heal === '回春' && BAG_NAME.keen === '锐角' && BAG_NAME.tide === '潮符' && BAG_NAME.clear === '霁符');
+    ok('bag keys 9', BAG_KEYS.length === 9 && BAG_KEYS[0] === 'xun' && BAG_KEYS[6] === 'keen' && BAG_KEYS[7] === 'tide' && BAG_KEYS[8] === 'clear');
+    ok('bag nums', BAG_BOOT === 36 && BAG_HEAL === 14 && BAG_WARD === 16 && BAG_KEEN === 4 && BAG_WIND === 2 && BAG_SPLASH === 1.14 && BAG_CRATER === 1.16 && BAG_TIDE_CRATER === 4 && BAG_TIDE_PUSH === 10 && BAG_CLEAR === 0.5 && BAG_CRATE_P === 0.35);
     ok('keen pull 70→66', pullToward65(70) === 66);
     ok('keen pull 50→54', pullToward65(50) === 54);
     ok('keen pull 65 stays', pullToward65(65) === 65);
@@ -10192,14 +10260,15 @@
     xu.ang = 120;
     ok('xun wind +2 left', bagShotWind(xu, 3) === 1);
     xu.ang = 65;
-    const stacked = { ang: 70, face: 1, bag: { xun: 2, chen: 1, zhong: 1, boot: 1, ward: 1, heal: 2, keen: 1 }, armed: { xun: true, chen: true, zhong: true, boot: true, ward: true, heal: false, keen: true }, hp: 80, max: 100, x: 160, y: 400, stam: 100, wardOnce: false };
+    const stacked = { ang: 70, face: 1, bag: { xun: 2, chen: 1, zhong: 1, boot: 1, ward: 1, heal: 2, keen: 1, tide: 1, clear: 1 }, armed: { xun: true, chen: true, zhong: true, boot: true, ward: true, heal: false, keen: true, tide: true, clear: true }, hp: 80, max: 100, x: 160, y: 400, stam: 100, wardOnce: false };
     const sm = consumeBagOnFire(stacked);
-    ok('stack mods', sm.splashMul === 1.14 && sm.craterMul === 1.16 && sm.windAdd === 2 && sm.keen === true && sm.ward === true);
-    ok('stack consume 1', stacked.bag.xun === 1 && stacked.bag.chen === 0 && stacked.bag.zhong === 0 && stacked.bag.boot === 0 && stacked.bag.ward === 0 && stacked.bag.keen === 0 && stacked.bag.heal === 2);
+    ok('stack mods', sm.splashMul === 1.14 && sm.craterMul === 1.16 && sm.windAdd === 2 && sm.keen === true && sm.ward === true && sm.tide === true && sm.craterAdd === 4 && sm.windMul === 0.5);
+    ok('stack consume 1', stacked.bag.xun === 1 && stacked.bag.chen === 0 && stacked.bag.zhong === 0 && stacked.bag.boot === 0 && stacked.bag.ward === 0 && stacked.bag.keen === 0 && stacked.bag.heal === 2 && stacked.bag.tide === 0 && stacked.bag.clear === 0);
     ok('stack wardOnce', stacked.wardOnce === true);
     ok('empty cannot keep arm', stacked.armed.chen === false && stacked.armed.xun === true);
     const bw = bagWep(WEPS[0], sm);
     ok('bag wep splash crater', Math.abs(bw.splash - 36 * 1.14) < 1e-9 && Math.abs(bw.crater - 30 * 1.16) < 1e-9);
+    ok('bag wep tide clear', bw.craterAdd === 4 && bw.tidePush === true);
     const emptyU = { bag: zeroBag(), armed: freshArmed(), hp: 50, max: 100, x: 100, y: 400, stam: 100 };
     ok('empty no arm', armBagSilent(emptyU, 'xun') === false && emptyU.armed.xun === false);
     G.phase = 'aim';
@@ -10224,7 +10293,7 @@
     ok('crate bag toast 堂匣 · 名', gb && gb.toast === CRATE_NAME + ' · ' + BAG_NAME[gb.id]);
     const bagGold2 = grantCrate({ items: freshItems(), bag: freshBag(), rage: 40, stake: false }, 'gold');
     ok('crate gold still 金匣', bagGold2 && bagGold2.kind === 'gold' && bagGold2.toast === '金匣');
-    ok('hotkeys map 7', bagIdFromKey({ key: '-', code: 'Minus' }) === 'xun' && bagIdFromKey({ key: '=', code: 'Equal' }) === 'chen' && bagIdFromKey({ key: '[', code: 'BracketLeft' }) === 'zhong' && bagIdFromKey({ key: ']', code: 'BracketRight' }) === 'boot' && bagIdFromKey({ key: '\\', code: 'Backslash' }) === 'ward' && bagIdFromKey({ key: ';', code: 'Semicolon' }) === 'heal' && bagIdFromKey({ key: "'", code: 'Quote' }) === 'keen');
+    ok('hotkeys map 9', bagIdFromKey({ key: '-', code: 'Minus' }) === 'xun' && bagIdFromKey({ key: '=', code: 'Equal' }) === 'chen' && bagIdFromKey({ key: '[', code: 'BracketLeft' }) === 'zhong' && bagIdFromKey({ key: ']', code: 'BracketRight' }) === 'boot' && bagIdFromKey({ key: '\\', code: 'Backslash' }) === 'ward' && bagIdFromKey({ key: ';', code: 'Semicolon' }) === 'heal' && bagIdFromKey({ key: "'", code: 'Quote' }) === 'keen' && bagIdFromKey({ key: ',', code: 'Comma' }) === 'tide' && bagIdFromKey({ key: '.', code: 'Period' }) === 'clear');
     ok('hotkeys no steal 1-8', bagIdFromKey({ key: '1', code: 'Digit1' }) == null && bagIdFromKey({ key: '8', code: 'Digit8' }) == null);
     ok('hotkeys no steal QECVBGFX', bagIdFromKey({ key: 'q', code: 'KeyQ' }) == null && bagIdFromKey({ key: 'e', code: 'KeyE' }) == null && bagIdFromKey({ key: 'c', code: 'KeyC' }) == null && bagIdFromKey({ key: 'v', code: 'KeyV' }) == null && bagIdFromKey({ key: 'b', code: 'KeyB' }) == null && bagIdFromKey({ key: 'g', code: 'KeyG' }) == null && bagIdFromKey({ key: 'f', code: 'KeyF' }) == null && bagIdFromKey({ key: 'x', code: 'KeyX' }) == null);
     G.walk = WALK_PX;
@@ -10240,23 +10309,44 @@
     ok('时尽 still after 堂袋', TURN_T === 18 && TURN_T_CORE === 14 && TURN_T_SUDDEN === 11);
     ok('余震 still after 堂袋', QUAKE_NAME === '余震' && HIT_STOP_DIRECT === 0.14);
     ok('井口 still after 堂袋', MAP_NAME.well === '井口' && MAP_IDS[18] === 'well');
-    ok('no banned bag words', BAG_NAME.xun.indexOf('传送') < 0 && BAG_NAME.boot.indexOf('飞行') < 0 && BAG_NAME.keen.indexOf('三叉戟') < 0 && BAG_NAME.ward.indexOf('激怒') < 0 && BAG_NAME.heal.indexOf('天使') < 0 && BAG_NAME.chen.indexOf('恶魔') < 0);
+    ok('no banned bag words', BAG_NAME.xun.indexOf('传送') < 0 && BAG_NAME.boot.indexOf('飞行') < 0 && BAG_NAME.keen.indexOf('三叉戟') < 0 && BAG_NAME.ward.indexOf('激怒') < 0 && BAG_NAME.heal.indexOf('天使') < 0 && BAG_NAME.chen.indexOf('恶魔') < 0 && BAG_NAME.tide.indexOf('传送') < 0 && BAG_NAME.clear.indexOf('飞行') < 0 && BAG_NAME.tide.indexOf('天使') < 0 && BAG_NAME.clear.indexOf('恶魔') < 0);
     ok('g vk v36', GRAV === 260 && VK === 420 && WIND_K === 2.05);
-    ok('bag short 巽沉重', BAG_SHORT.xun === '巽' && BAG_SHORT.chen === '沉' && BAG_SHORT.zhong === '重' && BAG_SHORT.boot === '轻' && BAG_SHORT.ward === '护' && BAG_SHORT.heal === '回' && BAG_SHORT.keen === '锐');
-    const chipU = { bag: { xun: 1, chen: 1, zhong: 1, boot: 0, ward: 0, heal: 0, keen: 0 }, armed: { xun: true, chen: true, zhong: true, boot: false, ward: false, heal: false, keen: false } };
+    ok('bag short 巽沉重潮霁', BAG_SHORT.xun === '巽' && BAG_SHORT.chen === '沉' && BAG_SHORT.zhong === '重' && BAG_SHORT.boot === '轻' && BAG_SHORT.ward === '护' && BAG_SHORT.heal === '回' && BAG_SHORT.keen === '锐' && BAG_SHORT.tide === '潮' && BAG_SHORT.clear === '霁');
+    const chipU = { bag: { xun: 1, chen: 1, zhong: 1, boot: 0, ward: 0, heal: 0, keen: 0, tide: 0, clear: 0 }, armed: { xun: true, chen: true, zhong: true, boot: false, ward: false, heal: false, keen: false, tide: false, clear: false } };
     ok('chip 巽+沉+重', bagChipText(chipU) === '巽+沉+重');
+    const chipTide = { bag: { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 1, clear: 1 }, armed: { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: true, clear: true } };
+    ok('chip 潮+霁', bagChipText(chipTide) === '潮+霁');
     ok('any armed true', anyBagArmed(chipU) === true);
     const idleU = { bag: freshBag(), armed: freshArmed() };
     ok('any armed false', anyBagArmed(idleU) === false);
-    ok('bag tints 7', !!BAG_TINT.xun && !!BAG_TINT.chen && !!BAG_TINT.zhong && !!BAG_TINT.boot && !!BAG_TINT.ward && !!BAG_TINT.heal && !!BAG_TINT.keen);
-    ok('no extra bag items v37', BAG_KEYS.length === 7 && WEPS.length === 8);
+    ok('bag tints 9', !!BAG_TINT.xun && !!BAG_TINT.chen && !!BAG_TINT.zhong && !!BAG_TINT.boot && !!BAG_TINT.ward && !!BAG_TINT.heal && !!BAG_TINT.keen && !!BAG_TINT.tide && !!BAG_TINT.clear);
+    ok('bag 9 v38', BAG_KEYS.length === 9 && WEPS.length === 8);
     ok('maps 19 after polish', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
     ok('g vk v37', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('clear windMul armed', bagWindMul({ bag: { clear: 1 }, armed: { clear: true } }) === 0.5);
+    ok('clear windMul idle', bagWindMul(idleU) === 1);
+    const tideOnly = { ang: 65, face: 1, bag: { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 2, clear: 0 }, armed: { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: true, clear: false } };
+    const tm = consumeBagOnFire(tideOnly);
+    ok('tide consume', tm.tide === true && tm.craterAdd === 4 && tideOnly.bag.tide === 1 && tideOnly.armed.tide === true);
+    const clearOnly = { ang: 65, face: 1, bag: { xun: 0, chen: 0, zhong: 0, boot: 0, ward: 0, heal: 0, keen: 0, tide: 0, clear: 2 }, armed: { xun: false, chen: false, zhong: false, boot: false, ward: false, heal: false, keen: false, tide: false, clear: true } };
+    const cm = consumeBagOnFire(clearOnly);
+    ok('clear consume', cm.windMul === 0.5 && clearOnly.bag.clear === 1);
+    ok('g vk v38', GRAV === 260 && VK === 420 && WIND_K === 2.05);
+    ok('no 9th wep after v38', WEPS.length === 8 && WEPS[6].name === '叠珠' && WEPS[7].name === '迟雷');
+    ok('maps 19 after v38', MAP_IDS.length === 19 && MAP_NAME.well === '井口');
 
     G.mapId = 'plain';
     G.H = buildHeight('plain');
     G.p = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, max: 100, side: 'p', ang: 65 };
     G.f = { x: 768, y: G.H[768] - 14, r: 14, hp: 100, max: 100, side: 'f', ang: 115 };
+    carve(450, G.H[450], 40);
+    const ledgeU = { x: 400, y: G.H[400] - 14, r: 14, hp: 100, grounded: true, face: 1 };
+    ok('tide ledge', thinLedge(ledgeU) === true);
+    const ox = ledgeU.x;
+    const pushed = tidePushToward(ledgeU, 450);
+    ok('tide push +10 toward hole', pushed === 10 && ledgeU.x === ox + 10, ledgeU.x);
+    const solidU = { x: 152, y: G.H[152] - 14, r: 14, hp: 100, grounded: true, face: 1 };
+    ok('tide no push thick', tidePushToward(solidU, 200) === 0 && solidU.x === 152);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);

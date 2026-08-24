@@ -1440,13 +1440,16 @@ canvas {
 .bag-chip-ward { color: #ffe36b; }
 .bag-chip-heal { color: #5dffb2; }
 .bag-chip-keen { color: #ffd08a; }
+.bag-chip-tide { color: #7af8e8; }
+.bag-chip-clear { color: #fff3c2; }
 
 .item-dock-rail {
   display: flex;
   justify-content: center;
   align-items: stretch;
-  gap: 8px;
+  gap: 6px;
   pointer-events: none;
+  flex-wrap: nowrap;
 }
 
 .bag-slot {
@@ -1643,6 +1646,14 @@ canvas {
   .item-dock-rail { gap: 5px; }
   .bag-slot { width: 48px; min-width: 46px; height: 64px; min-height: 64px; padding: 4px 2px 5px; }
   .bag-name { font-size: 9px; letter-spacing: 0.06em; }
+}
+
+@media (max-width: 700px) {
+  .item-dock-rail {
+    flex-wrap: wrap;
+    row-gap: 5px;
+  }
+  .bag-slot { width: 46px; min-width: 44px; }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
