@@ -48,8 +48,8 @@
   const FRUIT_GOLD_P = 0.15;
   const FRUIT_RAGE = 25;
   const FRUIT_WALL = 36;
-  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖' };
-  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff'];
+  const MAP_NAME = { plain: '平原', canyon: '峡谷', twin: '双台', spire: '风柱', bridge: '碎桥', isles: '悬岛', ruins: '残垣', vale: '风谷', forge: '熔台', arcade: '廊桥', towers: '双塔', moon: '月池', cliff: '断崖', dune: '沙脊' };
+  const MAP_IDS = ['plain', 'canyon', 'twin', 'spire', 'bridge', 'isles', 'ruins', 'vale', 'forge', 'arcade', 'towers', 'moon', 'cliff', 'dune'];
   const WALL_MAXH = 160;
   const FIRE_R = 28;
   const FIRE_DMG = 8;
@@ -136,6 +136,16 @@
   const CLIFF_F2X = 736;
   const CLIFF_WALK = 0.45;
   const CLIFF_DMG = 2;
+  const DUNE_PX = 168;
+  const DUNE_FX = 772;
+  const DUNE_P2X = 204;
+  const DUNE_F2X = 736;
+  const DUNE_CREST_Y = 246;
+  const DUNE_SADDLE_Y = 394;
+  const DUNE_HALF = 204;
+  const DUNE_WALK = 0.55;
+  const DUNE_CRATER = 1.25;
+  const DUNE_WIND_EXTRA = 1;
   const ISLE_VOID = 532;
   const ISLE_THICK = 44;
   const BURY_PX = 40;
@@ -709,10 +719,43 @@
     return i > CLIFF_EDGE + CLIFF_FACE && G.H[i] < CLIFF_WATER_Y && G.H[i] > CLIFF_TOP_Y + 80;
   }
 
+  function duneHillY(x, peak) {
+    const d = Math.abs(x - peak) / DUNE_HALF;
+    if (d >= 1) return DUNE_SADDLE_Y;
+    const k = 0.5 * (1 + Math.cos(Math.PI * d));
+    return lerp(DUNE_SADDLE_Y, DUNE_CREST_Y, Math.pow(k, 0.72));
+  }
+
+  function isDuneCrest(x) {
+    if (G.mapId !== 'dune' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    if (G.H[i] > DUNE_CREST_Y + 36) return false;
+    return (i < 320 && Math.abs(i - DUNE_PX) <= 92) || (i > 640 && Math.abs(i - DUNE_FX) <= 92);
+  }
+
+  function isDuneSaddle(x) {
+    if (G.mapId !== 'dune' || !G.H) return false;
+    const i = x | 0;
+    if (i < 0 || i >= VW) return false;
+    return i > 360 && i < 600 && G.H[i] > DUNE_SADDLE_Y - 28;
+  }
+
+  function onSand(u) {
+    if (G.mapId !== 'dune' || !u) return false;
+    return !isDeathVoid(u.x);
+  }
+
+  function sandR(r) {
+    if (G.mapId !== 'dune' || r <= 0) return r;
+    return r * DUNE_CRATER;
+  }
+
   function walkSpd(u) {
     const base = isHuman(u) ? 90 : 78;
     if (inMoonWater(u)) return base * MOON_WALK;
     if (inCliffWater(u)) return base * CLIFF_WALK;
+    if (onSand(u)) return base * DUNE_WALK;
     return base;
   }
 
@@ -937,6 +980,16 @@
       }
       padFlat(h, 48, 240, CLIFF_TOP_Y);
       padFlat(h, 700, 910, CLIFF_BEACH_Y);
+    } else if (id === 'dune') {
+      for (let x = 0; x < VW; x++) {
+        let yy = Math.min(duneHillY(x, DUNE_PX), duneHillY(x, DUNE_FX));
+        const mid = 1 - clamp(Math.abs(x - 480) / 118, 0, 1);
+        yy += mid * mid * 10;
+        yy += Math.sin(x * 0.08) * 2.0 + Math.sin(x * 0.19) * 0.9;
+        h[x] = yy;
+      }
+      padFlat(h, 88, 248, DUNE_CREST_Y);
+      padFlat(h, 712, 872, DUNE_CREST_Y);
     } else {
       for (let x = 0; x < VW; x++) {
         const t = x / (VW - 1);
@@ -960,6 +1013,7 @@
     if (id === 'towers') return side === 'p' ? TOWERS_PX : TOWERS_FX;
     if (id === 'moon') return side === 'p' ? MOON_PX : MOON_FX;
     if (id === 'cliff') return side === 'p' ? CLIFF_PX : CLIFF_FX;
+    if (id === 'dune') return side === 'p' ? DUNE_PX : DUNE_FX;
     return side === 'p' ? 152 : 768;
   }
 
@@ -967,6 +1021,7 @@
     if (G.mapId === 'towers' && slot) return side === 'p' ? TOWERS_P2X : TOWERS_F2X;
     if (G.mapId === 'moon' && slot) return side === 'p' ? MOON_P2X : MOON_F2X;
     if (G.mapId === 'cliff' && slot) return side === 'p' ? CLIFF_P2X : CLIFF_F2X;
+    if (G.mapId === 'dune' && slot) return side === 'p' ? DUNE_P2X : DUNE_F2X;
     const base = spawnX(G.mapId, side);
     if (!slot) return base;
     const inward = side === 'p' ? 1 : -1;
@@ -1180,7 +1235,8 @@
       if (G.drillWind === '4r') return 4;
       if (G.drillWind === '4l') return -4;
     }
-    const m = windMax();
+    const cap = windMax();
+    const m = cap + (G.mapId === 'dune' ? DUNE_WIND_EXTRA : 0);
     let w;
     if (G.kind === 'core' && Math.random() < 0.55) {
       w = (Math.random() < 0.5 ? -1 : 1) * irand(8, m);
@@ -1188,7 +1244,7 @@
       w = irand(-m, m);
     }
     if (w === 0 && Math.random() < 0.35) w = Math.random() < 0.5 ? -1 : 1;
-    return w;
+    return clamp(w, -cap, cap);
   }
 
   function rollWind() {
@@ -2769,9 +2825,10 @@
     const wasUlt = !!(owner && owner.ult);
     const ultMul = wasUlt ? 1.35 : 1;
     if (wasUlt) crater = Math.round(crater * 1.35);
+    crater = Math.round(sandR(crater));
     let hit = !!fromHit;
     if (wep.id === 4) {
-      const pops = carveCluster(x, y, ultMul);
+      const pops = carveCluster(x, y, ultMul * (G.mapId === 'dune' ? DUNE_CRATER : 1));
       for (let i = 0; i < pops.length; i++) {
         const pop = pops[i];
         snapBridge(pop.x, pop.r, wep);
@@ -3310,6 +3367,7 @@
       if (G.mapId === 'moon' && isMoonRim(foe.x)) return 1;
       if (G.mapId === 'cliff' && isCliffPlateau(foe.x)) return 1;
       if (G.mapId === 'cliff' && isCliffBeach(foe.x)) return 3;
+      if (G.mapId === 'dune' && isDuneSaddle(foe.x)) return 1;
     }
     if (Math.abs(G.wind) >= 4) return 4;
     if (G.mapId === 'canyon') return 2;
@@ -3326,7 +3384,7 @@
     return 0;
   }
 
-  function scoreOne(imp, wep, from, t) {
+  function scoreOne(imp, wep, from, t, ang) {
     const d = hypot(imp.x - t.x, imp.y - t.y);
     const feet = hypot(imp.x - t.x, imp.y - (t.y + t.r));
     const mid = Math.abs(imp.x - (from.x + t.x) * 0.5);
@@ -3349,17 +3407,24 @@
     if (G.mapId === 'cliff' && isCliffBeach(imp.x) && wep.id === 4) bury += 600;
     if (G.mapId === 'towers' && inWall(imp.x, imp.y) && (wep.id === 1 || wep.id === 4)) bury += 600;
     if (G.mapId === 'towers' && inWall(imp.x, imp.y) && wep.id === 2) bury += 500;
+    if (G.mapId === 'dune' && isDuneSaddle(t.x)) {
+      const e = ang != null ? elev(ang) : 0;
+      if (e >= 78) score += 1600;
+      else if (e >= 70) score += 700;
+      if (feetX < 52) bury += 900;
+    }
+    if (G.mapId === 'dune' && isDuneSaddle(imp.x) && (wep.id === 1 || wep.id === 4)) bury += 700;
     score += bury;
     return score;
   }
 
-  function scoreImpact(imp, wep, from) {
+  function scoreImpact(imp, wep, from, ang) {
     if (!imp || !from) return -1e9;
     const foes = foesOf(from);
     if (!foes.length) return -1e9;
     let score = -1e9;
     for (let i = 0; i < foes.length; i++) {
-      const sc = scoreOne(imp, wep, from, foes[i]);
+      const sc = scoreOne(imp, wep, from, foes[i], ang);
       if (sc > score) score = sc;
     }
     const selfD = hypot(imp.x - from.x, imp.y - from.y);
@@ -3390,7 +3455,7 @@
       for (let pow = 18; pow <= 100; pow += 4) {
         const m = muzzle(ang);
         const imp = traceShot(m.x, m.y, ang, pow, G.wind, wep, G.H, from);
-        const sc = scoreImpact(imp, wep, from);
+        const sc = scoreImpact(imp, wep, from, ang);
         if (sc > best.score) best = { score: sc, ang: ang, pow: pow };
       }
     }
@@ -3399,7 +3464,7 @@
         if (ang < 8 || ang > 172 || pow < 14 || pow > 100) continue;
         const m = muzzle(ang);
         const imp = traceShot(m.x, m.y, ang, pow, G.wind, wep, G.H, from);
-        const sc = scoreImpact(imp, wep, from);
+        const sc = scoreImpact(imp, wep, from, ang);
         if (sc > best.score) best = { score: sc, ang: ang, pow: pow };
       }
     }
@@ -4199,8 +4264,8 @@
     g.clearRect(0, 0, VW, VH);
     const H = G.H;
     if (!H) return;
-    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : '#7dffc6';
-    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : '#162436';
+    const top = G.mapId === 'canyon' ? '#5ad6ff' : G.mapId === 'twin' ? '#ffe36b' : G.mapId === 'spire' ? '#9af0ff' : G.mapId === 'bridge' ? '#e8c090' : G.mapId === 'isles' ? '#c8f0ff' : G.mapId === 'ruins' ? '#e0c090' : G.mapId === 'vale' ? '#7cf6ff' : G.mapId === 'forge' ? '#ff8a40' : G.mapId === 'arcade' ? '#e4d2a8' : G.mapId === 'towers' ? '#d8c4a0' : G.mapId === 'moon' ? '#c8eeff' : G.mapId === 'cliff' ? '#ffc078' : G.mapId === 'dune' ? '#f0c878' : '#7dffc6';
+    const mid = G.mapId === 'canyon' ? '#2a1a48' : G.mapId === 'twin' ? '#2a1840' : G.mapId === 'spire' ? '#143044' : G.mapId === 'bridge' ? '#2a2018' : G.mapId === 'isles' ? '#182438' : G.mapId === 'ruins' ? '#2a1c18' : G.mapId === 'vale' ? '#142038' : G.mapId === 'forge' ? '#3a140c' : G.mapId === 'arcade' ? '#241c18' : G.mapId === 'towers' ? '#221810' : G.mapId === 'moon' ? '#122436' : G.mapId === 'cliff' ? '#3a2214' : G.mapId === 'dune' ? '#4a3018' : '#162436';
     const bot = '#0a0614';
     const grd = g.createLinearGradient(0, 220, 0, VH);
     grd.addColorStop(0, mid);
@@ -4400,6 +4465,16 @@
       g.fillStyle = 'rgba(24,12,8,0.22)';
       g.fillRect(CLIFF_EDGE - 2, CLIFF_TOP_Y, 6, CLIFF_DROP + 24);
     }
+    if (G.mapId === 'dune') {
+      g.fillStyle = 'rgba(240, 200, 120, 0.08)';
+      g.fillRect(360, DUNE_SADDLE_Y - 12, 240, 18);
+      g.strokeStyle = 'rgba(255, 220, 150, 0.22)';
+      g.lineWidth = 1.1;
+      g.beginPath();
+      g.moveTo(120, H[120] + 8);
+      for (let x = 120; x <= 840; x += 4) g.lineTo(x, H[x] + 7 + Math.sin(x * 0.05) * 1.4);
+      g.stroke();
+    }
     terrainDirty = false;
   }
 
@@ -4479,6 +4554,18 @@
       mist.addColorStop(0, 'rgba(80,180,190,0.14)');
       mist.addColorStop(1, 'rgba(80,180,190,0)');
       g.fillStyle = mist;
+      g.fillRect(0, 0, VW, VH);
+    }
+    if (G.mapId === 'dune') {
+      const heat = g.createRadialGradient(480, 70, 10, 480, 120, 320);
+      heat.addColorStop(0, 'rgba(255,190,90,0.16)');
+      heat.addColorStop(1, 'rgba(255,190,90,0)');
+      g.fillStyle = heat;
+      g.fillRect(0, 0, VW, VH);
+      const bowl = g.createRadialGradient(480, DUNE_SADDLE_Y, 16, 480, DUNE_SADDLE_Y + 40, 240);
+      bowl.addColorStop(0, 'rgba(210,150,70,0.12)');
+      bowl.addColorStop(1, 'rgba(210,150,70,0)');
+      g.fillStyle = bowl;
       g.fillRect(0, 0, VW, VH);
     }
     for (let i = 0; i < stars.length; i++) {
@@ -4823,6 +4910,21 @@
       const glow = 0.08 + 0.07 * (0.5 + 0.5 * Math.sin(t * 2.4 + k));
       g.fillStyle = 'rgba(255,200,120,' + glow + ')';
       g.fillRect(px, CLIFF_TOP_Y + 8 + k * 22, 3, 10);
+    }
+    g.restore();
+  }
+
+  function drawDune(g) {
+    if (G.mapId !== 'dune') return;
+    g.save();
+    const t = G.t;
+    for (let i = 0; i < 10; i++) {
+      const x = 140 + i * 72 + Math.sin(t * 0.55 + i) * 10;
+      const y = groundAt(x) - 10 - (i % 3) * 6 + Math.sin(t * 0.9 + i * 0.6) * 3;
+      g.fillStyle = 'rgba(240,200,120,' + (0.06 + 0.07 * Math.sin(t * 1.5 + i)) + ')';
+      g.beginPath();
+      g.ellipse(x, y, 16 + (i % 3) * 5, 3.4, 0, 0, TAU);
+      g.fill();
     }
     g.restore();
   }
@@ -5306,6 +5408,7 @@
     drawTowers(ctx);
     drawMoon(ctx);
     drawCliff(ctx);
+    drawDune(ctx);
     drawWalls(ctx);
     drawFires(ctx);
     drawCrumbs(ctx);
@@ -5658,7 +5761,7 @@
     const clDepth = G.H[500] - 400;
     ok('cluster deeper than HE', clDepth > heDepth && clDepth >= BURY_PX, Math.round(clDepth) + ' > ' + Math.round(heDepth));
     ok('三裂 stats', WEPS[3] && WEPS[3].name === '三裂' && WEPS[3].direct === 14 && WEPS[3].direct < WEPS[1].direct);
-    ok('maps thirteen', MAP_IDS.length === 13 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖');
+    ok('maps fourteen', MAP_IDS.length === 14 && MAP_NAME.spire === '风柱' && MAP_NAME.bridge === '碎桥' && MAP_NAME.isles === '悬岛' && MAP_NAME.ruins === '残垣' && MAP_NAME.vale === '风谷' && MAP_NAME.forge === '熔台' && MAP_NAME.arcade === '廊桥' && MAP_NAME.towers === '双塔' && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     G.H = buildHeight('isles');
     G.mapId = 'isles';
     ok('isles left', G.H[160] > 320 && G.H[160] < 400, Math.round(G.H[160]));
@@ -6193,7 +6296,7 @@
     ok('last hit enemy', G.lastHit === sh && duoFinisherName() === '岚丸');
     noteLastHit(sh, { id: 'p2', name: '霜丸', side: 'p' });
     ok('last hit skip mate', G.lastHit === sh);
-    ok('随图 pool 13', MAP_IDS.length === 13 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12);
+    ok('随图 pool 14', MAP_IDS.length === 14 && MAP_IDS.every(function (id) { return !!MAP_NAME[id]; }) && MAP_IDS.indexOf('moon') === 11 && MAP_IDS.indexOf('cliff') === 12 && MAP_IDS.indexOf('dune') === 13);
     ok('g vk v1', GRAV === 260 && VK === 420);
     ok('mini size', MINI_W === 160 && MINI_H === 48);
     ok('mini default on', G.mini !== false);
@@ -6437,7 +6540,7 @@
     G.ghostOn = true;
     ok('ghost match only', G.ghost == null);
     ok('g vk v20', GRAV === 260 && VK === 420);
-    ok('maps still 13 after ghost', MAP_IDS.length === 13 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖');
+    ok('maps still 14 after ghost', MAP_IDS.length === 14 && MAP_NAME.moon === '月池' && MAP_NAME.cliff === '断崖' && MAP_NAME.dune === '沙脊');
     ok('no banned ghost', '残影开残影关上 65°/70'.indexOf('传送') < 0 && '残影'.indexOf('飞行') < 0 && OPS.indexOf('K 残影') >= 0);
     ok('断崖 name locked', MAP_NAME.cliff === '断崖' && MAP_IDS[12] === 'cliff');
     ok('no banned cliff', MAP_NAME.cliff.indexOf('传送') < 0 && MAP_NAME.cliff.indexOf('飞行') < 0 && MAP_NAME.cliff.indexOf('三叉戟') < 0 && MAP_NAME.cliff.indexOf('激怒') < 0);
@@ -6456,10 +6559,79 @@
     const silkPhys = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     const silkPhys2 = traceShot(152, G.p.y - 4, 65, 70, 3, WEPS[0], G.H, G.p);
     ok('silk no physics drift', Math.abs(silkPhys.x - silkPhys2.x) < 0.01 && Math.abs(silkPhys.y - silkPhys2.y) < 0.01);
-    ok('maps still 13 after silk', MAP_IDS.length === 13 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池');
+    ok('maps still 14 after silk', MAP_IDS.length === 14 && MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && MAP_NAME.dune === '沙脊');
     ok('ghost K still after silk', G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
     ok('no banned silk', '风丝'.indexOf('传送') < 0 && '风丝'.indexOf('飞行') < 0 && '风丝'.indexOf('三叉戟') < 0 && '风丝'.indexOf('激怒') < 0);
     ok('g vk v22', GRAV === 260 && VK === 420);
+    G.H = buildHeight('dune');
+    G.mapId = 'dune';
+    G.kind = 'hall';
+    ok('dune spawn', spawnX('dune', 'p') === DUNE_PX && spawnX('dune', 'f') === DUNE_FX);
+    ok('dune spawn on crest', isDuneCrest(DUNE_PX) && isDuneCrest(DUNE_FX), Math.round(G.H[DUNE_PX]) + '/' + Math.round(G.H[DUNE_FX]));
+    ok('dune crests high', G.H[DUNE_PX] < 280 && G.H[DUNE_FX] < 280, Math.round(G.H[DUNE_PX]));
+    ok('dune saddle shallow', G.H[480] > G.H[DUNE_PX] + 80 && G.H[480] < 460, Math.round(G.H[480]));
+    ok('dune no void', !isDeathVoid(DUNE_PX) && !isDeathVoid(DUNE_FX) && !isDeathVoid(480));
+    ok('dune walk 0.55', DUNE_WALK === 0.55 && DUNE_CRATER === 1.25 && DUNE_WIND_EXTRA === 1);
+    ok('dune saddle flag', isDuneSaddle(480) && !isDuneSaddle(DUNE_PX) && !isDuneSaddle(DUNE_FX));
+    const dLip = 258;
+    const dey = G.H[dLip | 0] - UNIT_R;
+    const dSaddle = 480;
+    const dgrids = Math.round((dSaddle - dLip) / GRID);
+    const d90 = 90 - dgrids;
+    const dth90 = d90 * Math.PI / 180;
+    const ds90 = traceShot(dLip + Math.cos(dth90) * 18, dey - 4 - Math.sin(dth90) * 18, d90, 95, 0, WEPS[0], G.H, null);
+    ok('dune 90 dunk', isDuneSaddle(ds90.x) && !ds90.air, Math.round(ds90.x) + ' a' + d90);
+    const dpx = spawnX('dune', 'p');
+    const dpy = G.H[dpx | 0] - UNIT_R;
+    const dth30 = 30 * Math.PI / 180;
+    const ds30 = traceShot(dpx + Math.cos(dth30) * 18, dpy - 4 - Math.sin(dth30) * 18, 30, 70, 0, WEPS[0], G.H, null);
+    ok('dune 30 undercut', ds30.x > 600 && ds30.x < DUNE_FX + 24 && !ds30.air && G.H[ds30.x | 0] < DUNE_SADDLE_Y - 16, Math.round(ds30.x));
+    const dsand = { x: DUNE_PX, y: G.H[DUNE_PX] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    const dsandF = { x: DUNE_FX, y: G.H[DUNE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f' };
+    ok('dune on sand', onSand(dsand) === true && onSand(dsandF) === true);
+    ok('dune walk slow', Math.abs(walkSpd(dsand) - 90 * DUNE_WALK) < 0.01, walkSpd(dsand));
+    ok('dune walk ai sand', Math.abs(walkSpd(dsandF) - 78 * DUNE_WALK) < 0.01, walkSpd(dsandF));
+    G.mapId = 'plain';
+    const flatH = new Float32Array(VW);
+    for (let i = 0; i < VW; i++) flatH[i] = 400;
+    G.H = flatH;
+    carve(500, 400, 30);
+    const plainDepth = G.H[500] - 400;
+    G.mapId = 'dune';
+    for (let i = 0; i < VW; i++) G.H[i] = 400;
+    carve(500, 400, sandR(30));
+    const duneDepth = G.H[500] - 400;
+    ok('dune crater ~1.25', duneDepth > plainDepth * 1.15 && Math.abs(duneDepth / plainDepth - DUNE_CRATER) < 0.08, Math.round(duneDepth) + '/' + Math.round(plainDepth));
+    G.kind = 'hall';
+    G.mapId = 'dune';
+    ok('dune wind extra cap', windMax() === 8 && DUNE_WIND_EXTRA === 1);
+    G.kind = 'core';
+    ok('dune core wind still cap', windMax() === 14);
+    G.kind = 'hall';
+    G.H = buildHeight('dune');
+    G.mapId = 'dune';
+    G.p = { x: 480, y: G.H[480] - 14, r: 14, hp: 100, max: 100, side: 'p', id: 'p' };
+    G.f = { x: DUNE_FX, y: G.H[DUNE_FX] - 14, r: 14, hp: 100, max: 100, side: 'f', id: 'f', ang: 115 };
+    G.p2 = null; G.f2 = null;
+    const dimp = { x: 480, y: G.H[480], t: 1, hit: null };
+    const scHigh = scoreOne(dimp, WEPS[0], G.f, G.p, 88);
+    const scLow = scoreOne(dimp, WEPS[0], G.f, G.p, 30);
+    ok('dune AI prefer dunk', scHigh > scLow + 400, Math.round(scHigh) + '>' + Math.round(scLow));
+    ok('dune AI saddle 高爆', pickAIWeapon(G.f) === 1);
+    G.kind = 'duo';
+    const ddx0 = spawnAt('p', 0);
+    const ddx1 = spawnAt('p', 1);
+    const ddr0 = spawnAt('f', 0);
+    const ddr1 = spawnAt('f', 1);
+    ok('dune duo extras crest', isDuneCrest(ddx0) && isDuneCrest(ddx1) && isDuneCrest(ddr0) && isDuneCrest(ddr1), ddx1 + '/' + ddr1);
+    ok('dune duo tops', ddx0 === DUNE_PX && ddr0 === DUNE_FX);
+    ok('dune duo extras along', Math.abs(ddx1 - ddx0) >= 20 && Math.abs(ddr1 - ddr0) >= 20, Math.round(Math.abs(ddx1 - ddx0)));
+    ok('dune duo not void', !isDeathVoid(ddx0) && !isDeathVoid(ddx1) && !isDeathVoid(ddr0) && !isDeathVoid(ddr1));
+    G.kind = 'hall';
+    ok('沙脊 name locked', MAP_NAME.dune === '沙脊' && MAP_IDS[13] === 'dune');
+    ok('no banned dune', MAP_NAME.dune.indexOf('传送') < 0 && MAP_NAME.dune.indexOf('飞行') < 0 && MAP_NAME.dune.indexOf('三叉戟') < 0 && MAP_NAME.dune.indexOf('激怒') < 0);
+    ok('g vk v23', GRAV === 260 && VK === 420);
+    ok('cliff moon silk ghost kept', MAP_NAME.cliff === '断崖' && MAP_NAME.moon === '月池' && G.ghostOn !== false && OPS.indexOf('K 残影') >= 0);
 
     const text = out.join('\n');
     if (typeof console !== 'undefined') console.log(text);
