@@ -587,6 +587,10 @@ canvas {
   border-color: rgba(154, 216, 255, 0.42);
 }
 
+#map-cloud {
+  border-color: rgba(232, 214, 176, 0.48);
+}
+
 #btn-rand-map {
   border-color: rgba(0, 232, 255, 0.6);
   color: var(--cyan);
